@@ -1,20 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f9fafb;
+  --background: #f5f5f4;
   --foreground: #18181b;
   --card: #ffffff;
-  --accent: #059669;
-  --accent-light: #d1fae5;
-  --accent-dark: #047857;
+  --accent: #0f766e;
+  --accent-light: #ccfbf1;
+  --accent-dark: #0d6560;
   --muted: #71717a;
-  --border: #e4e4e7;
+  --border: #e5e5e5;
   --danger: #dc2626;
   --danger-light: #fef2f2;
   --warning: #d97706;
   --warning-light: #fffbeb;
-  --success: #059669;
-  --success-light: #ecfdf5;
+  --success: #0f766e;
+  --success-light: #f0fdfa;
+  --surface: #fafaf9;
 }
 
 @theme inline {
@@ -32,6 +33,7 @@
   --color-warning-light: var(--warning-light);
   --color-success: var(--success);
   --color-success-light: var(--success-light);
+  --color-surface: var(--surface);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -54,7 +56,7 @@ input, textarea, select {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #e4e4e7 25%, #f4f4f5 50%, #e4e4e7 75%);
+  background: linear-gradient(90deg, #e5e5e5 25%, #f5f5f4 50%, #e5e5e5 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 0.5rem;

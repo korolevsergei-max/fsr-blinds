@@ -1,5 +1,7 @@
+import { loadFullDataset } from "@/lib/server-data";
 import { UnitsList } from "./units-list";
 
-export default function UnitsPage() {
-  return <UnitsList />;
+export default async function UnitsPage() {
+  const data = await loadFullDataset();
+  return <UnitsList data={data} />;
 }

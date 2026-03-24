@@ -7,12 +7,13 @@ import {
   Buildings,
   CheckCircle,
 } from "@phosphor-icons/react";
-import { installers, units } from "@/lib/mock-data";
+import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Plus } from "@phosphor-icons/react";
 
-export function InstallersList() {
+export function InstallersList({ data }: { data: AppDataset }) {
+  const { installers, units } = data;
   return (
     <div className="flex flex-col">
       <PageHeader

@@ -4,12 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { MagnifyingGlass, ArrowRight, UserCircle } from "@phosphor-icons/react";
-import { units } from "@/lib/mock-data";
+import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RiskDot } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 
-export function UnitsList() {
+export function UnitsList({ data }: { data: AppDataset }) {
+  const { units } = data;
   const [search, setSearch] = useState("");
 
   const filtered = units.filter(

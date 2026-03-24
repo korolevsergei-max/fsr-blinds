@@ -9,12 +9,13 @@ import {
   CalendarBlank,
   ArrowRight,
 } from "@phosphor-icons/react";
-import { units } from "@/lib/mock-data";
+import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RiskDot } from "@/components/ui/risk-badge";
-import { UNIT_STATUS_ORDER } from "@/lib/types";
+import { UNIT_STATUS_ORDER, type UnitStatus } from "@/lib/types";
 
-export function ManagementDashboard() {
+export function ManagementDashboard({ data }: { data: AppDataset }) {
+  const { units } = data;
   const activeUnits = units.filter((u) => u.status !== "client_approved");
   const completedUnits = units.filter((u) => u.status === "client_approved");
   const escalated = units.filter((u) => u.riskFlag === "yellow");
@@ -27,9 +28,12 @@ export function ManagementDashboard() {
       u.bracketingDate <= "2026-03-29"
   );
 
+  const riskRank = { red: 0, yellow: 1, green: 2 } as const;
   const needsAttention = units
     .filter((u) => u.riskFlag !== "green" && u.status !== "client_approved")
-    .sort((a, b) => (a.riskFlag === "red" ? -1 : 1));
+    .sort(
+      (a, b) => riskRank[a.riskFlag] - riskRank[b.riskFlag]
+    );
 
   const statusCounts = new Map<string, number>();
   units.forEach((u) => {
@@ -122,7 +126,7 @@ export function ManagementDashboard() {
                   key={status}
                   className="flex items-center justify-between px-4 py-3"
                 >
-                  <StatusChip status={status as any} />
+                  <StatusChip status={status as UnitStatus} />
                   <span className="text-sm font-semibold text-zinc-900 font-mono">
                     {count}
                   </span>

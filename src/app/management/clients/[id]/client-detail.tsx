@@ -10,22 +10,22 @@ import {
   Buildings as BuildingsIcon,
 } from "@phosphor-icons/react";
 import {
-  clients,
   getBuildingsByClient,
   getUnitsByBuilding,
-} from "@/lib/mock-data";
+} from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 
-export function ClientDetail() {
+export function ClientDetail({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
-  const client = clients.find((c) => c.id === id);
+  const client = data.clients.find((c) => c.id === id);
 
   if (!client) {
     return <div className="p-6 text-center text-muted">Client not found</div>;
   }
 
-  const clientBuildings = getBuildingsByClient(client.id);
+  const clientBuildings = getBuildingsByClient(data, client.id);
 
   return (
     <div className="flex flex-col">
@@ -43,7 +43,7 @@ export function ClientDetail() {
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {clientBuildings.map((building, i) => {
-          const bUnits = getUnitsByBuilding(building.id);
+          const bUnits = getUnitsByBuilding(data, building.id);
           const activeUnits = bUnits.filter(
             (u) => u.status !== "client_approved"
           );

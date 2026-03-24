@@ -13,14 +13,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const inputId = id || label.toLowerCase().replace(/\s+/g, "-");
     return (
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={inputId} className="text-sm font-medium text-zinc-700 tracking-tight">
+        <label htmlFor={inputId} className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
           {label}
         </label>
         <input
           ref={ref}
           id={inputId}
           className={`
-            h-11 px-3.5 rounded-xl border text-sm text-zinc-900
+            h-12 px-4 rounded-2xl border text-sm text-foreground bg-white
             placeholder:text-zinc-400
             focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent
             transition-all duration-200

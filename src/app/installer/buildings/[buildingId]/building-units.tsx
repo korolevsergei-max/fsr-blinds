@@ -6,12 +6,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
-  Funnel,
 } from "@phosphor-icons/react";
-import {
-  buildings,
-  getUnitsByInstaller,
-} from "@/lib/mock-data";
+import { getUnitsByInstaller } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RiskDot } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,10 +17,10 @@ import type { Unit } from "@/lib/types";
 type Filter = "all" | "today" | "overdue" | "completed";
 
 const filterLabels: Record<Filter, string> = {
-  all: "All",
-  today: "Due Today",
-  overdue: "Overdue",
-  completed: "Done",
+  all: "ALL",
+  today: "DUE TODAY",
+  overdue: "OVERDUE",
+  completed: "DONE",
 };
 
 function filterUnits(units: Unit[], filter: Filter): Unit[] {
@@ -48,12 +45,18 @@ function filterUnits(units: Unit[], filter: Filter): Unit[] {
   }
 }
 
-export function BuildingUnits() {
+export function BuildingUnits({
+  data,
+  installerId = "inst-1",
+}: {
+  data: AppDataset;
+  installerId?: string;
+}) {
   const { buildingId } = useParams<{ buildingId: string }>();
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
 
-  const building = buildings.find((b) => b.id === buildingId);
-  const allInstallerUnits = getUnitsByInstaller("inst-1");
+  const building = data.buildings.find((b) => b.id === buildingId);
+  const allInstallerUnits = getUnitsByInstaller(data, installerId);
   const buildingUnits = allInstallerUnits.filter(
     (u) => u.buildingId === buildingId
   );
@@ -75,18 +78,17 @@ export function BuildingUnits() {
         backHref="/installer"
       />
 
-      <div className="px-4 pt-4">
+      <div className="px-5 pt-4">
         {/* Filters */}
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-4">
-          <Funnel size={15} className="text-muted flex-shrink-0" />
           {(Object.keys(filterLabels) as Filter[]).map((f) => (
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
-              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-tight transition-all active:scale-[0.96] ${
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-[0.96] ${
                 activeFilter === f
-                  ? "bg-zinc-900 text-white"
-                  : "bg-white text-zinc-600 border border-border hover:bg-zinc-50"
+                  ? "bg-accent text-white shadow-sm"
+                  : "bg-white text-zinc-500 border border-border hover:bg-surface"
               }`}
             >
               {filterLabels[f]}
@@ -94,13 +96,11 @@ export function BuildingUnits() {
           ))}
         </div>
 
-        {/* Count */}
-        <p className="text-xs text-muted font-medium mb-3">
+        <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-3">
           {filtered.length} unit{filtered.length !== 1 ? "s" : ""}
         </p>
 
-        {/* Unit list */}
-        <div className="flex flex-col gap-2 pb-6">
+        <div className="flex flex-col gap-3 pb-6">
           {filtered.map((unit, i) => (
             <motion.div
               key={unit.id}
@@ -115,7 +115,7 @@ export function BuildingUnits() {
               <Link href={`/installer/units/${unit.id}`}>
                 <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-zinc-900 tracking-tight">
+                    <p className="text-sm font-bold text-foreground tracking-tight">
                       {unit.unitNumber}
                     </p>
                     <RiskDot flag={unit.riskFlag} />
@@ -125,7 +125,7 @@ export function BuildingUnits() {
                     <StatusChip status={unit.status} />
                     <div className="flex items-center gap-1.5 text-xs text-muted">
                       {unit.bracketingDate && (
-                        <span className="font-mono">
+                        <span className="font-mono font-semibold text-accent">
                           {new Date(
                             unit.bracketingDate + "T00:00:00"
                           ).toLocaleDateString("en-CA", {
@@ -134,7 +134,7 @@ export function BuildingUnits() {
                           })}
                         </span>
                       )}
-                      <ArrowRight size={13} />
+                      <ArrowRight size={13} className="text-zinc-400" />
                     </div>
                   </div>
 

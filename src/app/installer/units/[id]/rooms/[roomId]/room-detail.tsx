@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -12,17 +11,18 @@ import {
   CheckCircle,
   ArrowRight,
 } from "@phosphor-icons/react";
-import { units, rooms, getWindowsByRoom } from "@/lib/mock-data";
+import { getWindowsByRoom } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RiskDot } from "@/components/ui/risk-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export function RoomDetail() {
+export function RoomDetail({ data }: { data: AppDataset }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const unit = units.find((u) => u.id === id);
-  const room = rooms.find((r) => r.id === roomId);
-  const windowsList = room ? getWindowsByRoom(room.id) : [];
+  const unit = data.units.find((u) => u.id === id);
+  const room = data.rooms.find((r) => r.id === roomId);
+  const windowsList = room ? getWindowsByRoom(data, room.id) : [];
 
   if (!unit || !room) {
     return <div className="p-6 text-center text-muted">Room not found</div>;
@@ -32,11 +32,11 @@ export function RoomDetail() {
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
         title={room.name}
-        subtitle={`${unit.unitNumber} \u2022 ${unit.buildingName}`}
+        subtitle={`${unit.unitNumber} • ${unit.buildingName}`}
         backHref={`/installer/units/${unit.id}`}
       />
 
-      <div className="flex-1 px-4 py-5">
+      <div className="flex-1 px-5 py-5">
         {windowsList.length === 0 ? (
           <EmptyState
             icon={Ruler}
@@ -54,11 +54,11 @@ export function RoomDetail() {
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-muted font-medium">
+              <p className="text-[10px] font-bold text-muted uppercase tracking-wider">
                 {windowsList.length} window{windowsList.length !== 1 ? "s" : ""}
               </p>
               <Link href={`/installer/units/${id}/rooms/${roomId}/windows/new`}>
-                <button className="flex items-center gap-1 text-xs font-medium text-accent hover:underline active:scale-[0.96]">
+                <button className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:underline active:scale-[0.96]">
                   <Plus size={14} weight="bold" />
                   Add Window
                 </button>
@@ -80,13 +80,22 @@ export function RoomDetail() {
                   href={`/installer/units/${id}/rooms/${roomId}/windows/new?edit=${win.id}`}
                 >
                   <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
+                    {win.photoUrl && (
+                      <div className="mb-3 rounded-xl overflow-hidden border border-border bg-surface aspect-[2/1]">
+                        <img
+                          src={win.photoUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                     <div className="flex items-start justify-between mb-2.5">
                       <div>
-                        <p className="text-sm font-semibold text-zinc-900 tracking-tight">
+                        <p className="text-sm font-bold text-foreground tracking-tight">
                           {win.label}
                         </p>
                         <span
-                          className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider ${
+                          className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                             win.blindType === "blackout"
                               ? "bg-zinc-900 text-white"
                               : "bg-zinc-100 text-zinc-600"
@@ -99,10 +108,10 @@ export function RoomDetail() {
                     </div>
 
                     <div className="flex items-center gap-4 text-xs text-muted">
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1.5">
                         <Ruler size={14} />
                         {win.measured ? (
-                          <span className="font-mono text-zinc-700">
+                          <span className="font-mono font-semibold text-foreground">
                             {win.width}&quot; x {win.height}&quot;
                           </span>
                         ) : (
@@ -115,7 +124,7 @@ export function RoomDetail() {
                           <CheckCircle
                             size={14}
                             weight="fill"
-                            className="text-emerald-500"
+                            className="text-accent"
                           />
                         ) : (
                           "Required"
@@ -142,9 +151,8 @@ export function RoomDetail() {
         )}
       </div>
 
-      {/* Sticky footer */}
       {windowsList.length > 0 && (
-        <div className="sticky bottom-20 px-4 pb-4 pt-3 bg-gradient-to-t from-background via-background to-transparent">
+        <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent">
           <Link href={`/installer/units/${id}`}>
             <Button variant="secondary" fullWidth size="lg">
               Done with Room

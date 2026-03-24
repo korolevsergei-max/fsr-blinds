@@ -90,6 +90,9 @@ export interface Window {
   width: number | null;
   height: number | null;
   depth: number | null;
+  blindWidth: number | null;
+  blindHeight: number | null;
+  blindDepth: number | null;
   notes: string;
   riskFlag: RiskFlag;
   photoUrl: string | null;
@@ -114,4 +117,16 @@ export interface ScheduleEntry {
   date: string;
   status: UnitStatus;
   riskFlag: RiskFlag;
+}
+
+export interface Notification {
+  id: string;
+  recipientRole: string;
+  recipientId: string;
+  type: string;
+  title: string;
+  body: string;
+  relatedWeekStart: string | null;
+  createdAt: string;
+  read: boolean;
 }

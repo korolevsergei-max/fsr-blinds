@@ -1,5 +1,7 @@
+import { loadFullDataset } from "@/lib/server-data";
 import { ManagementDashboard } from "./management-dashboard";
 
-export default function ManagementPage() {
-  return <ManagementDashboard />;
+export default async function ManagementPage() {
+  const data = await loadFullDataset();
+  return <ManagementDashboard data={data} />;
 }

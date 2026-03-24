@@ -13,7 +13,8 @@ import {
   CheckCircle,
   Circle,
 } from "@phosphor-icons/react";
-import { units, getRoomsByUnit } from "@/lib/mock-data";
+import { getRoomsByUnit } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import {
   UNIT_STATUSES,
   UNIT_STATUS_LABELS,
@@ -23,10 +24,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import { Button } from "@/components/ui/button";
 
-export function ManagementUnitDetail() {
+export function ManagementUnitDetail({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
-  const unit = units.find((u) => u.id === id);
-  const rooms = unit ? getRoomsByUnit(unit.id) : [];
+  const unit = data.units.find((u) => u.id === id);
+  const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;

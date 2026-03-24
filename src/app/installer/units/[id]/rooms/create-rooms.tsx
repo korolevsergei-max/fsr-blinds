@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash, Door } from "@phosphor-icons/react";
-import { units, getRoomsByUnit } from "@/lib/mock-data";
+import { Plus, Trash, Door, PencilSimple, ArrowRight, Info } from "@phosphor-icons/react";
+import { createRoomsForUnit } from "@/app/actions/fsr-data";
+import { getRoomsByUnit } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 
@@ -15,14 +17,16 @@ interface LocalRoom {
   name: string;
 }
 
-export function CreateRooms() {
+export function CreateRooms({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const unit = units.find((u) => u.id === id);
-  const existingRooms = unit ? getRoomsByUnit(unit.id) : [];
+  const unit = data.units.find((u) => u.id === id);
+  const existingRooms = unit ? getRoomsByUnit(data, unit.id) : [];
 
   const [newRooms, setNewRooms] = useState<LocalRoom[]>([]);
   const [customName, setCustomName] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [pending, startTransition] = useTransition();
 
   const allNames = new Set([
     ...existingRooms.map((r) => r.name),
@@ -49,40 +53,55 @@ export function CreateRooms() {
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
-        title="Create Rooms"
-        subtitle={`${unit.unitNumber} \u2022 ${unit.buildingName}`}
+        title="Rooms"
+        subtitle={`${unit.unitNumber}`}
         backHref={`/installer/units/${unit.id}`}
       />
 
-      <div className="flex-1 px-4 py-5 flex flex-col gap-6">
-        {/* Existing rooms */}
-        {existingRooms.length > 0 && (
-          <div>
-            <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-              Existing Rooms
-            </h2>
-            <div className="flex flex-col gap-2">
-              {existingRooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="flex items-center gap-3 bg-white rounded-xl border border-border px-4 py-3"
-                >
-                  <Door size={16} className="text-zinc-400" />
-                  <span className="text-sm font-medium text-zinc-900">{room.name}</span>
-                  <span className="text-xs text-muted ml-auto">
-                    {room.windowCount} windows
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+      <div className="px-5 pt-4 pb-2">
+        <h2 className="text-xl font-bold tracking-tight text-foreground">
+          {unit.buildingName}
+        </h2>
+        <p className="text-xs text-muted mt-0.5">
+          {unit.unitNumber} • Create Room Profiles
+        </p>
+      </div>
+
+      <div className="flex-1 px-5 py-4 flex flex-col gap-6">
+        {saveError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-2xl px-4 py-3">
+            {saveError}
+          </p>
         )}
 
-        {/* Quick add chips */}
-        <div>
-          <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
+        {/* Room name input + quick add */}
+        <div className="bg-white rounded-2xl border border-border p-5">
+          <label className="text-[10px] font-bold text-muted uppercase tracking-wider block mb-2">
+            Room Name
+          </label>
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addRoom(customName)}
+              placeholder="e.g. Master Bedroom"
+              className="flex-1 h-12 px-4 rounded-2xl border border-border bg-surface text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+            />
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => addRoom(customName)}
+              disabled={!customName.trim() || allNames.has(customName.trim())}
+              className="rounded-2xl"
+            >
+              <Plus size={18} weight="bold" />
+            </Button>
+          </div>
+
+          <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2">
             Quick Add
-          </h2>
+          </p>
           <div className="flex flex-wrap gap-2">
             {quickChips
               .filter((c) => !allNames.has(c))
@@ -90,7 +109,7 @@ export function CreateRooms() {
                 <button
                   key={chip}
                   onClick={() => addRoom(chip)}
-                  className="px-3.5 py-2 rounded-xl bg-white border border-border text-sm text-zinc-700 font-medium hover:border-zinc-300 active:scale-[0.96] transition-all"
+                  className="px-3.5 py-2 rounded-full bg-white border border-border text-sm text-zinc-600 font-medium hover:bg-surface hover:border-zinc-300 active:scale-[0.96] transition-all"
                 >
                   {chip}
                 </button>
@@ -98,37 +117,48 @@ export function CreateRooms() {
           </div>
         </div>
 
-        {/* Custom name input */}
-        <div>
-          <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-            Custom Room Name
-          </h2>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addRoom(customName)}
-              placeholder="e.g. Sunroom, Closet..."
-              className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-white text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-            />
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => addRoom(customName)}
-              disabled={!customName.trim() || allNames.has(customName.trim())}
-            >
-              <Plus size={18} weight="bold" />
-            </Button>
+        {/* Existing rooms */}
+        {existingRooms.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold tracking-tight text-foreground">
+                Existing Rooms
+              </h3>
+              <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
+                {existingRooms.length} Added
+              </span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {existingRooms.map((room) => (
+                <div
+                  key={room.id}
+                  className="flex items-center gap-3 bg-white rounded-2xl border border-border px-4 py-3.5"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center">
+                    <Door size={16} className="text-accent" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">{room.name}</p>
+                    <p className="text-[11px] text-muted">{room.windowCount} Windows</p>
+                  </div>
+                  <PencilSimple size={16} className="text-zinc-400" />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* New rooms list */}
         {newRooms.length > 0 && (
           <div>
-            <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-              New Rooms ({newRooms.length})
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold tracking-tight text-foreground">
+                Unit Rooms
+              </h3>
+              <span className="text-[10px] font-bold text-accent uppercase tracking-wider">
+                {newRooms.length} Added
+              </span>
+            </div>
             <div className="flex flex-col gap-2">
               <AnimatePresence mode="popLayout">
                 {newRooms.map((room) => (
@@ -139,14 +169,15 @@ export function CreateRooms() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="flex items-center justify-between bg-white rounded-xl border border-border px-4 py-3"
+                    className="flex items-center gap-3 bg-white rounded-2xl border border-border px-4 py-3.5"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center">
                       <Door size={16} className="text-accent" />
-                      <span className="text-sm font-medium text-zinc-900">
-                        {room.name}
-                      </span>
                     </div>
+                    <span className="text-sm font-semibold text-foreground flex-1">
+                      {room.name}
+                    </span>
+                    <PencilSimple size={16} className="text-zinc-400" />
                     <button
                       onClick={() => removeRoom(room.tempId)}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors active:scale-[0.96]"
@@ -159,17 +190,56 @@ export function CreateRooms() {
             </div>
           </div>
         )}
+
+        {/* Add another room dashed button */}
+        <button
+          onClick={() => {
+            const nameInput = document.querySelector<HTMLInputElement>('input[placeholder="e.g. Master Bedroom"]');
+            nameInput?.focus();
+          }}
+          className="flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-accent/30 text-accent text-sm font-semibold hover:bg-accent/3 active:scale-[0.99] transition-all"
+        >
+          <Plus size={16} weight="bold" />
+          Add Another Room
+        </button>
+
+        {/* Info callout */}
+        <div className="bg-accent/5 rounded-2xl border border-accent/15 p-4 flex gap-3">
+          <Info size={20} weight="fill" className="text-accent flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-zinc-600 leading-relaxed">
+            Defining rooms accurately allows for automated hardware specification across the unit inventory.
+          </p>
+        </div>
       </div>
 
       {/* Sticky footer */}
-      <div className="sticky bottom-20 px-4 pb-4 pt-3 bg-gradient-to-t from-background via-background to-transparent">
+      <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent">
         <Button
           fullWidth
           size="lg"
-          disabled={newRooms.length === 0 && existingRooms.length === 0}
-          onClick={() => router.push(`/installer/units/${unit.id}`)}
+          disabled={
+            (newRooms.length === 0 && existingRooms.length === 0) || pending
+          }
+          onClick={() => {
+            setSaveError("");
+            startTransition(async () => {
+              if (newRooms.length > 0) {
+                const result = await createRoomsForUnit(
+                  unit.id,
+                  newRooms.map((r) => r.name)
+                );
+                if (!result.ok) {
+                  setSaveError(result.error);
+                  return;
+                }
+              }
+              router.push(`/installer/units/${unit.id}`);
+              router.refresh();
+            });
+          }}
         >
-          Save Rooms & Continue
+          {pending ? "Saving…" : "Save Rooms & Continue"}
+          <ArrowRight size={16} weight="bold" />
         </Button>
       </div>
     </div>

@@ -9,7 +9,8 @@ import {
   Wrench,
   Hammer,
 } from "@phosphor-icons/react";
-import { getScheduleByInstaller } from "@/lib/mock-data";
+import { getScheduleByInstaller } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
 import { RiskDot } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -32,14 +33,20 @@ function formatDateKey(d: Date): string {
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function InstallerSchedule() {
+export function InstallerSchedule({
+  data,
+  installerId = "inst-1",
+}: {
+  data: AppDataset;
+  installerId?: string;
+}) {
   const [weekOffset, setWeekOffset] = useState(0);
   const today = new Date("2026-03-23");
   const baseDate = new Date(today);
   baseDate.setDate(today.getDate() + weekOffset * 7);
 
   const weekDays = getWeekDays(baseDate);
-  const entries = getScheduleByInstaller("inst-1");
+  const entries = getScheduleByInstaller(data, installerId);
 
   const entriesByDate = new Map<string, typeof entries>();
   entries.forEach((e) => {

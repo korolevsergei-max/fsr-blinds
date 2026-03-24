@@ -13,7 +13,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#f9fafb",
+  themeColor: "#f5f5f4",
 };
 
 export default function RootLayout({
@@ -24,9 +24,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
     >
-      <body className="min-h-[100dvh] bg-background text-foreground font-sans">
+      <body
+        suppressHydrationWarning
+        className="min-h-[100dvh] bg-background text-foreground font-sans"
+      >
         {children}
       </body>
     </html>

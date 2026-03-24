@@ -1,5 +1,7 @@
+import { loadFullDataset } from "@/lib/server-data";
 import { InstallersList } from "./installers-list";
 
-export default function InstallersPage() {
-  return <InstallersList />;
+export default async function InstallersPage() {
+  const data = await loadFullDataset();
+  return <InstallersList data={data} />;
 }

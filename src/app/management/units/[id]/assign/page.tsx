@@ -1,5 +1,7 @@
+import { loadFullDataset } from "@/lib/server-data";
 import { AssignUnit } from "./assign-unit";
 
-export default function AssignPage() {
-  return <AssignUnit />;
+export default async function AssignPage() {
+  const data = await loadFullDataset();
+  return <AssignUnit data={data} />;
 }
