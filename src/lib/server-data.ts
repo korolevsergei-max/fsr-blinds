@@ -246,7 +246,10 @@ export type InstallerMediaItem = {
   publicUrl: string;
   label: string | null;
   unitId: string;
-  unitNumber: string | undefined;
+  unitNumber: string;
+  buildingId: string;
+  buildingName: string;
+  phase: "bracketing" | "installation" | null;
   createdAt: string;
 };
 
@@ -256,19 +259,25 @@ export async function loadInstallerMedia(
   const supabase = await createClient();
   const { data: units, error: ue } = await supabase
     .from("units")
-    .select("id, unit_number")
+    .select("id, unit_number, building_id, building_name")
     .eq("assigned_installer_id", installerId);
   if (ue) {
     throw new Error(ue.message);
   }
-  const idMap = new Map((units ?? []).map((u) => [u.id, u.unit_number]));
-  const unitIds = [...idMap.keys()];
+  type UnitMeta = { unit_number: string; building_id: string; building_name: string };
+  const unitMap = new Map<string, UnitMeta>(
+    (units ?? []).map((u) => [
+      u.id,
+      { unit_number: u.unit_number, building_id: u.building_id, building_name: u.building_name },
+    ])
+  );
+  const unitIds = [...unitMap.keys()];
   if (unitIds.length === 0) {
     return [];
   }
   const { data: media, error: me } = await supabase
     .from("media_uploads")
-    .select("id, public_url, label, unit_id, created_at")
+    .select("id, public_url, label, unit_id, phase, created_at")
     .in("unit_id", unitIds)
     .order("created_at", { ascending: false });
   if (me) {
@@ -276,14 +285,20 @@ export async function loadInstallerMedia(
       `${me.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
     );
   }
-  return (media ?? []).map((m) => ({
-    id: m.id,
-    publicUrl: m.public_url,
-    label: m.label,
-    unitId: m.unit_id,
-    unitNumber: idMap.get(m.unit_id),
-    createdAt: m.created_at,
-  }));
+  return (media ?? []).map((m) => {
+    const meta = unitMap.get(m.unit_id);
+    return {
+      id: m.id,
+      publicUrl: m.public_url,
+      label: m.label,
+      unitId: m.unit_id,
+      unitNumber: meta?.unit_number ?? m.unit_id,
+      buildingId: meta?.building_id ?? "",
+      buildingName: meta?.building_name ?? "",
+      phase: (m.phase as "bracketing" | "installation") ?? "bracketing",
+      createdAt: m.created_at,
+    };
+  });
 }
 
 export async function loadNotifications(

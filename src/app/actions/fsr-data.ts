@@ -233,6 +233,15 @@ export async function createWindowWithPhoto(
       return { ok: false, error: "Room does not belong to this unit" };
     }
 
+    // Determine upload phase from unit's current status
+    const { data: unitRow } = await supabase
+      .from("units")
+      .select("status")
+      .eq("id", unitId)
+      .single();
+    const uploadPhase =
+      unitRow?.status === "install_date_scheduled" ? "installation" : "bracketing";
+
     const ext =
       (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") ||
       "jpg";
@@ -288,6 +297,7 @@ export async function createWindowWithPhoto(
       storage_path: path,
       public_url: publicUrl,
       upload_kind: "window_measure",
+      phase: uploadPhase,
       unit_id: unitId,
       room_id: roomId,
       window_id: windowId,
@@ -361,6 +371,15 @@ export async function updateWindowWithOptionalPhoto(
       return { ok: false, error: "Invalid room" };
     }
 
+    // Determine upload phase from unit's current status
+    const { data: unitRow } = await supabase
+      .from("units")
+      .select("status")
+      .eq("id", unitId)
+      .single();
+    const uploadPhase =
+      unitRow?.status === "install_date_scheduled" ? "installation" : "bracketing";
+
     let publicUrl: string | undefined;
     let storagePath: string | undefined;
     if (file instanceof File && file.size > 0) {
@@ -428,6 +447,7 @@ export async function updateWindowWithOptionalPhoto(
         storage_path: storagePath,
         public_url: publicUrl,
         upload_kind: "window_measure",
+        phase: uploadPhase,
         unit_id: unitId,
         room_id: roomId,
         window_id: windowId,
