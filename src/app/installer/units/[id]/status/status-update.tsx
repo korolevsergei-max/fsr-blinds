@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { CheckCircle, ArrowRight } from "@phosphor-icons/react";
+import { CheckCircle, ArrowRight, Warning } from "@phosphor-icons/react";
 import { updateUnitStatus } from "@/app/actions/fsr-data";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -38,6 +38,13 @@ export function StatusUpdate({ data }: { data: AppDataset }) {
   const allowedNext = UNIT_STATUSES.filter(
     (s) => UNIT_STATUS_ORDER[s] === currentStep + 1
   );
+
+  // Measurement progress for bracketing validation
+  const totalWindows = rooms.reduce((s, r) => s + r.windowCount, 0);
+  const measuredWindows = rooms.reduce((s, r) => s + r.completedWindows, 0);
+  const allMeasured = totalWindows > 0 && measuredWindows >= totalWindows;
+  const blockedByMeasurement =
+    selectedStatus === "bracketed_measured" && !allMeasured;
 
   const handleSave = () => {
     if (!selectedStatus) return;
@@ -92,12 +99,30 @@ export function StatusUpdate({ data }: { data: AppDataset }) {
             transition={{ delay: 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
             <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
-              Completion Summary
+              Measurement Progress
             </h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <MetricTile value={rooms.length} label="Rooms" />
-              <MetricTile value={unit.windowCount} label="Windows" />
+              <MetricTile value={measuredWindows} label="Measured" />
+              <MetricTile value={totalWindows} label="Total" />
             </div>
+            {totalWindows > 0 && !allMeasured && (
+              <div className="mt-3 flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <Warning size={16} weight="fill" className="text-amber-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                  <span className="font-bold">{totalWindows - measuredWindows} window{totalWindows - measuredWindows !== 1 ? "s" : ""} still need measuring.</span>{" "}
+                  You must measure and photograph all windows before marking this unit as Bracketed & Measured.
+                </p>
+              </div>
+            )}
+            {allMeasured && (
+              <div className="mt-3 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <CheckCircle size={16} weight="fill" className="text-emerald-600 flex-shrink-0" />
+                <p className="text-xs text-emerald-700 font-semibold">
+                  All {totalWindows} windows measured — ready to mark as Bracketed & Measured.
+                </p>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -110,21 +135,32 @@ export function StatusUpdate({ data }: { data: AppDataset }) {
             Move To
           </h2>
           <div className="flex flex-col gap-2">
-            {allowedNext.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setSelectedStatus(status)}
-                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-sm font-semibold transition-all active:scale-[0.98] ${
-                  selectedStatus === status
-                    ? "border-accent bg-accent/5 text-accent"
-                    : "border-border bg-white text-zinc-700 hover:bg-surface"
-                }`}
-              >
-                <ArrowRight size={16} />
-                {UNIT_STATUS_LABELS[status]}
-              </button>
-            ))}
+            {allowedNext.map((s) => {
+              const locked = s === "bracketed_measured" && !allMeasured;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => !locked && setSelectedStatus(s)}
+                  disabled={locked}
+                  className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-sm font-semibold transition-all ${
+                    locked
+                      ? "border-border bg-zinc-50 text-zinc-400 cursor-not-allowed"
+                      : selectedStatus === s
+                        ? "border-accent bg-accent/5 text-accent active:scale-[0.98]"
+                        : "border-border bg-white text-zinc-700 hover:bg-surface active:scale-[0.98]"
+                  }`}
+                >
+                  {locked ? <Warning size={16} className="text-amber-400" /> : <ArrowRight size={16} />}
+                  <span className="flex-1 text-left">{UNIT_STATUS_LABELS[s]}</span>
+                  {locked && (
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+                      {measuredWindows}/{totalWindows} measured
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
             {allowedNext.length === 0 && (
               <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-accent/5 border border-accent/20 text-accent text-sm font-semibold">
@@ -166,7 +202,7 @@ export function StatusUpdate({ data }: { data: AppDataset }) {
             <Button
               fullWidth
               size="lg"
-              disabled={!selectedStatus || pending}
+              disabled={!selectedStatus || pending || blockedByMeasurement}
               onClick={handleSave}
             >
               {pending ? "Saving…" : "Confirm Status Update"}

@@ -140,6 +140,46 @@ export async function updateUnitStatus(
 ): Promise<ActionResult> {
   try {
     const supabase = await createClient();
+
+    // Enforce: can only move to bracketed_measured if every window is measured
+    if (status === "bracketed_measured") {
+      const { data: rooms } = await supabase
+        .from("rooms")
+        .select("id")
+        .eq("unit_id", unitId);
+      const roomIds = (rooms ?? []).map((r) => r.id);
+
+      let totalWindows = 0;
+      let measuredWindows = 0;
+
+      if (roomIds.length > 0) {
+        const { count: total } = await supabase
+          .from("windows")
+          .select("*", { count: "exact", head: true })
+          .in("room_id", roomIds);
+        const { count: measured } = await supabase
+          .from("windows")
+          .select("*", { count: "exact", head: true })
+          .in("room_id", roomIds)
+          .eq("measured", true);
+        totalWindows = total ?? 0;
+        measuredWindows = measured ?? 0;
+      }
+
+      if (totalWindows === 0) {
+        return {
+          ok: false,
+          error: "No windows have been added to this unit. Add and measure all windows before marking as Bracketed & Measured.",
+        };
+      }
+      if (measuredWindows < totalWindows) {
+        return {
+          ok: false,
+          error: `${measuredWindows} of ${totalWindows} windows measured. All windows must be measured with photos before marking as Bracketed & Measured.`,
+        };
+      }
+    }
+
     const { error } = await supabase
       .from("units")
       .update({

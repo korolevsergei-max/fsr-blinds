@@ -2,7 +2,6 @@ export const UNIT_STATUSES = [
   "pending_scheduling",
   "scheduled_bracketing",
   "bracketed_measured",
-  "install_date_tbd",
   "install_date_scheduled",
   "installed_pending_approval",
   "client_approved",
@@ -14,7 +13,6 @@ export const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
   pending_scheduling: "Pending Scheduling",
   scheduled_bracketing: "Scheduled for Bracketing",
   bracketed_measured: "Bracketed & Measured",
-  install_date_tbd: "Install Date TBD",
   install_date_scheduled: "Install Scheduled",
   installed_pending_approval: "Installed, Awaiting Approval",
   client_approved: "Client Approved",
@@ -24,10 +22,9 @@ export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
   pending_scheduling: 0,
   scheduled_bracketing: 1,
   bracketed_measured: 2,
-  install_date_tbd: 3,
-  install_date_scheduled: 4,
-  installed_pending_approval: 5,
-  client_approved: 6,
+  install_date_scheduled: 3,
+  installed_pending_approval: 4,
+  client_approved: 5,
 };
 
 export type RiskFlag = "green" | "yellow" | "red";
