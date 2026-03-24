@@ -9,6 +9,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { Unit } from "@/lib/types";
 import { StatusChip } from "@/components/ui/status-chip";
 import { RiskDot } from "@/components/ui/risk-badge";
+import { PageHeader } from "@/components/ui/page-header";
 
 export function InstallerHome({
   data,
@@ -50,28 +51,19 @@ export function InstallerHome({
 
   return (
     <div className="flex flex-col">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
-        <span className="text-lg font-bold tracking-tight text-foreground">
-          FSR Blinds
-        </span>
-        <Link
-          href="/installer/profile"
-          className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:bg-accent-dark transition-colors"
-          aria-label="Profile"
-        >
-          {installer?.name?.[0] ?? "I"}
-        </Link>
-      </header>
-
-      <div className="px-5 pt-4 pb-2">
-        <p className="text-[10px] font-bold text-accent uppercase tracking-[0.15em]">
-          Assigned Tasks
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
-          Good morning, {installer?.name?.split(" ")[0] ?? "Installer"}
-        </h1>
-      </div>
+      <PageHeader
+        title="FSR Blinds"
+        subtitle={`Good morning, ${installer?.name?.split(" ")[0] ?? "Installer"}`}
+        actions={
+          <Link
+            href="/installer/profile"
+            className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:bg-accent-dark transition-colors"
+            aria-label="Profile"
+          >
+            {installer?.name?.[0] ?? "I"}
+          </Link>
+        }
+      />
 
       {/* Search */}
       <div className="px-5 py-3">
