@@ -7,7 +7,6 @@ import {
   CalendarBlank,
   UploadSimple,
   Bell,
-  UserCircle,
 } from "@phosphor-icons/react";
 
 const navItems = [
@@ -15,7 +14,6 @@ const navItems = [
   { href: "/installer/schedule", label: "SCHEDULE", Icon: CalendarBlank },
   { href: "/installer/uploads", label: "UPLOADS", Icon: UploadSimple },
   { href: "/installer/notifications", label: "ALERTS", Icon: Bell },
-  { href: "/installer/profile", label: "PROFILE", Icon: UserCircle },
 ];
 
 export function BottomNav({

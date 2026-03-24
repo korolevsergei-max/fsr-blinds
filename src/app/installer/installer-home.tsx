@@ -3,47 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import {
-  MagnifyingGlass,
-  List,
-  ArrowRight,
-} from "@phosphor-icons/react";
+import { MagnifyingGlass, Buildings, ArrowRight } from "@phosphor-icons/react";
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
-import type { Building, Unit } from "@/lib/types";
+import type { Unit } from "@/lib/types";
 import { StatusChip } from "@/components/ui/status-chip";
-import { RiskBadge } from "@/components/ui/risk-badge";
-
-type Filter = "all" | "today" | "overdue" | "completed";
-
-const filterLabels: Record<Filter, string> = {
-  all: "ALL",
-  today: "DUE TODAY",
-  overdue: "OVERDUE",
-  completed: "COMPLETED",
-};
-
-function filterUnits(units: Unit[], filter: Filter): Unit[] {
-  const today = new Date().toISOString().slice(0, 10);
-  switch (filter) {
-    case "today":
-      return units.filter(
-        (u) => u.bracketingDate === today || u.installationDate === today
-      );
-    case "overdue":
-      return units.filter(
-        (u) =>
-          u.status !== "client_approved" &&
-          u.bracketingDate &&
-          u.bracketingDate < today &&
-          u.status === "scheduled_bracketing"
-      );
-    case "completed":
-      return units.filter((u) => u.status === "client_approved");
-    default:
-      return units;
-  }
-}
+import { RiskDot } from "@/components/ui/risk-badge";
 
 export function InstallerHome({
   data,
@@ -53,36 +18,50 @@ export function InstallerHome({
   installerId?: string;
 }) {
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<Filter>("all");
 
   const installer = data.installers.find((i) => i.id === installerId);
   const allUnits = getUnitsByInstaller(data, installerId);
-  const filtered = filterUnits(allUnits, activeFilter).filter(
-    (u) =>
-      u.unitNumber.toLowerCase().includes(search.toLowerCase()) ||
-      u.buildingName.toLowerCase().includes(search.toLowerCase()) ||
-      u.clientName.toLowerCase().includes(search.toLowerCase())
-  );
 
-  const buildingMap = new Map<string, Building>();
-  for (const b of data.buildings) buildingMap.set(b.id, b);
+  // Group units by building, deduplicated
+  const buildingMap = new Map<
+    string,
+    { id: string; name: string; clientName: string; units: Unit[] }
+  >();
+  for (const unit of allUnits) {
+    if (!buildingMap.has(unit.buildingId)) {
+      buildingMap.set(unit.buildingId, {
+        id: unit.buildingId,
+        name: unit.buildingName,
+        clientName: unit.clientName,
+        units: [],
+      });
+    }
+    buildingMap.get(unit.buildingId)!.units.push(unit);
+  }
+
+  const buildings = Array.from(buildingMap.values()).filter(
+    (b) =>
+      !search ||
+      b.name.toLowerCase().includes(search.toLowerCase()) ||
+      b.units.some((u) =>
+        u.unitNumber.toLowerCase().includes(search.toLowerCase())
+      )
+  );
 
   return (
     <div className="flex flex-col">
       {/* Top bar */}
       <header className="flex items-center justify-between px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2">
-        <div className="flex items-center gap-3">
-          <List size={22} className="text-foreground" />
-          <span className="text-lg font-bold tracking-tight text-foreground">
-            FSR Blinds
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <MagnifyingGlass size={20} className="text-zinc-400" />
-          <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">
-            {installer?.name?.[0] ?? "I"}
-          </div>
-        </div>
+        <span className="text-lg font-bold tracking-tight text-foreground">
+          FSR Blinds
+        </span>
+        <Link
+          href="/installer/profile"
+          className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:bg-accent-dark transition-colors"
+          aria-label="Profile"
+        >
+          {installer?.name?.[0] ?? "I"}
+        </Link>
       </header>
 
       <div className="px-5 pt-4 pb-2">
@@ -103,7 +82,7 @@ export function InstallerHome({
           />
           <input
             type="text"
-            placeholder="Search by Client or Unit ID..."
+            placeholder="Search by building name or unit number..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-12 pl-10 pr-4 rounded-2xl border border-border bg-white text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
@@ -111,47 +90,28 @@ export function InstallerHome({
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="px-5 flex items-center gap-2 overflow-x-auto no-scrollbar pb-4">
-        {(Object.keys(filterLabels) as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setActiveFilter(f)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-[0.96] ${
-              activeFilter === f
-                ? "bg-accent text-white shadow-sm"
-                : "bg-white text-zinc-500 border border-border hover:bg-surface"
-            }`}
-          >
-            {filterLabels[f]}
-          </button>
-        ))}
-      </div>
-
       {/* Section heading */}
       <div className="px-5 flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold tracking-tight text-foreground">
-          Today&apos;s Load
+          Your Buildings
         </h2>
         <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
-          {filtered.length} Unit{filtered.length !== 1 ? "s" : ""}
+          {buildings.length} Building{buildings.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {/* Unit cards */}
+      {/* Building cards */}
       <div className="px-5 flex flex-col gap-4 pb-8">
-        {filtered.map((unit, i) => {
-          const building = buildingMap.get(unit.buildingId);
-          const nextTask = unit.status === "scheduled_bracketing"
-            ? "Bracketing & Measurement"
-            : unit.status === "install_date_scheduled"
-              ? "Installation"
-              : null;
-          const nextDate = unit.bracketingDate ?? unit.installationDate;
+        {buildings.map((building, i) => {
+          const nextDate =
+            building.units
+              .map((u) => u.bracketingDate ?? u.installationDate)
+              .filter(Boolean)
+              .sort()[0] ?? null;
 
           return (
             <motion.div
-              key={unit.id}
+              key={building.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
@@ -160,63 +120,78 @@ export function InstallerHome({
                 ease: [0.16, 1, 0.3, 1],
               }}
             >
-              <Link href={`/installer/units/${unit.id}`}>
+              <Link href={`/installer/buildings/${building.id}`}>
                 <div className="bg-white rounded-2xl border border-border overflow-hidden hover:border-zinc-300 transition-all active:scale-[0.99]">
-                  <div className="p-4 pb-3">
-                    <p className="text-[10px] font-bold text-muted uppercase tracking-[0.12em]">
-                      {unit.clientName}
-                    </p>
-                    <p className="text-lg font-bold text-foreground tracking-tight mt-0.5">
-                      {building?.name ?? unit.buildingName}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs font-semibold text-accent font-mono">
-                        {unit.unitNumber}
-                      </span>
-                      <span className="text-xs text-muted">
-                        • {unit.unitNumber}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2.5">
-                      <StatusChip status={unit.status} />
-                      {unit.riskFlag !== "green" && (
-                        <RiskBadge flag={unit.riskFlag} />
-                      )}
-                    </div>
-                  </div>
-
-                  {nextTask && nextDate && (
-                    <div className="mx-3 mb-3 px-4 py-3 rounded-xl bg-surface border border-border/60">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">
-                            Next Task
-                          </p>
-                          <p className="text-sm font-semibold text-foreground mt-0.5">
-                            {nextTask}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] font-bold text-muted uppercase tracking-wider">
-                            Due
-                          </p>
-                          <p className="text-sm font-bold text-accent font-mono mt-0.5">
-                            {new Date(nextDate + "T00:00:00").toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            }).toUpperCase()}
-                          </p>
+                  {/* Building header */}
+                  <div className="p-4 pb-3 flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center flex-shrink-0">
+                        <Buildings size={18} className="text-accent" />
+                      </div>
+                      <div>
+                        <p className="text-base font-bold text-foreground tracking-tight leading-tight">
+                          {building.name}
+                        </p>
+                        <p className="text-[11px] text-muted mt-0.5">
+                          {building.clientName}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10px] font-bold text-accent uppercase tracking-wider">
+                            {building.units.length} unit{building.units.length !== 1 ? "s" : ""}
+                          </span>
+                          {nextDate && (
+                            <>
+                              <span className="text-zinc-300">·</span>
+                              <span className="text-[10px] font-mono font-semibold text-muted">
+                                Next:{" "}
+                                {new Date(nextDate + "T00:00:00").toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
-                  )}
+                    <ArrowRight size={16} className="text-zinc-400 mt-1 flex-shrink-0" />
+                  </div>
 
-                  {!nextTask && (
-                    <div className="px-4 pb-3 flex items-center justify-end">
-                      <ArrowRight size={16} className="text-zinc-400" />
-                    </div>
-                  )}
+                  {/* Unit rows */}
+                  <div className="border-t border-border divide-y divide-border">
+                    {building.units.slice(0, 4).map((unit) => {
+                      const dueDate = unit.bracketingDate ?? unit.installationDate;
+                      return (
+                        <div
+                          key={unit.id}
+                          className="flex items-center justify-between px-4 py-2.5"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <RiskDot flag={unit.riskFlag} />
+                            <span className="text-sm font-bold text-foreground font-mono">
+                              {unit.unitNumber}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <StatusChip status={unit.status} />
+                            {dueDate && (
+                              <span className="text-[11px] font-mono font-semibold text-muted">
+                                {new Date(dueDate + "T00:00:00").toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {building.units.length > 4 && (
+                      <div className="px-4 py-2 text-[11px] font-semibold text-muted text-center">
+                        +{building.units.length - 4} more units
+                      </div>
+                    )}
+                  </div>
                 </div>
               </Link>
             </motion.div>
