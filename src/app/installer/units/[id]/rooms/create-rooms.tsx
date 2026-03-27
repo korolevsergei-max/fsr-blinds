@@ -23,6 +23,10 @@ export function CreateRooms({ data }: { data: AppDataset }) {
   const unit = data.units.find((u) => u.id === id);
   const existingRooms = unit ? getRoomsByUnit(data, unit.id) : [];
 
+  if (!unit) {
+    return <div className="p-6 text-center text-muted">Unit not found</div>;
+  }
+
   const [newRooms, setNewRooms] = useState<LocalRoom[]>([]);
   const [customName, setCustomName] = useState("");
   const [saveError, setSaveError] = useState("");
