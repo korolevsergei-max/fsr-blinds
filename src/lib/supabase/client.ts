@@ -55,7 +55,12 @@ export function createClient() {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
-          setCookieOnDocument(name, value, options);
+          const { sameSite, ...rest } = options ?? {};
+          const safeOptions = {
+            ...rest,
+            ...(sameSite && typeof sameSite === "string" ? { sameSite } : {}),
+          };
+          setCookieOnDocument(name, value, safeOptions);
         });
       },
     },
