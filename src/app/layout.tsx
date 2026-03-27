@@ -13,7 +13,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#f5f5f4",
+  themeColor: "#f4f4f3",
 };
 
 export default function RootLayout({
@@ -31,6 +31,9 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-[100dvh] bg-background text-foreground font-sans"
       >
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         {children}
       </body>
     </html>

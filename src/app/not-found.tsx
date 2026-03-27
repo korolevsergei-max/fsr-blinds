@@ -7,17 +7,17 @@ import { Button } from "@/components/ui/button";
 export default function NotFound() {
   return (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center px-6 text-center bg-background">
-      <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-zinc-100 mb-5">
-        <MapTrifold size={28} weight="duotone" className="text-zinc-400" />
+      <div className="w-14 h-14 rounded-[var(--radius-xl)] bg-surface border border-border flex items-center justify-center mb-5">
+        <MapTrifold size={24} weight="duotone" className="text-tertiary" />
       </div>
-      <h1 className="text-xl font-semibold text-zinc-900 tracking-tight mb-2">
+      <h1 className="text-[19px] font-semibold text-foreground tracking-tight mb-2">
         Page not found
       </h1>
-      <p className="text-sm text-muted max-w-[30ch] leading-relaxed mb-8">
+      <p className="text-[14px] text-secondary max-w-[30ch] leading-relaxed mb-8">
         The page you are looking for does not exist or has been moved.
       </p>
       <Link href="/">
-        <Button>Back to Home</Button>
+        <Button>Back to home</Button>
       </Link>
     </div>
   );

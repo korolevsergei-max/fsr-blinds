@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash, Door, PencilSimple, ArrowRight, Info } from "@phosphor-icons/react";
-import { createRoomsForUnit } from "@/app/actions/fsr-data";
+import { Plus, Trash, Door, PencilSimple, ArrowRight, Info, Check, X } from "@phosphor-icons/react";
+import { createRoomsForUnit, deleteRoom, updateRoomName } from "@/app/actions/fsr-data";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,6 +26,9 @@ export function CreateRooms({ data }: { data: AppDataset }) {
   const [newRooms, setNewRooms] = useState<LocalRoom[]>([]);
   const [customName, setCustomName] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [editingExistingRoomId, setEditingExistingRoomId] = useState<string | null>(null);
+  const [editingNewRoomTempId, setEditingNewRoomTempId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [pending, startTransition] = useTransition();
 
   const allNames = new Set([
@@ -44,6 +47,95 @@ export function CreateRooms({ data }: { data: AppDataset }) {
 
   const removeRoom = (tempId: string) => {
     setNewRooms((prev) => prev.filter((r) => r.tempId !== tempId));
+  };
+
+  const startEditExistingRoom = (roomId: string, name: string) => {
+    setEditingNewRoomTempId(null);
+    setEditingExistingRoomId(roomId);
+    setEditName(name);
+    setSaveError("");
+  };
+
+  const startEditNewRoom = (tempId: string, name: string) => {
+    setEditingExistingRoomId(null);
+    setEditingNewRoomTempId(tempId);
+    setEditName(name);
+    setSaveError("");
+  };
+
+  const cancelEdit = () => {
+    setEditingExistingRoomId(null);
+    setEditingNewRoomTempId(null);
+    setEditName("");
+  };
+
+  const saveExistingRoomEdit = (roomId: string) => {
+    const nextName = editName.trim();
+    if (!nextName) {
+      setSaveError("Room name is required.");
+      return;
+    }
+    const duplicateExisting = existingRooms.some(
+      (r) => r.id !== roomId && r.name.toLowerCase() === nextName.toLowerCase()
+    );
+    const duplicateNew = newRooms.some((r) => r.name.toLowerCase() === nextName.toLowerCase());
+    if (duplicateExisting || duplicateNew) {
+      setSaveError("A room with this name already exists.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await updateRoomName(roomId, unit.id, nextName);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      cancelEdit();
+      router.refresh();
+    });
+  };
+
+  const saveNewRoomEdit = (tempId: string) => {
+    const nextName = editName.trim();
+    if (!nextName) {
+      setSaveError("Room name is required.");
+      return;
+    }
+    const duplicateExisting = existingRooms.some(
+      (r) => r.name.toLowerCase() === nextName.toLowerCase()
+    );
+    const duplicateNew = newRooms.some(
+      (r) => r.tempId !== tempId && r.name.toLowerCase() === nextName.toLowerCase()
+    );
+    if (duplicateExisting || duplicateNew) {
+      setSaveError("A room with this name already exists.");
+      return;
+    }
+
+    setNewRooms((prev) =>
+      prev.map((room) => (room.tempId === tempId ? { ...room, name: nextName } : room))
+    );
+    cancelEdit();
+  };
+
+  const removeExistingRoom = (roomId: string, roomName: string) => {
+    const confirmed = window.confirm(
+      `Delete "${roomName}"? This can only be done if no windows are saved in that room.`
+    );
+    if (!confirmed) return;
+
+    setSaveError("");
+    startTransition(async () => {
+      const result = await deleteRoom(roomId, unit.id);
+      if (!result.ok) {
+        setSaveError(result.error);
+        return;
+      }
+      if (editingExistingRoomId === roomId) {
+        cancelEdit();
+      }
+      router.refresh();
+    });
   };
 
   if (!unit) {
@@ -138,10 +230,56 @@ export function CreateRooms({ data }: { data: AppDataset }) {
                     <Door size={16} className="text-accent" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">{room.name}</p>
+                    {editingExistingRoomId === room.id ? (
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveExistingRoomEdit(room.id);
+                          if (e.key === "Escape") cancelEdit();
+                        }}
+                        className="h-9 w-full rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                      />
+                    ) : (
+                      <p className="text-sm font-semibold text-foreground">{room.name}</p>
+                    )}
                     <p className="text-[11px] text-muted">{room.windowCount} Windows</p>
                   </div>
-                  <PencilSimple size={16} className="text-zinc-400" />
+                  {editingExistingRoomId === room.id ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => saveExistingRoomEdit(room.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditExistingRoom(room.id, room.name)}
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors active:scale-[0.96]"
+                    >
+                      <PencilSimple size={16} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeExistingRoom(room.id, room.name)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors active:scale-[0.96]"
+                    title="Delete room"
+                  >
+                    <Trash size={16} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -174,11 +312,52 @@ export function CreateRooms({ data }: { data: AppDataset }) {
                     <div className="w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center">
                       <Door size={16} className="text-accent" />
                     </div>
-                    <span className="text-sm font-semibold text-foreground flex-1">
-                      {room.name}
-                    </span>
-                    <PencilSimple size={16} className="text-zinc-400" />
+                    <div className="flex-1">
+                      {editingNewRoomTempId === room.tempId ? (
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveNewRoomEdit(room.tempId);
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                          className="h-9 w-full rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-foreground">
+                          {room.name}
+                        </span>
+                      )}
+                    </div>
+                    {editingNewRoomTempId === room.tempId ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => saveNewRoomEdit(room.tempId)}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEditNewRoom(room.tempId, room.name)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 transition-colors active:scale-[0.96]"
+                      >
+                        <PencilSimple size={16} />
+                      </button>
+                    )}
                     <button
+                      type="button"
                       onClick={() => removeRoom(room.tempId)}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors active:scale-[0.96]"
                     >

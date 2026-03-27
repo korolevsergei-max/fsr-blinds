@@ -27,6 +27,26 @@ export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
   client_approved: 5,
 };
 
+export const UNIT_PHOTO_STAGES = [
+  "scheduled_bracketing",
+  "bracketed_measured",
+  "installed_pending_approval",
+] as const;
+
+export type UnitPhotoStage = (typeof UNIT_PHOTO_STAGES)[number];
+
+export const UNIT_PHOTO_STAGE_LABELS: Record<UnitPhotoStage, string> = {
+  scheduled_bracketing: "Scheduled for Bracketing",
+  bracketed_measured: "Bracketed & Measured",
+  installed_pending_approval: "Installed, Awaiting Approval",
+};
+
+export const UNIT_PHOTO_STAGE_HELPERS: Record<UnitPhotoStage, string> = {
+  scheduled_bracketing: "Before-bracketing photos (first set).",
+  bracketed_measured: "After-bracketing photos (second set).",
+  installed_pending_approval: "Completion photos waiting for client approval.",
+};
+
 export type RiskFlag = "green" | "yellow" | "red";
 
 export const RISK_LABELS: Record<RiskFlag, string> = {
@@ -36,6 +56,16 @@ export const RISK_LABELS: Record<RiskFlag, string> = {
 };
 
 export type BlindType = "screen" | "blackout";
+
+export const UNIT_PRIORITIES = ["low", "medium", "high"] as const;
+
+export type UnitPriority = (typeof UNIT_PRIORITIES)[number];
+
+export const UNIT_PRIORITY_LABELS: Record<UnitPriority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
 
 export interface Client {
   id: string;
@@ -60,15 +90,28 @@ export interface Unit {
   buildingName: string;
   unitNumber: string;
   status: UnitStatus;
-  riskFlag: RiskFlag;
   assignedInstallerId: string | null;
   assignedInstallerName: string | null;
   bracketingDate: string | null;
   installationDate: string | null;
+  earliestBracketingDate: string | null;
+  earliestInstallationDate?: string | null;
+  completeByDate?: string | null;
   roomCount: number;
   windowCount: number;
   photosUploaded: number;
   notesCount: number;
+  createdAt: string | null;
+}
+
+export interface UnitActivityLog {
+  id: string;
+  unitId: string;
+  actorRole: string;
+  actorName: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export interface Room {
@@ -84,6 +127,7 @@ export interface Window {
   roomId: string;
   label: string;
   blindType: BlindType;
+  riskFlag: RiskFlag;
   width: number | null;
   height: number | null;
   depth: number | null;
@@ -91,7 +135,6 @@ export interface Window {
   blindHeight: number | null;
   blindDepth: number | null;
   notes: string;
-  riskFlag: RiskFlag;
   photoUrl: string | null;
   measured: boolean;
 }
@@ -102,6 +145,24 @@ export interface Installer {
   email: string;
   phone: string;
   avatarUrl: string;
+  authUserId: string | null;
+}
+
+export interface Manufacturer {
+  id: string;
+  name: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  authUserId: string | null;
+}
+
+export interface Scheduler {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  authUserId: string | null;
 }
 
 export interface ScheduleEntry {
@@ -110,10 +171,11 @@ export interface ScheduleEntry {
   unitNumber: string;
   buildingName: string;
   clientName: string;
+  ownerUserId: string | null;
+  ownerName: string | null;
   taskType: "bracketing" | "installation";
   date: string;
   status: UnitStatus;
-  riskFlag: RiskFlag;
 }
 
 export interface Notification {

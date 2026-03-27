@@ -1,19 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  Envelope,
-  Phone,
-  Buildings,
-  CheckCircle,
-} from "@phosphor-icons/react";
+import { Envelope, Phone, Buildings, CheckCircle, Plus } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Plus } from "@phosphor-icons/react";
 
 export function InstallersList({ data }: { data: AppDataset }) {
   const { installers, units } = data;
+
   return (
     <div className="flex flex-col">
       <PageHeader
@@ -43,57 +38,53 @@ export function InstallersList({ data }: { data: AppDataset }) {
               key={inst.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: i * 0.08,
-                duration: 0.3,
-                ease: [0.16, 1, 0.3, 1],
-              }}
+              transition={{ delay: i * 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="bg-white rounded-2xl border border-border p-4">
+              <div className="surface-card p-4">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0">
+                  <div className="w-12 h-12 rounded-[var(--radius-lg)] overflow-hidden bg-surface border border-border flex-shrink-0">
                     <img
                       src={inst.avatarUrl}
-                      alt=""
+                      alt={inst.name}
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-zinc-900 tracking-tight">
+                    <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
                       {inst.name}
                     </h3>
-                    <p className="text-xs text-muted">Field Installer</p>
+                    <p className="text-[12px] text-tertiary">Field installer</p>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5 mb-3">
-                  <div className="flex items-center gap-2 text-xs text-muted">
+                  <div className="flex items-center gap-2 text-[12px] text-secondary">
                     <Envelope size={12} />
                     {inst.email}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted">
+                  <div className="flex items-center gap-2 text-[12px] text-secondary">
                     <Phone size={12} />
                     {inst.phone}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs text-muted border-t border-border pt-3">
+                <div className="flex items-center gap-4 text-[12px] text-tertiary border-t border-border-subtle pt-3">
                   <span className="flex items-center gap-1">
                     <Buildings size={12} />
-                    <span className="font-mono font-semibold text-zinc-700">
+                    <span className="font-mono font-semibold text-foreground">
                       {activeUnits.length}
                     </span>{" "}
                     active
                   </span>
                   <span className="flex items-center gap-1">
                     <CheckCircle size={12} />
-                    <span className="font-mono font-semibold text-zinc-700">
+                    <span className="font-mono font-semibold text-foreground">
                       {completedUnits.length}
                     </span>{" "}
                     completed
                   </span>
                   <span>
-                    <span className="font-mono font-semibold text-zinc-700">
+                    <span className="font-mono font-semibold text-foreground">
                       {assignedUnits.length}
                     </span>{" "}
                     total

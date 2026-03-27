@@ -11,7 +11,6 @@ import {
 } from "@phosphor-icons/react";
 import { getScheduleByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
-import { RiskDot } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 
 function getWeekDays(baseDate: Date): Date[] {
@@ -41,7 +40,7 @@ export function InstallerSchedule({
   installerId?: string;
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
-  const today = new Date("2026-03-23");
+  const today = new Date();
   const baseDate = new Date(today);
   baseDate.setDate(today.getDate() + weekOffset * 7);
 
@@ -85,7 +84,7 @@ export function InstallerSchedule({
         <div className="flex flex-col gap-1">
           {weekDays.map((day, dayIdx) => {
             const key = formatDateKey(day);
-            const isToday = key === "2026-03-23";
+            const isToday = key === today.toISOString().split("T")[0];
             const dayEntries = entriesByDate.get(key) || [];
 
             return (
@@ -162,7 +161,6 @@ export function InstallerSchedule({
                                     {entry.taskType}
                                   </span>
                                 </div>
-                                <RiskDot flag={entry.riskFlag} />
                               </div>
                               <p className="text-sm font-medium text-zinc-900 tracking-tight">
                                 {entry.unitNumber}

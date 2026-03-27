@@ -8,20 +8,52 @@ import {
   CheckCircle,
   Circle,
   Info,
+  WarningCircle,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
-import { UNIT_STATUSES, UNIT_STATUS_LABELS, UNIT_STATUS_ORDER } from "@/lib/types";
+import type { UnitStageMediaItem } from "@/lib/server-data";
+import {
+  UNIT_STATUSES,
+  UNIT_STATUS_LABELS,
+  UNIT_STATUS_ORDER,
+  type UnitActivityLog,
+} from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
-import { RiskBadge } from "@/components/ui/risk-badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
+import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 
-export function UnitDetail({ data }: { data: AppDataset }) {
+export function UnitDetail({
+  data,
+  mediaItems,
+  activityLog,
+}: {
+  data: AppDataset;
+  mediaItems: UnitStageMediaItem[];
+  activityLog: UnitActivityLog[];
+}) {
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  const roomIds = new Set(rooms.map((room) => room.id));
+  const escalationCount = data.windows.filter(
+    (window) => roomIds.has(window.roomId) && window.riskFlag !== "green"
+  ).length;
+  const bracketedWindowIdsByRoom = new Map<string, Set<string>>();
+  for (const item of mediaItems) {
+    if (
+      item.stage === "bracketed_measured" &&
+      item.roomId &&
+      item.windowId &&
+      item.uploadKind === "window_measure"
+    ) {
+      const set = bracketedWindowIdsByRoom.get(item.roomId) ?? new Set<string>();
+      set.add(item.windowId);
+      bracketedWindowIdsByRoom.set(item.roomId, set);
+    }
+  }
 
   if (!unit) {
     return (
@@ -30,6 +62,51 @@ export function UnitDetail({ data }: { data: AppDataset }) {
   }
 
   const currentStep = UNIT_STATUS_ORDER[unit.status];
+  const today = new Date();
+  const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const formatDate = (value: string | null | undefined) => {
+    if (!value) return "Not set";
+    return new Date(value).toLocaleDateString("en-CA", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const isPastDue = (value: string | null | undefined) => {
+    if (!value) return false;
+    const date = new Date(value);
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return day.getTime() < todayDay.getTime();
+  };
+
+  const getStatusChangeDate = (status: "bracketed_measured" | "installed_pending_approval") => {
+    const match = activityLog.find((log) => {
+      if (log.action !== "status_changed") return false;
+      const details = log.details as Record<string, unknown> | null;
+      return details?.to === status;
+    });
+    return match?.createdAt ?? null;
+  };
+
+  const bracketedDate = getStatusChangeDate("bracketed_measured");
+  const installedDate = getStatusChangeDate("installed_pending_approval");
+
+  const showBracketedDate = UNIT_STATUS_ORDER[unit.status] >= UNIT_STATUS_ORDER.bracketed_measured;
+  const showInstalledDate =
+    UNIT_STATUS_ORDER[unit.status] >= UNIT_STATUS_ORDER.installed_pending_approval;
+
+  const bracketingLabel = showBracketedDate ? "Date Bracketed" : "Bracketing Scheduled";
+  const bracketingValue = showBracketedDate ? bracketedDate ?? unit.bracketingDate : unit.bracketingDate;
+  const installationLabel = showInstalledDate ? "Date Installed" : "Install Scheduled";
+  const installationValue = showInstalledDate
+    ? installedDate ?? unit.installationDate
+    : unit.installationDate;
+
+  const bracketingPastDue = isPastDue(bracketingValue);
+  const installationPastDue = isPastDue(installationValue);
+  const completeByPastDue = isPastDue(unit.completeByDate);
 
   return (
     <div className="flex flex-col">
@@ -51,26 +128,85 @@ export function UnitDetail({ data }: { data: AppDataset }) {
           <h2 className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
             {unit.buildingName}
           </h2>
-          <p className="text-xs text-muted font-mono mt-0.5">
-            {unit.unitNumber}
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-muted font-mono">
+              {unit.unitNumber}
+            </p>
+          </div>
           <div className="flex items-center gap-2 mt-3">
             <StatusChip status={unit.status} />
-            <RiskBadge flag={unit.riskFlag} />
           </div>
+        </motion.div>
+
+        {/* Key Dates */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-1 gap-3"
+        >
+          {[
+            {
+              label: bracketingLabel,
+              value: formatDate(bracketingValue),
+              overdue: bracketingPastDue,
+            },
+            {
+              label: installationLabel,
+              value: formatDate(installationValue),
+              overdue: installationPastDue,
+            },
+            {
+              label: "Complete By",
+              value: formatDate(unit.completeByDate),
+              overdue: completeByPastDue,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className={`rounded-2xl border px-4 py-3 ${
+                item.overdue
+                  ? "border-red-200 bg-red-50"
+                  : "border-border bg-white"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p
+                  className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+                    item.overdue ? "text-red-600" : "text-muted"
+                  }`}
+                >
+                  {item.label}
+                </p>
+                {item.overdue && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                    <WarningCircle size={12} weight="fill" />
+                    Overdue *
+                  </span>
+                )}
+              </div>
+              <p
+                className={`mt-1 text-sm font-semibold ${
+                  item.overdue ? "text-red-700" : "text-foreground"
+                }`}
+              >
+                {item.value}
+              </p>
+            </div>
+          ))}
         </motion.div>
 
         {/* Stats Grid */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="grid grid-cols-2 gap-3"
         >
           <MetricTile value={unit.roomCount} label="Rooms" />
           <MetricTile value={unit.windowCount} label="Windows" />
-          <MetricTile value={unit.photosUploaded} label="Photos" />
-          <MetricTile value={unit.notesCount} label="Notes" />
+          <MetricTile value={mediaItems.length} label="Photos" />
+          <MetricTile value={escalationCount} label="Escalations" />
         </motion.div>
 
         {/* Installation Timeline */}
@@ -78,11 +214,14 @@ export function UnitDetail({ data }: { data: AppDataset }) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-white rounded-2xl border border-border p-5"
+          className="surface-card p-5"
         >
-          <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-4">
-            Installation Timeline
-          </h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em]">
+              Installation Timeline
+            </h3>
+            <UnitStageMediaViewer items={mediaItems} />
+          </div>
           <div className="flex flex-col gap-0">
             {UNIT_STATUSES.map((status, i) => {
               const step = UNIT_STATUS_ORDER[status];
@@ -150,14 +289,19 @@ export function UnitDetail({ data }: { data: AppDataset }) {
             <div className="flex flex-col gap-2">
               {rooms.map((room) => (
                 <Link key={room.id} href={`/installer/units/${unit.id}/rooms/${room.id}`}>
-                  <div className="flex items-center justify-between bg-white rounded-2xl border border-border px-4 py-3.5 hover:border-zinc-300 transition-all active:scale-[0.99]">
+                  <div className="flex items-center justify-between surface-card px-4 py-3.5 hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{room.name}</p>
-                      <p className="text-[11px] text-muted mt-0.5">
-                        {room.completedWindows}/{room.windowCount} windows measured
+                      <p className="text-[14px] font-semibold text-foreground">{room.name}</p>
+                      <p className="text-[11px] text-tertiary mt-0.5">
+                        {room.completedWindows}/{room.windowCount} measured •{" "}
+                        {Math.min(
+                          bracketedWindowIdsByRoom.get(room.id)?.size ?? 0,
+                          room.windowCount
+                        )}
+                        /{room.windowCount} bracketed
                       </p>
                     </div>
-                    <ArrowRight size={16} className="text-zinc-400" />
+                    <ArrowRight size={15} className="text-tertiary" />
                   </div>
                 </Link>
               ))}
@@ -171,14 +315,14 @@ export function UnitDetail({ data }: { data: AppDataset }) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-accent/5 rounded-2xl border border-accent/15 p-4 flex gap-3"
+            className="bg-accent-light rounded-[var(--radius-xl)] border border-[rgba(15,118,110,0.15)] p-4 flex gap-3"
           >
             <Info size={20} weight="fill" className="text-accent flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-[10px] font-bold text-accent uppercase tracking-wider">
                 Architectural Note
               </p>
-              <p className="text-xs text-zinc-600 mt-1 leading-relaxed">
+              <p className="text-[12px] text-secondary mt-1 leading-relaxed">
                 Review measurement details and special conditions in room-level notes before proceeding.
               </p>
             </div>

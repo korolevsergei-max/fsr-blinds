@@ -1,7 +1,15 @@
-import { loadFullDataset } from "@/lib/server-data";
+import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
 import { RoomDetail } from "./room-detail";
 
-export default async function RoomDetailPage() {
-  const data = await loadFullDataset();
-  return <RoomDetail data={data} />;
+export default async function RoomDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const [data, mediaItems] = await Promise.all([
+    loadFullDataset(),
+    loadUnitStageMedia(id),
+  ]);
+  return <RoomDetail data={data} mediaItems={mediaItems} />;
 }

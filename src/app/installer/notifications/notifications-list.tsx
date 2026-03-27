@@ -26,8 +26,10 @@ function formatDate(iso: string): string {
 
 export function NotificationsList({
   notifications,
+  installerId = "inst-1",
 }: {
   notifications: Notification[];
+  installerId?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -40,7 +42,7 @@ export function NotificationsList({
       return;
     }
     startTransition(async () => {
-      await markNotificationRead(notif.id, "installer", "inst-1");
+      await markNotificationRead(notif.id, "installer", installerId);
       router.refresh();
       if (notif.type === "schedule_published") {
         router.push("/installer/schedule");

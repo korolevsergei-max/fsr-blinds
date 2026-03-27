@@ -10,7 +10,6 @@ import {
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
-import { RiskDot } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import type { Unit } from "@/lib/types";
 
@@ -115,10 +114,9 @@ export function BuildingUnits({
               <Link href={`/installer/units/${unit.id}`}>
                 <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-bold text-foreground tracking-tight">
+                    <p className="text-sm font-bold text-foreground tracking-tight flex items-center gap-2">
                       {unit.unitNumber}
                     </p>
-                    <RiskDot flag={unit.riskFlag} />
                   </div>
 
                   <div className="flex items-center justify-between">

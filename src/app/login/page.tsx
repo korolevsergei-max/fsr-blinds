@@ -3,31 +3,39 @@ import { LoginForm } from "./login-form";
 export default function LoginPage() {
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
-      <div className="flex-1 flex flex-col justify-between px-6 py-12">
-        <div className="pt-8">
-          <div className="mb-2">
-            <span className="text-xs font-mono font-medium tracking-widest text-muted uppercase">
-              Field Operations
-            </span>
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tighter text-zinc-900 leading-none mb-2">
+      <div className="flex-1 flex flex-col justify-between px-6 py-14 max-w-md mx-auto w-full">
+
+        {/* Brand mark */}
+        <div className="pt-6">
+          <p className="text-[11px] font-semibold tracking-[0.14em] text-tertiary uppercase mb-4">
+            Field Operations
+          </p>
+          <h1 className="text-[2.5rem] font-bold tracking-[-0.03em] text-foreground leading-[1.05] mb-3">
             FSR Blinds
           </h1>
-          <p className="text-sm text-muted leading-relaxed max-w-[32ch]">
+          <p className="text-[14px] text-secondary leading-relaxed max-w-[32ch]">
             Measurement, bracketing, and installation management for commercial projects.
           </p>
         </div>
 
-        <LoginForm />
+        {/* Form surface */}
+        <div className="surface-card p-6 my-10">
+          <LoginForm />
+        </div>
 
-        <p className="text-xs text-center text-zinc-400 leading-relaxed">
-          Need access? Contact your project administrator
-          <br />
+        {/* Footer note */}
+        <p className="text-[12px] text-center text-tertiary leading-relaxed">
+          Need access? Contact your project administrator{" "}
+          <br className="hidden sm:inline" />
           or email{" "}
-          <a href="mailto:admin@fsrblinds.ca" className="text-accent font-medium">
+          <a
+            href="mailto:admin@fsrblinds.ca"
+            className="text-accent font-medium hover:underline"
+          >
             admin@fsrblinds.ca
           </a>
         </p>
+
       </div>
     </div>
   );

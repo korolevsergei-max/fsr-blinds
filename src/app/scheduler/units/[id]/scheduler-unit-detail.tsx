@@ -1,0 +1,368 @@
+"use client";
+
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { motion } from "framer-motion";
+import {
+  UserCircle,
+  CalendarBlank,
+  PencilSimple,
+  ClockCounterClockwise,
+  Wrench,
+  Buildings,
+  Robot,
+  UserGear,
+  CalendarCheck,
+  ArrowRight,
+} from "@phosphor-icons/react";
+import { getRoomsByUnit } from "@/lib/app-dataset";
+import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitActivityLog } from "@/lib/types";
+import { UNIT_STATUS_LABELS } from "@/lib/types";
+import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
+import { PageHeader } from "@/components/ui/page-header";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { SectionLabel } from "@/components/ui/section-label";
+import { StatusChip } from "@/components/ui/status-chip";
+import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
+
+const ACTOR_ICONS: Record<string, React.ReactNode> = {
+  owner: <UserGear size={14} className="text-indigo-500" />,
+  scheduler: <CalendarCheck size={14} className="text-sky-500" />,
+  installer: <Wrench size={14} className="text-teal-500" />,
+  manufacturer: <Buildings size={14} className="text-orange-500" />,
+  system: <Robot size={14} className="text-zinc-400" />,
+};
+
+const ACTOR_COLORS: Record<string, string> = {
+  owner: "bg-indigo-50 border-indigo-100",
+  scheduler: "bg-sky-50 border-sky-100",
+  installer: "bg-teal-50 border-teal-100",
+  manufacturer: "bg-orange-50 border-orange-100",
+  system: "bg-zinc-50 border-zinc-100",
+};
+
+function formatRelative(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffD = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (diffD === 0) return "today";
+  if (diffD === 1) return "yesterday";
+  if (diffD < 7) return `${diffD}d ago`;
+  return date.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function buildLogDescription(log: UnitActivityLog): string {
+  const d = log.details ?? {};
+  if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
+    const parts: string[] = [];
+    if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
+    if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
+    return parts.join(" · ");
+  }
+  if (log.action === "status_changed") {
+    const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
+    const to = d.to ? UNIT_STATUS_LABELS[d.to as keyof typeof UNIT_STATUS_LABELS] ?? String(d.to) : "";
+    const note = d.note ? ` — "${d.note}"` : "";
+    return from && to ? `${from} → ${to}${note}` : to || from;
+  }
+  return "";
+}
+
+function FlagBadge({ flag }: { flag: UnitFlag }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${FLAG_CLASSES[flag]}`}>
+      {FLAG_LABELS[flag]}
+    </span>
+  );
+}
+
+export function SchedulerUnitDetail({
+  data,
+  activityLog,
+}: {
+  data: AppDataset;
+  activityLog: UnitActivityLog[];
+}) {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const unit = data.units.find((u) => u.id === id);
+  const rooms = getRoomsByUnit(data, id);
+
+  const today = new Date().toISOString().split("T")[0];
+  const [completeByDate, setCompleteByDate] = useState(unit?.completeByDate ?? "");
+  const [savingCompleteBy, startCompleteByTransition] = useTransition();
+  const [completeByError, setCompleteByError] = useState("");
+  const [completeBySuccess, setCompleteBySuccess] = useState(false);
+
+  if (!unit) {
+    return <div className="p-6 text-center text-muted">Unit not found</div>;
+  }
+
+  const flags = computeUnitFlags(unit, today);
+
+  const isPastDue = (dateStr: string | null | undefined) =>
+    dateStr ? dateStr < today : false;
+
+  const dateField = (label: string, value: string | null | undefined) => (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted">{label}</p>
+      <p className={`text-[13px] font-semibold ${isPastDue(value) ? "text-red-600" : "text-foreground"}`}>
+        {value ?? "—"}
+        {isPastDue(value) && <span className="ml-1 text-[10px] font-bold text-red-500">OVERDUE</span>}
+      </p>
+    </div>
+  );
+
+  const handleSaveCompleteBy = () => {
+    setCompleteByError("");
+    setCompleteBySuccess(false);
+    startCompleteByTransition(async () => {
+      const result = await updateUnitCompleteByDate(id, completeByDate || null);
+      if (!result.ok) {
+        setCompleteByError(result.error);
+        return;
+      }
+      setCompleteBySuccess(true);
+      router.refresh();
+      setTimeout(() => setCompleteBySuccess(false), 2000);
+    });
+  };
+
+  return (
+    <div className="flex flex-col min-h-[100dvh]">
+      <PageHeader
+        title={unit.unitNumber}
+        subtitle={`${unit.buildingName} · ${unit.clientName}`}
+        backHref="/scheduler/units"
+      />
+
+      <div className="flex-1 px-4 py-5 flex flex-col gap-6">
+        {/* Status + flags */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-3"
+        >
+          <div className="flex items-center gap-2">
+            <StatusChip status={unit.status} />
+          </div>
+          {flags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {flags.map((f) => <FlagBadge key={f} flag={f} />)}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Key dates */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="surface-card p-4"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <SectionLabel>Key Dates</SectionLabel>
+            <Link
+              href={`/scheduler/units/${id}/assign`}
+              className="flex items-center gap-1 text-[12px] font-semibold text-accent"
+            >
+              <PencilSimple size={13} />
+              Edit Assignment
+            </Link>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {dateField("Bracketing", unit.bracketingDate)}
+            {dateField("Installation", unit.installationDate)}
+            {dateField("Complete By", unit.completeByDate)}
+          </div>
+        </motion.div>
+
+        {/* Installer */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="surface-card p-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                <UserCircle size={22} className="text-tertiary" />
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-foreground">
+                  {unit.assignedInstallerName ?? "Unassigned"}
+                </p>
+                <p className="text-[11px] text-tertiary">Installer</p>
+              </div>
+            </div>
+            <Link
+              href={`/scheduler/units/${id}/assign`}
+              className="flex items-center gap-1 text-[12px] font-semibold text-accent"
+            >
+              <PencilSimple size={13} />
+              Assign
+            </Link>
+          </div>
+        </motion.div>
+
+        {/* Complete-by quick edit */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="surface-card p-4 flex flex-col gap-3"
+        >
+          <SectionLabel>Complete By Date</SectionLabel>
+          {completeByError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {completeByError}
+            </p>
+          )}
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Input
+                label="Date"
+                type="date"
+                value={completeByDate}
+                onChange={(e) => {
+                  setCompleteByDate(e.target.value);
+                  setCompleteByError("");
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleSaveCompleteBy}
+              disabled={savingCompleteBy}
+            >
+              {completeBySuccess ? "Saved" : savingCompleteBy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </motion.div>
+
+        {/* Rooms overview */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-2"
+        >
+          <div className="flex items-center justify-between">
+            <SectionLabel>Rooms & Windows</SectionLabel>
+            <div className="flex items-center gap-1 text-[11px] text-muted font-mono">
+              <CalendarBlank size={11} />
+              {rooms.reduce((s, r) => s + r.completedWindows, 0)}/
+              {rooms.reduce((s, r) => s + r.windowCount, 0)} measured
+            </div>
+          </div>
+          {rooms.length === 0 ? (
+            <div className="surface-card px-4 py-6 text-center text-[13px] text-muted">
+              No rooms added yet
+            </div>
+          ) : (
+            rooms.map((room, i) => (
+              <motion.div
+                key={room.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 + i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="surface-card px-4 py-3 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-[13px] font-semibold text-foreground">{room.name}</p>
+                  <p className="text-[11px] text-muted font-mono">
+                    {room.completedWindows}/{room.windowCount} measured
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-16 bg-zinc-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-accent rounded-full"
+                      style={{
+                        width: room.windowCount > 0
+                          ? `${(room.completedWindows / room.windowCount) * 100}%`
+                          : "0%",
+                      }}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </motion.div>
+
+        {/* Activity log */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <SectionLabel className="mb-2">Activity</SectionLabel>
+          {activityLog.length === 0 ? (
+            <div className="py-8 text-center text-muted text-sm flex flex-col items-center gap-2">
+              <ClockCounterClockwise size={28} className="text-zinc-300" />
+              No activity yet
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {activityLog.map((log, i) => {
+                const isLast = i === activityLog.length - 1;
+                const description = buildLogDescription(log);
+                const actorColor = ACTOR_COLORS[log.actorRole] ?? ACTOR_COLORS.system;
+                const actorIcon = ACTOR_ICONS[log.actorRole] ?? ACTOR_ICONS.system;
+                return (
+                  <div key={log.id} className="relative flex gap-3 pb-4">
+                    {!isLast && (
+                      <div className="absolute left-[18px] top-7 bottom-0 w-px bg-border" />
+                    )}
+                    <div
+                      className={`relative z-10 flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center ${actorColor}`}
+                    >
+                      {actorIcon}
+                    </div>
+                    <div className="flex-1 pt-1.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-[12px] font-semibold text-foreground capitalize">
+                          {log.actorName}
+                          <span className="ml-1 text-[10px] font-medium text-tertiary capitalize">
+                            ({log.actorRole})
+                          </span>
+                        </p>
+                        <span className="text-[10px] text-muted flex-shrink-0">
+                          {formatRelative(log.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-secondary mt-0.5">
+                        {UNIT_STATUS_LABELS[log.action as keyof typeof UNIT_STATUS_LABELS] ?? log.action.replace(/_/g, " ")}
+                      </p>
+                      {description && (
+                        <p className="text-[11px] text-muted mt-0.5 font-mono">{description}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </motion.div>
+
+        {/* Assign CTA */}
+        <div className="pb-6">
+          <Link
+            href={`/scheduler/units/${id}/assign`}
+            className="flex items-center justify-center gap-2 h-13 rounded-xl bg-accent text-white font-semibold text-[15px] transition-all active:scale-[0.99]"
+          >
+            <PencilSimple size={18} />
+            Edit Assignment & Dates
+            <ArrowRight size={16} weight="bold" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

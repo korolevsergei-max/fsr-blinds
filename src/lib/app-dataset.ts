@@ -2,6 +2,8 @@ import type {
   Building,
   Client,
   Installer,
+  Manufacturer,
+  Scheduler,
   Room,
   ScheduleEntry,
   Unit,
@@ -16,6 +18,8 @@ export type AppDataset = {
   windows: Window[];
   installers: Installer[];
   schedule: ScheduleEntry[];
+  manufacturers: Manufacturer[];
+  schedulers: Scheduler[];
 };
 
 export function getUnitsByInstaller(
@@ -57,4 +61,37 @@ export function getUnitsByBuilding(
   buildingId: string
 ): Unit[] {
   return data.units.filter((u) => u.buildingId === buildingId);
+}
+
+export function getScheduleByBuilding(
+  data: AppDataset,
+  buildingId: string
+): ScheduleEntry[] {
+  const buildingUnits = new Set(
+    data.units.filter((u) => u.buildingId === buildingId).map((u) => u.id)
+  );
+  return data.schedule.filter((s) => buildingUnits.has(s.unitId));
+}
+
+export function getInstallerColor(index: number) {
+  const colors = [
+    { bg: "bg-blue-100", text: "text-blue-700", ring: "ring-blue-300" },
+    { bg: "bg-purple-100", text: "text-purple-700", ring: "ring-purple-300" },
+    { bg: "bg-orange-100", text: "text-orange-700", ring: "ring-orange-300" },
+    { bg: "bg-pink-100", text: "text-pink-700", ring: "ring-pink-300" },
+    { bg: "bg-teal-100", text: "text-teal-700", ring: "ring-teal-300" },
+    { bg: "bg-indigo-100", text: "text-indigo-700", ring: "ring-indigo-300" },
+    { bg: "bg-rose-100", text: "text-rose-700", ring: "ring-rose-300" },
+    { bg: "bg-cyan-100", text: "text-cyan-700", ring: "ring-cyan-300" },
+  ];
+  return colors[index % colors.length];
+}
+
+export function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }

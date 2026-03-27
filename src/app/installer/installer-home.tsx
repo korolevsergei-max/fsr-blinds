@@ -23,7 +23,6 @@ export function InstallerHome({
   const installer = data.installers.find((i) => i.id === installerId);
   const allUnits = getUnitsByInstaller(data, installerId);
 
-  // Group units by building, deduplicated
   const buildingMap = new Map<
     string,
     { id: string; name: string; clientName: string; units: Unit[] }
@@ -53,11 +52,10 @@ export function InstallerHome({
     <div className="flex flex-col">
       <PageHeader
         title="FSR Blinds"
-        subtitle={`Good morning, ${installer?.name?.split(" ")[0] ?? "Installer"}`}
         actions={
           <Link
             href="/installer/profile"
-            className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:bg-accent-dark transition-colors"
+            className="w-9 h-9 rounded-full bg-accent flex items-center justify-center text-white text-[13px] font-bold hover:bg-accent-hover transition-colors"
             aria-label="Profile"
           >
             {installer?.name?.[0] ?? "I"}
@@ -66,34 +64,34 @@ export function InstallerHome({
       />
 
       {/* Search */}
-      <div className="px-5 py-3">
+      <div className="px-4 pt-4 pb-2">
         <div className="relative">
           <MagnifyingGlass
-            size={16}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400"
+            size={15}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tertiary pointer-events-none"
           />
           <input
             type="text"
-            placeholder="Search by building name or unit number..."
+            placeholder="Search buildings or unit numbers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-12 pl-10 pr-4 rounded-2xl border border-border bg-white text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+            className="w-full h-11 pl-9 pr-4 rounded-[var(--radius-lg)] border border-border bg-surface text-[14px] text-foreground placeholder:text-tertiary focus:outline-none focus:ring-[3px] focus:ring-[rgba(15,118,110,0.14)] focus:border-accent transition-all duration-200"
           />
         </div>
       </div>
 
       {/* Section heading */}
-      <div className="px-5 flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold tracking-tight text-foreground">
-          Your Buildings
+      <div className="px-4 flex items-center justify-between pt-3 pb-2">
+        <h2 className="text-[13px] font-semibold text-secondary tracking-[0.04em] uppercase">
+          Your buildings
         </h2>
-        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
-          {buildings.length} Building{buildings.length !== 1 ? "s" : ""}
+        <span className="text-[11px] font-medium text-tertiary">
+          {buildings.length} {buildings.length === 1 ? "building" : "buildings"}
         </span>
       </div>
 
       {/* Building cards */}
-      <div className="px-5 flex flex-col gap-4 pb-8">
+      <div className="px-4 flex flex-col gap-3 pb-8">
         {buildings.map((building, i) => {
           const nextDate =
             building.units
@@ -104,37 +102,37 @@ export function InstallerHome({
           return (
             <motion.div
               key={building.id}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{
-                delay: i * 0.06,
+                delay: i * 0.055,
                 duration: 0.35,
                 ease: [0.16, 1, 0.3, 1],
               }}
             >
               <Link href={`/installer/buildings/${building.id}`}>
-                <div className="bg-white rounded-2xl border border-border overflow-hidden hover:border-zinc-300 transition-all active:scale-[0.99]">
+                <div className="surface-card overflow-hidden hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
                   {/* Building header */}
-                  <div className="p-4 pb-3 flex items-start justify-between">
+                  <div className="p-4 pb-3 flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
-                      <div className="mt-0.5 w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center flex-shrink-0">
-                        <Buildings size={18} className="text-accent" />
+                      <div className="mt-0.5 w-9 h-9 rounded-[var(--radius-md)] bg-accent-light flex items-center justify-center flex-shrink-0">
+                        <Buildings size={17} className="text-accent" />
                       </div>
                       <div>
-                        <p className="text-base font-bold text-foreground tracking-tight leading-tight">
+                        <p className="text-[15px] font-semibold text-foreground tracking-tight leading-tight">
                           {building.name}
                         </p>
-                        <p className="text-[11px] text-muted mt-0.5">
+                        <p className="text-[12px] text-tertiary mt-0.5">
                           {building.clientName}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5">
-                          <span className="text-[10px] font-bold text-accent uppercase tracking-wider">
-                            {building.units.length} unit{building.units.length !== 1 ? "s" : ""}
+                          <span className="text-[11px] font-semibold text-accent">
+                            {building.units.length} {building.units.length === 1 ? "unit" : "units"}
                           </span>
                           {nextDate && (
                             <>
-                              <span className="text-zinc-300">·</span>
-                              <span className="text-[10px] font-mono font-semibold text-muted">
+                              <span className="text-border">·</span>
+                              <span className="text-[11px] font-mono font-medium text-tertiary">
                                 Next:{" "}
                                 {new Date(nextDate + "T00:00:00").toLocaleDateString("en-US", {
                                   month: "short",
@@ -146,11 +144,11 @@ export function InstallerHome({
                         </div>
                       </div>
                     </div>
-                    <ArrowRight size={16} className="text-zinc-400 mt-1 flex-shrink-0" />
+                    <ArrowRight size={15} className="text-tertiary mt-1 flex-shrink-0" />
                   </div>
 
                   {/* Unit rows */}
-                  <div className="border-t border-border divide-y divide-border">
+                  <div className="border-t border-border-subtle divide-y divide-border-subtle">
                     {building.units.slice(0, 4).map((unit) => {
                       const dueDate = unit.bracketingDate ?? unit.installationDate;
                       return (
@@ -159,15 +157,14 @@ export function InstallerHome({
                           className="flex items-center justify-between px-4 py-2.5"
                         >
                           <div className="flex items-center gap-2.5">
-                            <RiskDot flag={unit.riskFlag} />
-                            <span className="text-sm font-bold text-foreground font-mono">
+                            <span className="text-[13px] font-semibold text-foreground font-mono">
                               {unit.unitNumber}
                             </span>
                           </div>
                           <div className="flex items-center gap-2.5">
                             <StatusChip status={unit.status} />
                             {dueDate && (
-                              <span className="text-[11px] font-mono font-semibold text-muted">
+                              <span className="text-[11px] font-mono font-medium text-tertiary">
                                 {new Date(dueDate + "T00:00:00").toLocaleDateString("en-US", {
                                   month: "short",
                                   day: "numeric",
@@ -179,7 +176,7 @@ export function InstallerHome({
                       );
                     })}
                     {building.units.length > 4 && (
-                      <div className="px-4 py-2 text-[11px] font-semibold text-muted text-center">
+                      <div className="px-4 py-2.5 text-[12px] font-medium text-tertiary text-center">
                         +{building.units.length - 4} more units
                       </div>
                     )}

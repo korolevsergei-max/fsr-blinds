@@ -1,18 +1,32 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "framer-motion";
-import { Buildings, Image as ImageIcon, Ruler, Wrench } from "@phosphor-icons/react";
+import {
+  Buildings,
+  Camera,
+  Image as ImageIcon,
+  Ruler,
+  Wrench,
+} from "@phosphor-icons/react";
 import type { InstallerMediaItem } from "@/lib/server-data";
+import { UNIT_PHOTO_STAGES, UNIT_PHOTO_STAGE_LABELS } from "@/lib/types";
 
-const PHASE_META = {
-  bracketing: {
-    label: "Bracketing & Measurement",
+const STAGE_META = {
+  scheduled_bracketing: {
+    label: UNIT_PHOTO_STAGE_LABELS.scheduled_bracketing,
+    Icon: Camera,
+    color: "text-sky-700",
+    bg: "bg-sky-50",
+  },
+  bracketed_measured: {
+    label: UNIT_PHOTO_STAGE_LABELS.bracketed_measured,
     Icon: Ruler,
     color: "text-accent",
     bg: "bg-accent/8",
   },
-  installation: {
-    label: "Installation",
+  installed_pending_approval: {
+    label: UNIT_PHOTO_STAGE_LABELS.installed_pending_approval,
     Icon: Wrench,
     color: "text-amber-600",
     bg: "bg-amber-50",
@@ -20,7 +34,7 @@ const PHASE_META = {
 } as const;
 
 export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
-  // Group: buildingId → unitId → phase
+  // Group: buildingId → unitId → stage
   const buildingMap = new Map<
     string,
     {
@@ -31,7 +45,7 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
         {
           unitId: string;
           unitNumber: string;
-          phases: Map<"bracketing" | "installation", InstallerMediaItem[]>;
+          stages: Map<(typeof UNIT_PHOTO_STAGES)[number], InstallerMediaItem[]>;
         }
       >;
     }
@@ -51,16 +65,16 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
       building.units.set(item.unitId, {
         unitId: item.unitId,
         unitNumber: item.unitNumber,
-        phases: new Map(),
+        stages: new Map(),
       });
     }
     const unit = building.units.get(item.unitId)!;
 
-    const phase = item.phase ?? "bracketing";
-    if (!unit.phases.has(phase)) {
-      unit.phases.set(phase, []);
+    const stage = item.stage;
+    if (!unit.stages.has(stage)) {
+      unit.stages.set(stage, []);
     }
-    unit.phases.get(phase)!.push(item);
+    unit.stages.get(stage)!.push(item);
   }
 
   const buildings = Array.from(buildingMap.values());
@@ -85,10 +99,10 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
             <span className="text-[10px] font-bold text-muted uppercase tracking-wider ml-auto">
               {Array.from(building.units.values()).reduce(
                 (s, u) =>
-                  s + Array.from(u.phases.values()).reduce((ps, ph) => ps + ph.length, 0),
+                  s + Array.from(u.stages.values()).reduce((ps, stageItems) => ps + stageItems.length, 0),
                 0
               )}{" "}
-              photo{Array.from(building.units.values()).reduce((s, u) => s + Array.from(u.phases.values()).reduce((ps, ph) => ps + ph.length, 0), 0) !== 1 ? "s" : ""}
+              photo{Array.from(building.units.values()).reduce((s, u) => s + Array.from(u.stages.values()).reduce((ps, stageItems) => ps + stageItems.length, 0), 0) !== 1 ? "s" : ""}
             </span>
           </div>
 
@@ -103,14 +117,14 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
                   </p>
                 </div>
 
-                {/* Phase sections */}
-                {(["bracketing", "installation"] as const).map((phase) => {
-                  const photos = unit.phases.get(phase);
+                {/* Stage sections */}
+                {UNIT_PHOTO_STAGES.map((stage) => {
+                  const photos = unit.stages.get(stage);
                   if (!photos || photos.length === 0) return null;
-                  const { label, Icon, color, bg } = PHASE_META[phase];
+                  const { label, Icon, color, bg } = STAGE_META[stage];
 
                   return (
-                    <div key={phase}>
+                    <div key={stage}>
                       <div className={`flex items-center gap-2 px-4 py-2 border-b border-border ${bg}`}>
                         <Icon size={13} className={color} />
                         <p className={`text-[10px] font-bold uppercase tracking-wider ${color}`}>
@@ -130,10 +144,13 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
                             className="group flex flex-col rounded-xl border border-border overflow-hidden hover:border-zinc-300 transition-colors active:scale-[0.99]"
                           >
                             <div className="aspect-[4/3] bg-surface relative overflow-hidden">
-                              <img
+                              <Image
                                 src={item.publicUrl}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                fill
+                                unoptimized
+                                sizes="(min-width: 640px) 33vw, 50vw"
+                                className="object-cover"
                               />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                             </div>

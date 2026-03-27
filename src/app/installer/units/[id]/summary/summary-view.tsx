@@ -8,13 +8,13 @@ import {
   ShareNetwork,
   Envelope,
   Ruler,
-  Warning,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
-import { UNIT_STATUS_LABELS, RISK_LABELS } from "@/lib/types";
+import { UNIT_STATUS_LABELS } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { RiskBadge } from "@/components/ui/risk-badge";
 
 export function SummaryView({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
@@ -78,8 +78,6 @@ export function SummaryView({ data }: { data: AppDataset }) {
           body += ` | Blind: ${w.blindWidth ?? "—"}" x ${w.blindHeight ?? "—"}"`;
           if (w.blindDepth != null) body += ` x ${w.blindDepth}"`;
         }
-        if (w.riskFlag !== "green")
-          body += ` [${RISK_LABELS[w.riskFlag]}]`;
         if (w.notes) body += ` — ${w.notes}`;
         body += "\n";
       });
@@ -190,12 +188,7 @@ export function SummaryView({ data }: { data: AppDataset }) {
                               {w.blindType}
                             </span>
                           </div>
-                          {w.riskFlag !== "green" && (
-                            <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-                              <Warning size={14} weight="fill" />
-                              {RISK_LABELS[w.riskFlag]}
-                            </span>
-                          )}
+                          <RiskBadge flag={w.riskFlag} />
                         </div>
 
                         <div className="mt-2.5 flex flex-col gap-1.5">

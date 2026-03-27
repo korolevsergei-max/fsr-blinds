@@ -5,10 +5,14 @@ import type {
   Building,
   Client,
   Installer,
+  Manufacturer,
+  Scheduler,
   Notification,
   Room,
   ScheduleEntry,
   Unit,
+  UnitActivityLog,
+  UnitPhotoStage,
   UnitStatus,
   Window,
   BlindType,
@@ -36,6 +40,7 @@ type InstallerRow = {
   email: string;
   phone: string;
   avatar_url: string;
+  auth_user_id?: string | null;
 };
 
 type UnitRow = {
@@ -51,10 +56,25 @@ type UnitRow = {
   assigned_installer_name: string | null;
   bracketing_date: string | null;
   installation_date: string | null;
+  earliest_bracketing_date: string | null;
+  earliest_installation_date?: string | null;
+  // Note: Database unit record type no longer includes occupancy_date
+  complete_by_date?: string | null;
   room_count: number;
   window_count: number;
   photos_uploaded: number;
   notes_count: number;
+  created_at: string | null;
+};
+
+type UnitActivityLogRow = {
+  id: string;
+  unit_id: string;
+  actor_role: string;
+  actor_name: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
 };
 
 type RoomRow = {
@@ -88,10 +108,42 @@ type ScheduleRow = {
   unit_number: string;
   building_name: string;
   client_name: string;
+  owner_user_id: string | null;
+  owner_name: string | null;
   task_type: "bracketing" | "installation";
   task_date: string;
   status: UnitStatus;
   risk_flag: RiskFlag;
+};
+
+type ManufacturerRow = {
+  id: string;
+  name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  auth_user_id?: string | null;
+};
+
+type SchedulerRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  auth_user_id?: string | null;
+};
+
+type MediaUploadRow = {
+  id: string;
+  public_url: string;
+  label: string | null;
+  unit_id: string;
+  room_id: string | null;
+  window_id: string | null;
+  upload_kind: string;
+  stage: string | null;
+  phase: string | null;
+  created_at: string;
 };
 
 function mapClient(r: ClientRow): Client {
@@ -120,6 +172,7 @@ function mapInstaller(r: InstallerRow): Installer {
     email: r.email,
     phone: r.phone,
     avatarUrl: r.avatar_url,
+    authUserId: r.auth_user_id ?? null,
   };
 }
 
@@ -132,15 +185,30 @@ function mapUnit(r: UnitRow): Unit {
     buildingName: r.building_name,
     unitNumber: r.unit_number,
     status: r.status,
-    riskFlag: r.risk_flag,
     assignedInstallerId: r.assigned_installer_id,
     assignedInstallerName: r.assigned_installer_name,
     bracketingDate: r.bracketing_date,
-    installationDate: r.installation_date,
-    roomCount: r.room_count,
+    installationDate: r.installation_date || null,
+    earliestBracketingDate: r.earliest_bracketing_date,
+    earliestInstallationDate: r.earliest_installation_date || null,
+    completeByDate: r.complete_by_date || null,
+    roomCount: r.room_count ?? 0,
     windowCount: r.window_count,
     photosUploaded: r.photos_uploaded,
     notesCount: r.notes_count,
+    createdAt: r.created_at,
+  };
+}
+
+function mapActivityLog(r: UnitActivityLogRow): UnitActivityLog {
+  return {
+    id: r.id,
+    unitId: r.unit_id,
+    actorRole: r.actor_role,
+    actorName: r.actor_name,
+    action: r.action,
+    details: r.details,
+    createdAt: r.created_at,
   };
 }
 
@@ -160,14 +228,14 @@ function mapWindow(r: WindowRow): Window {
     roomId: r.room_id,
     label: r.label,
     blindType: r.blind_type,
+    riskFlag: r.risk_flag ?? "green",
     width: r.width,
     height: r.height,
     depth: r.depth,
     blindWidth: r.blind_width,
     blindHeight: r.blind_height,
     blindDepth: r.blind_depth,
-    notes: r.notes,
-    riskFlag: r.risk_flag,
+    notes: r.notes || "",
     photoUrl: r.photo_url,
     measured: r.measured,
   };
@@ -180,10 +248,32 @@ function mapSchedule(r: ScheduleRow): ScheduleEntry {
     unitNumber: r.unit_number,
     buildingName: r.building_name,
     clientName: r.client_name,
+    ownerUserId: r.owner_user_id,
+    ownerName: r.owner_name,
     taskType: r.task_type,
     date: r.task_date,
     status: r.status,
-    riskFlag: r.risk_flag,
+  };
+}
+
+function mapManufacturer(r: ManufacturerRow): Manufacturer {
+  return {
+    id: r.id,
+    name: r.name,
+    contactName: r.contact_name,
+    contactEmail: r.contact_email,
+    contactPhone: r.contact_phone,
+    authUserId: r.auth_user_id ?? null,
+  };
+}
+
+function mapScheduler(r: SchedulerRow): Scheduler {
+  return {
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    phone: r.phone,
+    authUserId: r.auth_user_id ?? null,
   };
 }
 
@@ -208,7 +298,13 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     supabase.from("schedule_entries").select("*").order("task_date"),
   ]);
 
-  const responses = [
+  // Optional tables — only exist after their migration is applied.
+  const [manufacturersRes, schedulersRes] = await Promise.all([
+    supabase.from("manufacturers").select("*").order("name"),
+    supabase.from("schedulers").select("*").order("name"),
+  ]);
+
+  const coreResponses = [
     clientsRes,
     buildingsRes,
     unitsRes,
@@ -217,12 +313,12 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     installersRes,
     scheduleRes,
   ];
-  const firstError = responses.find((r) => r.error)?.error;
+  const firstError = coreResponses.find((r) => r.error)?.error;
   if (firstError) {
     const baseMessage = `Supabase: ${firstError.message}.`;
     if (/invalid api key/i.test(firstError.message)) {
       throw new Error(
-        `${baseMessage} Update NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) in /Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/.env.local and restart dev server.`
+        `${baseMessage} Update NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY) in .env.local and restart dev server.`
       );
     }
     throw new Error(
@@ -238,6 +334,12 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     windows: (windowsRes.data as WindowRow[]).map(mapWindow),
     installers: (installersRes.data as InstallerRow[]).map(mapInstaller),
     schedule: (scheduleRes.data as ScheduleRow[]).map(mapSchedule),
+    manufacturers: manufacturersRes.error
+      ? []
+      : (manufacturersRes.data as ManufacturerRow[])?.map(mapManufacturer) ?? [],
+    schedulers: schedulersRes.error
+      ? []
+      : (schedulersRes.data as SchedulerRow[])?.map(mapScheduler) ?? [],
   };
 });
 
@@ -249,9 +351,39 @@ export type InstallerMediaItem = {
   unitNumber: string;
   buildingId: string;
   buildingName: string;
-  phase: "bracketing" | "installation" | null;
+  stage: UnitPhotoStage;
   createdAt: string;
 };
+
+export type UnitStageMediaItem = {
+  id: string;
+  publicUrl: string;
+  label: string | null;
+  unitId: string;
+  roomId: string | null;
+  roomName: string | null;
+  windowId: string | null;
+  windowLabel: string | null;
+  uploadKind: string;
+  stage: UnitPhotoStage;
+  createdAt: string;
+};
+
+function normalizeMediaStage(
+  stage: string | null,
+  phase: string | null
+): UnitPhotoStage {
+  if (
+    stage === "scheduled_bracketing" ||
+    stage === "bracketed_measured" ||
+    stage === "installed_pending_approval"
+  ) {
+    return stage;
+  }
+  return phase === "installation"
+    ? "installed_pending_approval"
+    : "bracketed_measured";
+}
 
 export async function loadInstallerMedia(
   installerId: string
@@ -277,7 +409,7 @@ export async function loadInstallerMedia(
   }
   const { data: media, error: me } = await supabase
     .from("media_uploads")
-    .select("id, public_url, label, unit_id, phase, created_at")
+    .select("id, public_url, label, unit_id, stage, phase, created_at")
     .in("unit_id", unitIds)
     .order("created_at", { ascending: false });
   if (me) {
@@ -295,8 +427,68 @@ export async function loadInstallerMedia(
       unitNumber: meta?.unit_number ?? m.unit_id,
       buildingId: meta?.building_id ?? "",
       buildingName: meta?.building_name ?? "",
-      phase: (m.phase as "bracketing" | "installation") ?? "bracketing",
+      stage: normalizeMediaStage(m.stage, m.phase),
       createdAt: m.created_at,
+    };
+  });
+}
+
+export async function loadUnitStageMedia(
+  unitId: string
+): Promise<UnitStageMediaItem[]> {
+  const supabase = await createClient();
+  const [{ data: media, error: mediaError }, { data: rooms, error: roomError }] =
+    await Promise.all([
+      supabase
+        .from("media_uploads")
+        .select(
+          "id, public_url, label, unit_id, room_id, window_id, upload_kind, stage, phase, created_at"
+        )
+        .eq("unit_id", unitId)
+        .order("created_at", { ascending: false }),
+      supabase.from("rooms").select("id, name").eq("unit_id", unitId),
+    ]);
+
+  if (mediaError) {
+    throw new Error(
+      `${mediaError.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
+    );
+  }
+  if (roomError) {
+    throw new Error(roomError.message);
+  }
+
+  const roomMap = new Map((rooms ?? []).map((room) => [room.id, room.name]));
+  const roomIds = [...roomMap.keys()];
+  const { data: windows, error: windowError } = roomIds.length
+    ? await supabase
+        .from("windows")
+        .select("id, room_id, label")
+        .in("room_id", roomIds)
+    : { data: [], error: null };
+
+  if (windowError) {
+    throw new Error(windowError.message);
+  }
+
+  const windowMap = new Map(
+    (windows ?? []).map((window) => [window.id, { label: window.label, roomId: window.room_id }])
+  );
+
+  return ((media ?? []) as MediaUploadRow[]).map((item) => {
+    const windowMeta = item.window_id ? windowMap.get(item.window_id) : null;
+    return {
+      id: item.id,
+      publicUrl: item.public_url,
+      label: item.label,
+      unitId: item.unit_id,
+      roomId: item.room_id,
+      roomName: item.room_id ? roomMap.get(item.room_id) ?? null : null,
+      windowId: item.window_id,
+      windowLabel: windowMeta?.label ?? null,
+      uploadKind: item.upload_kind,
+      stage: normalizeMediaStage(item.stage, item.phase),
+      createdAt: item.created_at,
     };
   });
 }
@@ -337,6 +529,19 @@ export async function loadNotifications(
     createdAt: r.created_at,
     read: readSet.has(r.id),
   }));
+}
+
+export async function loadUnitActivityLog(
+  unitId: string
+): Promise<UnitActivityLog[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("unit_activity_log")
+    .select("*")
+    .eq("unit_id", unitId)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return (data as UnitActivityLogRow[]).map(mapActivityLog);
 }
 
 export async function getUnreadNotificationCount(

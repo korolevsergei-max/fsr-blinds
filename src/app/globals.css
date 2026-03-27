@@ -1,41 +1,80 @@
 @import "tailwindcss";
 
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
 :root {
-  --background: #f5f5f4;
-  --foreground: #18181b;
-  --card: #ffffff;
-  --accent: #0f766e;
-  --accent-light: #ccfbf1;
-  --accent-dark: #0d6560;
-  --muted: #71717a;
-  --border: #e5e5e5;
-  --danger: #dc2626;
-  --danger-light: #fef2f2;
-  --warning: #d97706;
-  --warning-light: #fffbeb;
-  --success: #0f766e;
-  --success-light: #f0fdfa;
+  /* Canvas */
+  --background: #f4f4f3;
   --surface: #fafaf9;
+  --card: #ffffff;
+
+  /* Foreground */
+  --foreground: #1a1a1a;
+  --text-secondary: #5a5a5e;
+  --text-tertiary: #a0a0a5;
+
+  /* Borders */
+  --border: #e4e4e2;
+  --border-subtle: #ededeb;
+
+  /* Accent — one color only */
+  --accent: #0f766e;
+  --accent-hover: #0d6560;
+  --accent-light: #e6faf7;
+  --accent-muted: rgba(15, 118, 110, 0.12);
+
+  /* Legacy alias kept for existing usage */
+  --accent-dark: #0d6560;
+  --muted: #5a5a5e;
+
+  /* Status */
+  --danger: #c8392b;
+  --danger-light: #fff0ee;
+  --warning: #c97a10;
+  --warning-light: #fff8ec;
+  --success: #0f766e;
+  --success-light: #e6faf7;
+
+  /* Shadows — tinted, not black */
+  --shadow-sm: 0 1px 3px rgba(26, 26, 26, 0.06), 0 0 0 1px rgba(26, 26, 26, 0.04);
+  --shadow-md: 0 4px 12px rgba(26, 26, 26, 0.08), 0 0 0 1px rgba(26, 26, 26, 0.04);
+  --shadow-focus: 0 0 0 3px rgba(15, 118, 110, 0.15);
+
+  /* Radii */
+  --radius-sm: 0.625rem;   /* 10px — tags, chips */
+  --radius-md: 0.875rem;   /* 14px — buttons, inner elements */
+  --radius-lg: 1.125rem;   /* 18px — inputs, cards */
+  --radius-xl: 1.5rem;     /* 24px — large cards */
+  --radius-full: 9999px;   /* pills */
 }
 
+/* ─── Tailwind v4 theme wiring ───────────────────────────────────────────── */
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
   --color-card: var(--card);
-  --color-accent: var(--accent);
-  --color-accent-light: var(--accent-light);
-  --color-accent-dark: var(--accent-dark);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--text-secondary);
+  --color-tertiary: var(--text-tertiary);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-light: var(--accent-light);
+  --color-accent-dark: var(--accent-dark);
   --color-danger: var(--danger);
   --color-danger-light: var(--danger-light);
   --color-warning: var(--warning);
   --color-warning-light: var(--warning-light);
   --color-success: var(--success);
   --color-success-light: var(--success-light);
-  --color-surface: var(--surface);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -46,18 +85,74 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-input, textarea, select {
+h1, h2, h3, h4 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+input, textarea, select, button {
   font-family: inherit;
 }
 
+/* ─── Focus ring — accessible & on-brand ────────────────────────────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* ─── Skeleton loader ────────────────────────────────────────────────────── */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #e5e5e5 25%, #f5f5f4 50%, #e5e5e5 75%);
+  background: linear-gradient(
+    90deg,
+    var(--border) 25%,
+    var(--background) 50%,
+    var(--border) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Fade-up entry animation ────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ─── Card surface utility ───────────────────────────────────────────────── */
+.surface-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Skip link ──────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--foreground);
+  color: var(--card);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 1rem;
 }

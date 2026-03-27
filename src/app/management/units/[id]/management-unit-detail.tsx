@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   UserCircle,
@@ -12,22 +13,200 @@ import {
   PencilSimple,
   CheckCircle,
   Circle,
+  ClockCounterClockwise,
+  Wrench,
+  Buildings,
+  Robot,
+  UserGear,
+  ArrowRight,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitActivityLog } from "@/lib/types";
+import type { UnitStageMediaItem } from "@/lib/server-data";
+import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import {
   UNIT_STATUSES,
   UNIT_STATUS_LABELS,
   UNIT_STATUS_ORDER,
 } from "@/lib/types";
+import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
-import { RiskBadge } from "@/components/ui/risk-badge";
 import { Button } from "@/components/ui/button";
+import { SectionLabel } from "@/components/ui/section-label";
+import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 
-export function ManagementUnitDetail({ data }: { data: AppDataset }) {
+const ACTION_LABELS: Record<string, string> = {
+  unit_created: "Unit added to the system",
+  installer_assigned: "Installer assigned",
+  bulk_assigned: "Bulk assigned",
+  status_changed: "Status updated",
+  stage_photos_added: "Stage photos added",
+  bracketing_date_set: "Bracketing date set",
+  installation_date_set: "Installation date set",
+};
+
+const ACTOR_ICONS: Record<string, React.ReactNode> = {
+  owner: <UserGear size={14} className="text-indigo-500" />,
+  scheduler: <CalendarBlank size={14} className="text-sky-500" />,
+  installer: <Wrench size={14} className="text-teal-500" />,
+  manufacturer: <Buildings size={14} className="text-orange-500" />,
+  system: <Robot size={14} className="text-zinc-400" />,
+};
+
+const ACTOR_COLORS: Record<string, string> = {
+  owner: "bg-indigo-50 border-indigo-100",
+  scheduler: "bg-sky-50 border-sky-100",
+  installer: "bg-teal-50 border-teal-100",
+  manufacturer: "bg-orange-50 border-orange-100",
+  system: "bg-zinc-50 border-zinc-100",
+};
+
+function formatRelative(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffH = Math.floor(diffMs / 3600000);
+  const diffD = Math.floor(diffMs / 86400000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffH < 24) return `${diffH}h ago`;
+  if (diffD < 7) return `${diffD}d ago`;
+  return date.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-CA", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function buildLogDescription(log: UnitActivityLog): string {
+  const d = log.details ?? {};
+  if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
+    const parts: string[] = [];
+    if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
+    if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
+    return parts.join(" · ");
+  }
+  if (log.action === "status_changed") {
+    const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
+    const to = d.to ? UNIT_STATUS_LABELS[d.to as keyof typeof UNIT_STATUS_LABELS] ?? String(d.to) : "";
+    const note = d.note ? ` — "${d.note}"` : "";
+    return from && to ? `${from} → ${to}${note}` : to || from;
+  }
+  return "";
+}
+
+function ActivityTimeline({ logs }: { logs: UnitActivityLog[] }) {
+  if (logs.length === 0) {
+    return (
+      <div className="py-8 text-center text-muted text-sm flex flex-col items-center gap-2">
+        <ClockCounterClockwise size={28} className="text-zinc-300" />
+        No activity yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      {logs.map((log, i) => {
+        const isLast = i === logs.length - 1;
+        const description = buildLogDescription(log);
+        const icon = ACTOR_ICONS[log.actorRole] ?? ACTOR_ICONS.system;
+        const colorClass = ACTOR_COLORS[log.actorRole] ?? ACTOR_COLORS.system;
+
+        return (
+          <div key={log.id} className="flex gap-3">
+            {/* Timeline spine */}
+            <div className="flex flex-col items-center flex-shrink-0 w-8">
+              <div className={`w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                {icon}
+              </div>
+              {!isLast && <div className="w-px flex-1 bg-zinc-100 my-1" />}
+            </div>
+
+            {/* Content */}
+            <div className={`pb-5 flex-1 min-w-0 ${isLast ? "" : ""}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-foreground leading-snug">
+                    {ACTION_LABELS[log.action] ?? log.action}
+                  </p>
+                  <p className="text-[11px] text-tertiary">{log.actorName}</p>
+                </div>
+                <span
+                  className="text-[10px] text-muted flex-shrink-0 mt-0.5"
+                  title={formatDateTime(log.createdAt)}
+                >
+                  {formatRelative(log.createdAt)}
+                </span>
+              </div>
+              {description && (
+                <p className="mt-1 text-[11px] text-secondary leading-relaxed">{description}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ManagementUnitDetail({
+  data,
+  activityLog,
+  mediaItems,
+}: {
+  data: AppDataset;
+  activityLog: UnitActivityLog[];
+  mediaItems: UnitStageMediaItem[];
+}) {
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+
+  const [isUpdatingDate, startDateTransition] = useTransition();
+
+  const handleCompleteDateChange = (dateString: string) => {
+    if (!unit) return;
+    startDateTransition(async () => {
+      await updateUnitCompleteByDate(unit.id, dateString || null);
+    });
+  };
+
+  const handleBracketingDateChange = (dateString: string) => {
+    if (!unit) return;
+    startDateTransition(async () => {
+      await updateUnitAssignment(
+        unit.id,
+        unit.assignedInstallerId,
+        dateString,
+        unit.installationDate || "",
+        unit.completeByDate || null
+      );
+    });
+  };
+
+  const handleInstallationDateChange = (dateString: string) => {
+    if (!unit) return;
+    startDateTransition(async () => {
+      await updateUnitAssignment(
+        unit.id,
+        unit.assignedInstallerId,
+        unit.bracketingDate || "",
+        dateString,
+        unit.completeByDate || null
+      );
+    });
+  };
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
@@ -59,36 +238,55 @@ export function ManagementUnitDetail({ data }: { data: AppDataset }) {
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3"
         >
-          <div className="flex items-center justify-between">
-            <RiskBadge flag={unit.riskFlag} />
-          </div>
+          <div></div>
 
-          <div className="bg-white rounded-xl border border-border divide-y divide-border">
+          <div className="surface-card divide-y divide-border-subtle" style={{ padding: 0 }}>
             <div className="flex items-center gap-3 px-4 py-3">
-              <UserCircle size={18} className="text-zinc-400" />
+              <UserCircle size={17} className="text-tertiary" />
               <div>
-                <p className="text-xs text-muted">Assigned Installer</p>
-                <p className="text-sm font-medium text-zinc-900">
+                <p className="text-[11px] text-tertiary">Assigned installer</p>
+                <p className="text-[13px] font-medium text-foreground">
                   {unit.assignedInstallerName || "Unassigned"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarBlank size={18} className="text-zinc-400" />
+              <CalendarBlank size={17} className="text-tertiary" />
               <div>
-                <p className="text-xs text-muted">Bracketing Date</p>
-                <p className="text-sm font-medium text-zinc-900 font-mono">
-                  {unit.bracketingDate || "Not set"}
-                </p>
+                <p className="text-[11px] text-tertiary">Complete by</p>
+                <input
+                  type="date"
+                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                  value={unit.completeByDate || ""}
+                  onChange={(e) => handleCompleteDateChange(e.target.value)}
+                  disabled={isUpdatingDate}
+                />
               </div>
             </div>
             <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarBlank size={18} className="text-zinc-400" />
+              <CalendarBlank size={17} className="text-tertiary" />
               <div>
-                <p className="text-xs text-muted">Installation Date</p>
-                <p className="text-sm font-medium text-zinc-900 font-mono">
-                  {unit.installationDate || "Not set"}
-                </p>
+                <p className="text-[11px] text-tertiary">Bracketing date</p>
+                <input
+                  type="date"
+                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                  value={unit.bracketingDate || ""}
+                  onChange={(e) => handleBracketingDateChange(e.target.value)}
+                  disabled={isUpdatingDate}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <CalendarBlank size={17} className="text-tertiary" />
+              <div>
+                <p className="text-[11px] text-tertiary">Installation date</p>
+                <input
+                  type="date"
+                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                  value={unit.installationDate || ""}
+                  onChange={(e) => handleInstallationDateChange(e.target.value)}
+                  disabled={isUpdatingDate}
+                />
               </div>
             </div>
           </div>
@@ -100,9 +298,10 @@ export function ManagementUnitDetail({ data }: { data: AppDataset }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-            Status
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <SectionLabel as="h2" noMargin>Status</SectionLabel>
+            <UnitStageMediaViewer items={mediaItems} />
+          </div>
           <div className="flex flex-col">
             {UNIT_STATUSES.map((status, i) => {
               const step = UNIT_STATUS_ORDER[status];
@@ -125,8 +324,8 @@ export function ManagementUnitDetail({ data }: { data: AppDataset }) {
                     )}
                   </div>
                   <span
-                    className={`text-xs pb-4 ${
-                      isCurrent ? "font-semibold text-zinc-900" : isComplete ? "text-zinc-500" : "text-zinc-300"
+                    className={`text-[12px] pb-4 ${
+                      isCurrent ? "font-semibold text-foreground" : isComplete ? "text-secondary" : "text-tertiary"
                     }`}
                   >
                     {UNIT_STATUS_LABELS[status]}
@@ -147,16 +346,16 @@ export function ManagementUnitDetail({ data }: { data: AppDataset }) {
           {[
             { label: "Rooms", value: unit.roomCount, Icon: Door },
             { label: "Windows", value: unit.windowCount, Icon: Ruler },
-            { label: "Photos", value: unit.photosUploaded, Icon: Camera },
+            { label: "Photos", value: mediaItems.length, Icon: Camera },
           ].map(({ label, value, Icon }) => (
             <div
               key={label}
-              className="bg-white rounded-xl border border-border p-3.5 flex items-center gap-3"
+              className="surface-card p-3.5 flex items-center gap-3"
             >
-              <Icon size={16} className="text-zinc-400" />
+              <Icon size={15} className="text-tertiary" />
               <div>
-                <p className="text-base font-semibold text-zinc-900 font-mono">{value}</p>
-                <p className="text-xs text-muted">{label}</p>
+                <p className="text-[1rem] font-semibold text-foreground font-mono">{value}</p>
+                <p className="text-[11px] text-tertiary">{label}</p>
               </div>
             </div>
           ))}
@@ -169,21 +368,44 @@ export function ManagementUnitDetail({ data }: { data: AppDataset }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
-            <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-              Rooms
-            </h2>
-            <div className="bg-white rounded-xl border border-border divide-y divide-border">
+            <SectionLabel as="h2">Rooms</SectionLabel>
+            <div className="surface-card divide-y divide-border-subtle" style={{ padding: 0 }}>
               {rooms.map((room) => (
-                <div key={room.id} className="flex items-center justify-between px-4 py-3">
-                  <span className="text-sm text-zinc-900">{room.name}</span>
-                  <span className="text-xs text-muted font-mono">
-                    {room.completedWindows}/{room.windowCount}
-                  </span>
-                </div>
+                <Link
+                  key={room.id}
+                  href={`/management/units/${unit.id}/rooms/${room.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors"
+                >
+                  <span className="text-[13px] text-foreground">{room.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] text-tertiary font-mono">
+                      {room.completedWindows}/{room.windowCount}
+                    </span>
+                    <ArrowRight size={13} className="text-tertiary" />
+                  </div>
+                </Link>
               ))}
             </div>
           </motion.div>
         )}
+
+        {/* Activity Log */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.32, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <ClockCounterClockwise size={14} className="text-tertiary" />
+            <SectionLabel as="h2" noMargin>Activity history</SectionLabel>
+            {activityLog.length > 0 && (
+              <span className="ml-auto text-[10px] font-semibold text-tertiary bg-surface border border-border rounded-full px-2 py-0.5">
+                {activityLog.length}
+              </span>
+            )}
+          </div>
+          <ActivityTimeline logs={activityLog} />
+        </motion.div>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
-import { RiskBadge } from "@/components/ui/risk-badge";
+import { SectionLabel } from "@/components/ui/section-label";
 
 export function AssignUnit({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +27,9 @@ export function AssignUnit({ data }: { data: AppDataset }) {
   const [installationDate, setInstallationDate] = useState(
     unit?.installationDate || ""
   );
+  const [completeByDate, setCompleteByDate] = useState(
+    unit?.completeByDate || ""
+  );
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -42,7 +45,8 @@ export function AssignUnit({ data }: { data: AppDataset }) {
         unit.id,
         selectedInstaller,
         bracketingDate,
-        installationDate
+        installationDate,
+        completeByDate
       );
       if (!result.ok) {
         setSaveError(result.error);
@@ -76,7 +80,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
           className="flex items-center gap-3"
         >
           <StatusChip status={unit.status} />
-          <RiskBadge flag={unit.riskFlag} />
+          <SectionLabel>Assignment & Dates</SectionLabel>
         </motion.div>
 
         {/* Select installer */}
@@ -85,9 +89,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h2 className="text-xs font-medium text-muted uppercase tracking-widest mb-3">
-            Assign Installer
-          </h2>
+          <SectionLabel as="h2">Assign installer</SectionLabel>
           <div className="flex flex-col gap-2">
             {installers.map((inst) => (
               <button
@@ -142,6 +144,13 @@ export function AssignUnit({ data }: { data: AppDataset }) {
             value={installationDate}
             onChange={(e) => setInstallationDate(e.target.value)}
             helper="Optional, can be set later"
+          />
+          <Input
+            label="Complete By Date"
+            type="date"
+            value={completeByDate}
+            onChange={(e) => setCompleteByDate(e.target.value)}
+            helper="Optional deadline for completing unit work"
           />
         </motion.div>
 

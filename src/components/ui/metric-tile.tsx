@@ -8,11 +8,11 @@ export function MetricTile({
   label: string;
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-border p-5 flex flex-col items-center justify-center text-center">
-      <p className="text-2xl font-bold text-accent font-mono tracking-tight leading-none">
+    <div className="surface-card p-5 flex flex-col items-center justify-center text-center">
+      <p className="text-[1.75rem] font-bold text-accent font-mono tracking-tight leading-none">
         {value}
       </p>
-      <p className="text-[10px] font-bold text-muted uppercase tracking-wider mt-1.5">
+      <p className="text-[11px] font-medium text-tertiary uppercase tracking-[0.06em] mt-2">
         {label}
       </p>
     </div>
