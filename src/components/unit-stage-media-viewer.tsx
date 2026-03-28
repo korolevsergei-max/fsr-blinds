@@ -17,6 +17,7 @@ import {
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { Button } from "@/components/ui/button";
 import { UnitStageSummaryGrid } from "@/components/unit-stage-summary-grid";
+import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 
 export function UnitStageMediaViewer({
   items,
@@ -30,6 +31,7 @@ export function UnitStageMediaViewer({
     url: string;
     title: string;
   } | null>(null);
+  const visiblePhotoCount = useMemo(() => countDisplayableUnitPhotos(items), [items]);
 
   const groupedItems = useMemo(() => {
     const groups = new Map<typeof UNIT_PHOTO_STAGES[number], UnitStageMediaItem[]>();
@@ -67,7 +69,7 @@ export function UnitStageMediaViewer({
         <Images size={15} />
         View Images
         <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-bold text-zinc-600">
-          {items.length}
+          {visiblePhotoCount}
         </span>
       </Button>
 

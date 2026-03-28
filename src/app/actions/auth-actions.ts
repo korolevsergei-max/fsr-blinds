@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/auth";
-import { requireOwner } from "@/lib/auth";
+import { requireOwner, requireOwnerOrScheduler } from "@/lib/auth";
 
 export type ActionResult =
   | { ok: true; tempPassword?: string }
@@ -17,6 +17,15 @@ async function assertOwnerForAccountActions(): Promise<ActionResult | null> {
     return null;
   } catch {
     return { ok: false, error: "Only the owner can manage accounts." };
+  }
+}
+
+async function assertOwnerOrSchedulerForInstallerActions(): Promise<ActionResult | null> {
+  try {
+    await requireOwnerOrScheduler();
+    return null;
+  } catch {
+    return { ok: false, error: "Only the owner or scheduler can manage installers." };
   }
 }
 
@@ -157,7 +166,7 @@ export async function createInstallerAccount(
   phone: string
 ): Promise<ActionResult> {
   try {
-    const denied = await assertOwnerForAccountActions();
+    const denied = await assertOwnerOrSchedulerForInstallerActions();
     if (denied) return denied;
 
     const admin = createAdminClient();
@@ -239,6 +248,7 @@ export async function createInstallerAccount(
     if (insErr) return { ok: false, error: insErr.message };
 
     revalidatePath("/management", "layout");
+    revalidatePath("/scheduler", "layout");
     return { ok: true, tempPassword };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create installer" };

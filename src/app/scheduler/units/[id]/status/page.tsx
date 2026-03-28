@@ -1,7 +1,7 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { ManagementRoomDetail } from "./management-room-detail";
+import { UnitStatusEditor } from "@/components/units/unit-status-editor";
 
-export default async function ManagementRoomDetailPage({
+export default async function SchedulerStatusPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -11,5 +11,11 @@ export default async function ManagementRoomDetailPage({
     loadFullDataset(),
     loadUnitStageMedia(id),
   ]);
-  return <ManagementRoomDetail data={data} mediaItems={mediaItems} />;
+  return (
+    <UnitStatusEditor
+      data={data}
+      mediaItems={mediaItems}
+      unitsBasePath="/scheduler/units"
+    />
+  );
 }

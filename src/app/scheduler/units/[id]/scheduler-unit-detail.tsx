@@ -1,8 +1,7 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   UserCircle,
@@ -20,10 +19,7 @@ import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
-import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
@@ -60,7 +56,13 @@ function buildLogDescription(log: UnitActivityLog): string {
     if (d.installer) parts.push(`→ ${d.installer}`);
     if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
     if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
+    if (d.completeByDate) parts.push(`Complete by: ${d.completeByDate}`);
     return parts.join(" · ");
+  }
+  if (log.action === "complete_by_date_set") {
+    const from = d.from ? String(d.from) : "—";
+    const to = d.to ? String(d.to) : "—";
+    return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
     const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
@@ -87,15 +89,10 @@ export function SchedulerUnitDetail({
   activityLog: UnitActivityLog[];
 }) {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const unit = data.units.find((u) => u.id === id);
   const rooms = getRoomsByUnit(data, id);
 
   const today = new Date().toISOString().split("T")[0];
-  const [completeByDate, setCompleteByDate] = useState(unit?.completeByDate ?? "");
-  const [savingCompleteBy, startCompleteByTransition] = useTransition();
-  const [completeByError, setCompleteByError] = useState("");
-  const [completeBySuccess, setCompleteBySuccess] = useState(false);
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
@@ -116,21 +113,6 @@ export function SchedulerUnitDetail({
     </div>
   );
 
-  const handleSaveCompleteBy = () => {
-    setCompleteByError("");
-    setCompleteBySuccess(false);
-    startCompleteByTransition(async () => {
-      const result = await updateUnitCompleteByDate(id, completeByDate || null);
-      if (!result.ok) {
-        setCompleteByError(result.error);
-        return;
-      }
-      setCompleteBySuccess(true);
-      router.refresh();
-      setTimeout(() => setCompleteBySuccess(false), 2000);
-    });
-  };
-
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
@@ -147,8 +129,15 @@ export function SchedulerUnitDetail({
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
             <StatusChip status={unit.status} />
+            <Link
+              href={`/scheduler/units/${id}/status`}
+              className="flex items-center gap-1 text-[12px] font-semibold text-accent"
+            >
+              <ArrowRight size={13} />
+              Update status
+            </Link>
           </div>
           {flags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
@@ -167,11 +156,11 @@ export function SchedulerUnitDetail({
           <div className="flex items-center justify-between mb-3">
             <SectionLabel>Key Dates</SectionLabel>
             <Link
-              href={`/scheduler/units/${id}/assign`}
+              href={`/scheduler/units/${id}/dates`}
               className="flex items-center gap-1 text-[12px] font-semibold text-accent"
             >
               <PencilSimple size={13} />
-              Edit Assignment
+              Edit dates
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -205,43 +194,8 @@ export function SchedulerUnitDetail({
               className="flex items-center gap-1 text-[12px] font-semibold text-accent"
             >
               <PencilSimple size={13} />
-              Assign
+              Assign installer
             </Link>
-          </div>
-        </motion.div>
-
-        {/* Complete-by quick edit */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4 flex flex-col gap-3"
-        >
-          <SectionLabel>Complete By Date</SectionLabel>
-          {completeByError && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              {completeByError}
-            </p>
-          )}
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <Input
-                label="Date"
-                type="date"
-                value={completeByDate}
-                onChange={(e) => {
-                  setCompleteByDate(e.target.value);
-                  setCompleteByError("");
-                }}
-              />
-            </div>
-            <Button
-              size="sm"
-              onClick={handleSaveCompleteBy}
-              disabled={savingCompleteBy}
-            >
-              {completeBySuccess ? "Saved" : savingCompleteBy ? "Saving…" : "Save"}
-            </Button>
           </div>
         </motion.div>
 
@@ -271,26 +225,31 @@ export function SchedulerUnitDetail({
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 + i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                className="surface-card px-4 py-3 flex items-center justify-between"
               >
-                <div>
-                  <p className="text-[13px] font-semibold text-foreground">{room.name}</p>
-                  <p className="text-[11px] text-muted font-mono">
-                    {room.completedWindows}/{room.windowCount} measured
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-16 bg-zinc-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full"
-                      style={{
-                        width: room.windowCount > 0
-                          ? `${(room.completedWindows / room.windowCount) * 100}%`
-                          : "0%",
-                      }}
-                    />
+                <Link
+                  href={`/scheduler/units/${id}/rooms/${room.id}`}
+                  className="surface-card px-4 py-3 flex items-center justify-between active:scale-[0.98] transition-transform"
+                >
+                  <div>
+                    <p className="text-[13px] font-semibold text-foreground">{room.name}</p>
+                    <p className="text-[11px] text-muted font-mono">
+                      {room.completedWindows}/{room.windowCount} measured
+                    </p>
                   </div>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-16 bg-zinc-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent rounded-full"
+                        style={{
+                          width: room.windowCount > 0
+                            ? `${(room.completedWindows / room.windowCount) * 100}%`
+                            : "0%",
+                        }}
+                      />
+                    </div>
+                    <ArrowRight size={13} className="text-tertiary" />
+                  </div>
+                </Link>
               </motion.div>
             ))
           )}
@@ -351,17 +310,6 @@ export function SchedulerUnitDetail({
           )}
         </motion.div>
 
-        {/* Assign CTA */}
-        <div className="pb-6">
-          <Link
-            href={`/scheduler/units/${id}/assign`}
-            className="flex items-center justify-center gap-2 h-13 rounded-xl bg-accent text-white font-semibold text-[15px] transition-all active:scale-[0.99]"
-          >
-            <PencilSimple size={18} />
-            Edit Assignment & Dates
-            <ArrowRight size={16} weight="bold" />
-          </Link>
-        </div>
       </div>
     </div>
   );

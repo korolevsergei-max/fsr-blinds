@@ -6,7 +6,7 @@ import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 
-export function ManagementRoomDetail({
+export function SchedulerRoomDetail({
   data,
   mediaItems,
 }: {
@@ -26,7 +26,7 @@ export function ManagementRoomDetail({
       <PageHeader
         title={room.name}
         subtitle={`${unit.unitNumber} • ${unit.buildingName}`}
-        backHref={`/management/units/${unit.id}`}
+        backHref={`/scheduler/units/${unit.id}`}
       />
 
       <div className="flex-1 px-5 py-5">

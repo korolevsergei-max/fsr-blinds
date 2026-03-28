@@ -1,16 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   CaretLeft,
   CaretRight,
-  Wrench,
-  Hammer,
   X,
   FunnelSimple,
-  Warning,
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { getInstallerColor, getInitials } from "@/lib/app-dataset";
@@ -18,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { DATE_RANGE_LABELS, isWithinRange, type DateRange } from "@/lib/date-range";
 import { computeUnitFlags } from "@/lib/unit-flags";
+import { ScheduleEntryCard } from "@/components/schedule/schedule-entry-card";
 
 type ViewMode = "week" | "month";
 
@@ -77,6 +74,19 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
       if (clientFilter !== "all" && unit.clientId !== clientFilter) return false;
       if (buildingFilter !== "all" && unit.buildingId !== buildingFilter) return false;
       if (completeByFilter !== "all" && !isWithinRange(unit.completeByDate ?? null, completeByFilter)) return false;
+      if (!s.date) return false;
+
+      // Defensive guard:
+      // Only show bracketing tasks when the unit has a scheduled bracketing date,
+      // and only show installation tasks when the unit has a scheduled installation date.
+      if (s.taskType === "bracketing") {
+        if (!unit.bracketingDate) return false;
+        if (unit.bracketingDate.slice(0, 10) !== s.date.slice(0, 10)) return false;
+      }
+      if (s.taskType === "installation") {
+        if (!unit.installationDate) return false;
+        if (unit.installationDate.slice(0, 10) !== s.date.slice(0, 10)) return false;
+      }
       return true;
     });
   }, [schedule, units, clientFilter, buildingFilter, completeByFilter]);
@@ -122,38 +132,18 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
   ];
   const completeByOptions = Object.entries(DATE_RANGE_LABELS).map(([v, label]) => ({ value: v, label }));
 
-  const renderTaskChip = (entry: (typeof schedule)[0]) => {
+  const resolveEntryMeta = (entry: (typeof schedule)[0]) => {
     const unit = units.find((u) => u.id === entry.unitId);
     const instId = unit?.assignedInstallerId;
     const instColor = instId ? installerColorMap.get(instId) : null;
     const inst = instId ? installers.find((i) => i.id === instId) : null;
     const flags = unit ? computeUnitFlags(unit, todayStr) : [];
     const isOverdue = flags.includes("past_install_due") || flags.includes("past_bracketing_due");
-
-    return (
-      <Link
-        key={entry.id}
-        href={`/scheduler/units/${entry.unitId}`}
-        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--radius-sm)] border text-[11px] transition-all active:scale-[0.97] ${
-          isOverdue ? "border-red-200 bg-red-50" : "border-border bg-card"
-        }`}
-      >
-        {entry.taskType === "bracketing" ? (
-          <Wrench size={10} className="text-sky-500 flex-shrink-0" />
-        ) : (
-          <Hammer size={10} className="text-emerald-500 flex-shrink-0" />
-        )}
-        <span className="font-medium text-zinc-900 truncate">{entry.unitNumber}</span>
-        {isOverdue && <Warning size={9} className="text-red-500 flex-shrink-0" />}
-        {inst && instColor && (
-          <span
-            className={`w-5 h-5 rounded-full ${instColor.bg} ${instColor.text} flex items-center justify-center text-[8px] font-bold flex-shrink-0`}
-          >
-            {getInitials(inst.name)}
-          </span>
-        )}
-      </Link>
-    );
+    const installer =
+      inst && instColor
+        ? { name: inst.name, bg: instColor.bg, text: instColor.text, initials: getInitials(inst.name) }
+        : null;
+    return { isOverdue, installer };
   };
 
   return (
@@ -263,8 +253,20 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
                       )}
                     </div>
                     {entries.length > 0 ? (
-                      <div className="flex flex-col gap-1">
-                        {entries.map((e) => renderTaskChip(e))}
+                      <div className="flex flex-col gap-1.5">
+                        {entries.map((e) => {
+                          const { isOverdue, installer } = resolveEntryMeta(e);
+                          return (
+                            <ScheduleEntryCard
+                              key={e.id}
+                              entry={e}
+                              href={`/scheduler/units/${e.unitId}`}
+                              isOverdue={isOverdue}
+                              installer={installer}
+                              variant="week"
+                            />
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-[10px] text-muted italic">No tasks</p>
@@ -316,19 +318,15 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
                     </span>
                     <div className="flex flex-col gap-0.5">
                       {entries.slice(0, 2).map((e) => {
-                        const unit = units.find((u) => u.id === e.unitId);
-                        const flags = unit ? computeUnitFlags(unit, todayStr) : [];
-                        const isOverdue = flags.includes("past_install_due") || flags.includes("past_bracketing_due");
+                        const { isOverdue } = resolveEntryMeta(e);
                         return (
-                          <Link
+                          <ScheduleEntryCard
                             key={e.id}
+                            entry={e}
                             href={`/scheduler/units/${e.unitId}`}
-                            className={`text-[8px] font-medium px-1 rounded truncate block ${
-                              isOverdue ? "bg-red-100 text-red-700" : e.taskType === "bracketing" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            {e.unitNumber}
-                          </Link>
+                            isOverdue={isOverdue}
+                            variant="month"
+                          />
                         );
                       })}
                       {entries.length > 2 && (

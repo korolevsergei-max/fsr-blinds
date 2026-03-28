@@ -1,7 +1,7 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { ManagementRoomDetail } from "./management-room-detail";
+import { SchedulerRoomDetail } from "./scheduler-room-detail";
 
-export default async function ManagementRoomDetailPage({
+export default async function SchedulerRoomDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -11,5 +11,5 @@ export default async function ManagementRoomDetailPage({
     loadFullDataset(),
     loadUnitStageMedia(id),
   ]);
-  return <ManagementRoomDetail data={data} mediaItems={mediaItems} />;
+  return <SchedulerRoomDetail data={data} mediaItems={mediaItems} />;
 }

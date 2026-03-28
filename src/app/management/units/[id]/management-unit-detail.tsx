@@ -34,13 +34,18 @@ import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
+import { DateInput } from "@/components/ui/date-input";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
+import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { countDisplayableUnitPhotos } from "@/lib/unit-media";
+import { getUnitEscalations } from "@/lib/window-issues";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the system",
   installer_assigned: "Installer assigned",
   bulk_assigned: "Bulk assigned",
   status_changed: "Status updated",
+  complete_by_date_set: "Complete-by date updated",
   stage_photos_added: "Stage photos added",
   bracketing_date_set: "Bracketing date set",
   installation_date_set: "Installation date set",
@@ -94,7 +99,13 @@ function buildLogDescription(log: UnitActivityLog): string {
     if (d.installer) parts.push(`→ ${d.installer}`);
     if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
     if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
+    if (d.completeByDate) parts.push(`Complete by: ${d.completeByDate}`);
     return parts.join(" · ");
+  }
+  if (log.action === "complete_by_date_set") {
+    const from = d.from ? String(d.from) : "—";
+    const to = d.to ? String(d.to) : "—";
+    return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
     const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
@@ -213,6 +224,8 @@ export function ManagementUnitDetail({
   }
 
   const currentStep = UNIT_STATUS_ORDER[unit.status];
+  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
+  const escalations = getUnitEscalations(data, unit.id);
 
   return (
     <div className="flex flex-col">
@@ -221,12 +234,26 @@ export function ManagementUnitDetail({
         subtitle={`${unit.buildingName} \u2022 ${unit.clientName}`}
         backHref="/management/units"
         actions={
-          <Link href={`/management/units/${unit.id}/assign`}>
-            <Button size="sm" variant="secondary">
-              <PencilSimple size={14} />
-              Assign
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href={`/management/units/${unit.id}/dates`}>
+              <Button size="sm" variant="secondary">
+                <CalendarBlank size={14} />
+                Key dates
+              </Button>
+            </Link>
+            <Link href={`/management/units/${unit.id}/assign`}>
+              <Button size="sm" variant="secondary">
+                <PencilSimple size={14} />
+                Assign
+              </Button>
+            </Link>
+            <Link href={`/management/units/${unit.id}/status`}>
+              <Button size="sm" variant="secondary">
+                <ArrowRight size={14} />
+                Status
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -254,12 +281,12 @@ export function ManagementUnitDetail({
               <CalendarBlank size={17} className="text-tertiary" />
               <div>
                 <p className="text-[11px] text-tertiary">Complete by</p>
-                <input
-                  type="date"
-                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                <DateInput
                   value={unit.completeByDate || ""}
-                  onChange={(e) => handleCompleteDateChange(e.target.value)}
+                  onChange={handleCompleteDateChange}
                   disabled={isUpdatingDate}
+                  compact
+                  className="-ml-1"
                 />
               </div>
             </div>
@@ -267,12 +294,12 @@ export function ManagementUnitDetail({
               <CalendarBlank size={17} className="text-tertiary" />
               <div>
                 <p className="text-[11px] text-tertiary">Bracketing date</p>
-                <input
-                  type="date"
-                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                <DateInput
                   value={unit.bracketingDate || ""}
-                  onChange={(e) => handleBracketingDateChange(e.target.value)}
+                  onChange={handleBracketingDateChange}
                   disabled={isUpdatingDate}
+                  compact
+                  className="-ml-1"
                 />
               </div>
             </div>
@@ -280,12 +307,12 @@ export function ManagementUnitDetail({
               <CalendarBlank size={17} className="text-tertiary" />
               <div>
                 <p className="text-[11px] text-tertiary">Installation date</p>
-                <input
-                  type="date"
-                  className="bg-transparent text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-accent rounded-sm -ml-1 px-1 py-0.5 cursor-pointer disabled:opacity-50"
+                <DateInput
                   value={unit.installationDate || ""}
-                  onChange={(e) => handleInstallationDateChange(e.target.value)}
+                  onChange={handleInstallationDateChange}
                   disabled={isUpdatingDate}
+                  compact
+                  className="-ml-1"
                 />
               </div>
             </div>
@@ -346,7 +373,7 @@ export function ManagementUnitDetail({
           {[
             { label: "Rooms", value: unit.roomCount, Icon: Door },
             { label: "Windows", value: unit.windowCount, Icon: Ruler },
-            { label: "Photos", value: mediaItems.length, Icon: Camera },
+            { label: "Photos", value: displayPhotoCount, Icon: Camera },
           ].map(({ label, value, Icon }) => (
             <div
               key={label}
@@ -359,6 +386,14 @@ export function ManagementUnitDetail({
               </div>
             </div>
           ))}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <UnitEscalationsPanel escalations={escalations} />
         </motion.div>
 
         {/* Rooms preview */}

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, Buildings, CalendarBlank } from "@phosphor-icons/react";
+import { ChartBar, Buildings, CalendarBlank, UsersFour } from "@phosphor-icons/react";
 
 const navItems = [
   { href: "/scheduler", label: "Dashboard", Icon: ChartBar },
   { href: "/scheduler/units", label: "Units", Icon: Buildings },
   { href: "/scheduler/schedule", label: "Schedule", Icon: CalendarBlank },
+  { href: "/scheduler/installers", label: "Installers", Icon: UsersFour },
 ];
 
 export function SchedulerNav() {

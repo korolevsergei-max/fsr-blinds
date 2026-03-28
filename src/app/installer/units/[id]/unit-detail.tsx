@@ -24,6 +24,9 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
+import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { countDisplayableUnitPhotos } from "@/lib/unit-media";
+import { getUnitEscalations } from "@/lib/window-issues";
 
 export function UnitDetail({
   data,
@@ -62,6 +65,8 @@ export function UnitDetail({
   }
 
   const currentStep = UNIT_STATUS_ORDER[unit.status];
+  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
+  const escalations = getUnitEscalations(data, unit.id);
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -97,15 +102,14 @@ export function UnitDetail({
   const showInstalledDate =
     UNIT_STATUS_ORDER[unit.status] >= UNIT_STATUS_ORDER.installed_pending_approval;
 
-  const bracketingLabel = showBracketedDate ? "Date Bracketed" : "Bracketing Scheduled";
-  const bracketingValue = showBracketedDate ? bracketedDate ?? unit.bracketingDate : unit.bracketingDate;
-  const installationLabel = showInstalledDate ? "Date Installed" : "Install Scheduled";
-  const installationValue = showInstalledDate
-    ? installedDate ?? unit.installationDate
-    : unit.installationDate;
+  // Scheduled dates come from the unit record; actual completed dates come from the activity log.
+  const scheduledBracketingDate = unit.bracketingDate;
+  const scheduledInstallationDate = unit.installationDate;
+  const actualBracketingDate = showBracketedDate ? bracketedDate : null;
+  const actualInstallationDate = showInstalledDate ? installedDate : null;
 
-  const bracketingPastDue = isPastDue(bracketingValue);
-  const installationPastDue = isPastDue(installationValue);
+  const bracketingPastDue = isPastDue(scheduledBracketingDate) && !showBracketedDate;
+  const installationPastDue = isPastDue(scheduledInstallationDate) && !showInstalledDate;
   const completeByPastDue = isPastDue(unit.completeByDate);
 
   return (
@@ -145,55 +149,119 @@ export function UnitDetail({
           transition={{ delay: 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="grid grid-cols-1 gap-3"
         >
-          {[
-            {
-              label: bracketingLabel,
-              value: formatDate(bracketingValue),
-              overdue: bracketingPastDue,
-            },
-            {
-              label: installationLabel,
-              value: formatDate(installationValue),
-              overdue: installationPastDue,
-            },
-            {
-              label: "Complete By",
-              value: formatDate(unit.completeByDate),
-              overdue: completeByPastDue,
-            },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className={`rounded-2xl border px-4 py-3 ${
-                item.overdue
-                  ? "border-red-200 bg-red-50"
-                  : "border-border bg-white"
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p
-                  className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-                    item.overdue ? "text-red-600" : "text-muted"
-                  }`}
-                >
-                  {item.label}
-                </p>
-                {item.overdue && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                    <WarningCircle size={12} weight="fill" />
-                    Overdue *
-                  </span>
-                )}
-              </div>
+          {/* Bracketing milestone */}
+          <div
+            className={`rounded-2xl border px-4 py-3 ${
+              bracketingPastDue
+                ? "border-red-200 bg-red-50"
+                : "border-border bg-white"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
               <p
-                className={`mt-1 text-sm font-semibold ${
-                  item.overdue ? "text-red-700" : "text-foreground"
+                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+                  bracketingPastDue ? "text-red-600" : "text-muted"
                 }`}
               >
-                {item.value}
+                Bracketing
               </p>
+              {bracketingPastDue && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                  <WarningCircle size={12} weight="fill" />
+                  Overdue *
+                </span>
+              )}
             </div>
-          ))}
+            <div className="flex items-start gap-6">
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
+                <p className={`mt-0.5 text-sm font-semibold ${bracketingPastDue ? "text-red-700" : "text-foreground"}`}>
+                  {formatDate(scheduledBracketingDate)}
+                </p>
+              </div>
+              {actualBracketingDate && (
+                <div>
+                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                  <p className="mt-0.5 text-sm font-semibold text-accent">
+                    {formatDate(actualBracketingDate)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Installation milestone */}
+          <div
+            className={`rounded-2xl border px-4 py-3 ${
+              installationPastDue
+                ? "border-red-200 bg-red-50"
+                : "border-border bg-white"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p
+                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+                  installationPastDue ? "text-red-600" : "text-muted"
+                }`}
+              >
+                Installation
+              </p>
+              {installationPastDue && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                  <WarningCircle size={12} weight="fill" />
+                  Overdue *
+                </span>
+              )}
+            </div>
+            <div className="flex items-start gap-6">
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
+                <p className={`mt-0.5 text-sm font-semibold ${installationPastDue ? "text-red-700" : "text-foreground"}`}>
+                  {formatDate(scheduledInstallationDate)}
+                </p>
+              </div>
+              {actualInstallationDate && (
+                <div>
+                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                  <p className="mt-0.5 text-sm font-semibold text-accent">
+                    {formatDate(actualInstallationDate)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Complete By deadline */}
+          <div
+            className={`rounded-2xl border px-4 py-3 ${
+              completeByPastDue
+                ? "border-red-200 bg-red-50"
+                : "border-border bg-white"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p
+                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
+                  completeByPastDue ? "text-red-600" : "text-muted"
+                }`}
+              >
+                Complete By
+              </p>
+              {completeByPastDue && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                  <WarningCircle size={12} weight="fill" />
+                  Overdue *
+                </span>
+              )}
+            </div>
+            <p
+              className={`mt-1 text-sm font-semibold ${
+                completeByPastDue ? "text-red-700" : "text-foreground"
+              }`}
+            >
+              {formatDate(unit.completeByDate)}
+            </p>
+          </div>
         </motion.div>
 
         {/* Stats Grid */}
@@ -205,8 +273,16 @@ export function UnitDetail({
         >
           <MetricTile value={unit.roomCount} label="Rooms" />
           <MetricTile value={unit.windowCount} label="Windows" />
-          <MetricTile value={mediaItems.length} label="Photos" />
+          <MetricTile value={displayPhotoCount} label="Photos" />
           <MetricTile value={escalationCount} label="Escalations" />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <UnitEscalationsPanel escalations={escalations} />
         </motion.div>
 
         {/* Installation Timeline */}

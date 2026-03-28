@@ -11,6 +11,25 @@ function revalidateApp() {
   revalidatePath("/installer", "layout");
 }
 
+async function logUnitActivity(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string,
+  actorRole: string,
+  actorName: string,
+  action: string,
+  details?: Record<string, unknown>
+) {
+  await supabase.from("unit_activity_log").insert({
+    id: `log-${crypto.randomUUID()}`,
+    unit_id: unitId,
+    actor_role: actorRole,
+    actor_name: actorName,
+    action,
+    details: details ?? null,
+    created_at: new Date().toISOString(),
+  });
+}
+
 export async function createClient_(
   name: string,
   contactName: string,
@@ -193,13 +212,34 @@ export async function updateUnitCompleteByDate(
   try {
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
+    const nextDate = completeByDate || null;
+    const { data: current } = await supabase
+      .from("units")
+      .select("complete_by_date")
+      .eq("id", unitId)
+      .single();
+    const previousDate = current?.complete_by_date ?? null;
 
     const { error } = await supabase
       .from("units")
-      .update({ complete_by_date: completeByDate })
+      .update({ complete_by_date: nextDate })
       .eq("id", unitId);
 
     if (error) return { ok: false, error: error.message };
+
+    if (previousDate !== nextDate) {
+      await logUnitActivity(
+        supabase,
+        unitId,
+        owner.role,
+        owner.displayName,
+        "complete_by_date_set",
+        {
+          from: previousDate,
+          to: nextDate,
+        }
+      );
+    }
 
     revalidateApp();
     return { ok: true };

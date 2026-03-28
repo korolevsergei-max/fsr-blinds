@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
   Envelope,
   Phone,
-  Buildings,
   CheckCircle,
   Plus,
   UserCircle,
@@ -18,8 +17,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { InstallersList } from "@/components/installers/installers-list";
+import { InviteInstallerForm } from "@/components/installers/invite-installer-form";
 import {
-  createInstallerAccount,
   createManufacturerAccount,
   createSchedulerAccount,
   deleteInstallerAccount,
@@ -60,8 +60,6 @@ export function AccountsManager({
   const [deleteError, setDeleteError] = useState("");
   const [deletePending, startDeleteTransition] = useTransition();
 
-  const linkedInstallers = installers.filter((i) => Boolean(i.authUserId));
-  const orphanInstallers = installers.filter((i) => !i.authUserId);
   const linkedManufacturers = manufacturers.filter((m) => Boolean(m.authUserId));
   const orphanManufacturers = manufacturers.filter((m) => !m.authUserId);
   const linkedSchedulers = schedulers.filter((s) => Boolean(s.authUserId));
@@ -238,175 +236,14 @@ export function AccountsManager({
 
         {tab === "installers" && (
           <>
-            {linkedInstallers.map((inst, i) => {
-              const assignedUnits = units.filter(
-                (u) => u.assignedInstallerId === inst.id
-              );
-              const activeUnits = assignedUnits.filter(
-                (u) => u.status !== "client_approved"
-              );
-              const completedUnits = assignedUnits.filter(
-                (u) => u.status === "client_approved"
-              );
-
-              return (
-                <motion.div
-                  key={inst.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    delay: i * 0.06,
-                    duration: 0.3,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                >
-                  <div className="surface-card p-4">
-                    <div className="flex items-center gap-3 mb-3 justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                          <UserCircle size={22} className="text-tertiary" />
-                        </div>
-                        <div>
-                          <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                            {inst.name}
-                          </h3>
-                          <p className="text-[12px] text-tertiary">Installer</p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        disabled={deletePending}
-                        onClick={() => handleDeleteInstaller(inst)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 mb-3">
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Envelope size={12} />
-                        {inst.email}
-                      </div>
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {inst.phone}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-[12px] text-tertiary border-t border-border-subtle pt-3">
-                      <span className="flex items-center gap-1">
-                        <Buildings size={12} />
-                        <span className="font-mono font-semibold text-foreground">
-                          {activeUnits.length}
-                        </span>{" "}
-                        active
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <CheckCircle size={12} />
-                        <span className="font-mono font-semibold text-foreground">
-                          {completedUnits.length}
-                        </span>{" "}
-                        completed
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-
-            {orphanInstallers.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned installer records (not linked to Supabase Auth):{" "}
-                    {orphanInstallers.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanInstallers.map((inst, i) => {
-                  const assignedUnits = units.filter(
-                    (u) => u.assignedInstallerId === inst.id
-                  );
-                  const activeUnits = assignedUnits.filter(
-                    (u) => u.status !== "client_approved"
-                  );
-                  const completedUnits = assignedUnits.filter(
-                    (u) => u.status === "client_approved"
-                  );
-
-                  return (
-                    <motion.div
-                      key={inst.id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{
-                        delay: i * 0.06,
-                        duration: 0.3,
-                        ease: [0.16, 1, 0.3, 1],
-                      }}
-                    >
-                      <div className="surface-card p-4">
-                        <div className="flex items-center gap-3 mb-3 justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                              <UserCircle size={22} className="text-tertiary" />
-                            </div>
-                            <div>
-                              <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                                {inst.name}
-                              </h3>
-                              <p className="text-[12px] text-tertiary">Installer</p>
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            disabled={deletePending}
-                            onClick={() => handleDeleteInstaller(inst)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-
-                        <div className="flex flex-col gap-1.5 mb-3">
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <Envelope size={12} />
-                            {inst.email}
-                          </div>
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <Phone size={12} />
-                            {inst.phone}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-[12px] text-tertiary border-t border-border-subtle pt-3">
-                          <span className="flex items-center gap-1">
-                            <Buildings size={12} />
-                            <span className="font-mono font-semibold text-foreground">
-                              {activeUnits.length}
-                            </span>{" "}
-                            active
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <CheckCircle size={12} />
-                            <span className="font-mono font-semibold text-foreground">
-                              {completedUnits.length}
-                            </span>{" "}
-                            completed
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </>
-            )}
-
-            {installers.length === 0 && (
-              <div className="text-center py-12 text-[13px] text-tertiary">
-                No installers yet. Tap Invite to add one.
-              </div>
-            )}
+            <InstallersList
+              installers={installers}
+              units={units}
+              showDelete
+              deletePending={deletePending}
+              onDelete={handleDeleteInstaller}
+              emptyMessage="No installers yet. Tap Invite to add one."
+            />
           </>
         )}
 
@@ -633,92 +470,6 @@ export function AccountsManager({
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function InviteInstallerForm({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [tempPassword, setTempPassword] = useState("");
-  const [copied, setCopied] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  const handleSubmit = () => {
-    if (!name.trim() || !email.trim()) {
-      setError("Name and email are required.");
-      return;
-    }
-    setError("");
-    startTransition(async () => {
-      const result = await createInstallerAccount(name, email, phone);
-      if (!result.ok) {
-        setError(humanizeInviteError(result.error));
-        return;
-      }
-      if (result.tempPassword) {
-        setTempPassword(result.tempPassword);
-      }
-      setSuccess(true);
-      if (!result.tempPassword) setTimeout(onDone, 800);
-    });
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(tempPassword);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="surface-card p-4 flex flex-col gap-4">
-      <div>
-        <p className="text-[15px] font-semibold text-foreground tracking-tight">Invite installer</p>
-        <p className="text-[12px] text-tertiary mt-0.5">They will receive an email to set up their account.</p>
-      </div>
-
-      {error && <InlineAlert variant="error">{error}</InlineAlert>}
-
-      {success ? (
-        tempPassword ? (
-          <div className="flex flex-col gap-3">
-            <InlineAlert variant="warning">
-              Email invite couldn&apos;t be sent (rate limit). Account was created — share this temporary password with the installer:
-            </InlineAlert>
-            <div className="flex items-center gap-2 bg-surface border border-border rounded-[var(--radius-md)] px-3 py-2">
-              <code className="flex-1 text-[14px] font-mono font-semibold text-foreground tracking-wide">{tempPassword}</code>
-              <button
-                onClick={handleCopy}
-                className="text-[12px] font-medium text-accent hover:text-accent/80 transition-colors"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <p className="text-[11px] text-tertiary">The installer can change their password after first login.</p>
-            <button onClick={onDone} className="text-[13px] font-medium text-accent hover:underline text-left">Done</button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-[14px] text-success font-medium py-2">
-            <CheckCircle size={16} weight="fill" />
-            Invite sent
-          </div>
-        )
-      ) : (
-        <>
-          <Input label="Name" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(""); }} placeholder="Alex Naidu" autoFocus />
-          <Input label="Email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError(""); }} placeholder="jane@fsrblinds.ca" />
-          <Input label="Phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); if (error) setError(""); }} placeholder="+1 (416) 555-0000" />
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" variant="secondary" onClick={onDone}>Cancel</Button>
-            <Button size="sm" disabled={pending} onClick={handleSubmit}>
-              {pending ? "Sending…" : "Send invite"}
-            </Button>
-          </div>
-        </>
-      )}
     </div>
   );
 }

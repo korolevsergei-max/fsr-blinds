@@ -1,171 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
-  CalendarBlank,
-  CheckCircle,
   CheckSquare,
-  Clock,
   FunnelSimple,
   MagnifyingGlass,
   Square,
   UserCircle,
   Users,
-  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
+import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { SectionLabel } from "@/components/ui/section-label";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
 import { DATE_RANGE_LABELS, isWithinRange, type DateRange } from "@/lib/date-range";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
-import { bulkAssignUnits } from "@/app/actions/fsr-data";
-
-type BulkAssignSheetProps = {
-  unitIds: string[];
-  installers: AppDataset["installers"];
-  onClose: () => void;
-  onSuccess: () => void;
-};
-
-function BulkAssignSheet({ unitIds, installers, onClose, onSuccess }: BulkAssignSheetProps) {
-  const [selectedInstaller, setSelectedInstaller] = useState("");
-  const [bracketingDate, setBracketingDate] = useState("");
-  const [installationDate, setInstallationDate] = useState("");
-  const [completeByDate, setCompleteByDate] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  const handleSave = () => {
-    if (!selectedInstaller && !bracketingDate && !installationDate && !completeByDate) return;
-    setError("");
-    startTransition(async () => {
-      const result = await bulkAssignUnits(unitIds, selectedInstaller, bracketingDate, installationDate, undefined, completeByDate);
-      if (!result.ok) { setError(result.error); return; }
-      setSaved(true);
-      setTimeout(() => { onSuccess(); onClose(); }, 900);
-    });
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" onClick={onClose} />
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card rounded-t-[var(--radius-xl)] shadow-2xl max-h-[85dvh] overflow-y-auto"
-      >
-        <div className="px-4 pt-4 pb-2 flex items-center justify-between border-b border-border">
-          <div>
-            <h2 className="text-[15px] font-semibold text-foreground">Bulk assign</h2>
-            <p className="text-[12px] text-tertiary">{unitIds.length} unit{unitIds.length !== 1 ? "s" : ""} selected</p>
-          </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-zinc-100 transition-colors">
-            <X size={18} className="text-zinc-500" />
-          </button>
-        </div>
-
-        <div className="px-4 py-5 flex flex-col gap-6">
-          {error && (
-            <div className="rounded-[var(--radius-md)] border px-3.5 py-3 text-[13px] leading-snug font-medium bg-danger-light border-[rgba(200,57,43,0.2)] text-danger">{error}</div>
-          )}
-
-          <div>
-            <SectionLabel className="flex items-center gap-1.5">
-              <Users size={13} className="inline" />Assign installer
-            </SectionLabel>
-            <div className="flex flex-col gap-2">
-              {installers.map((inst) => (
-                <button
-                  key={inst.id}
-                  type="button"
-                  onClick={() => setSelectedInstaller(inst.id)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-left transition-all active:scale-[0.98] ${
-                    selectedInstaller === inst.id
-                      ? "border-accent bg-accent-light"
-                      : "border-border bg-card hover:bg-surface"
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0">
-                    <img src={inst.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                  <span className="flex-1 text-[14px] font-medium text-foreground">{inst.name}</span>
-                  {selectedInstaller === inst.id && (
-                    <CheckCircle size={18} weight="fill" className="text-accent flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <SectionLabel className="flex items-center gap-1.5">
-              <CalendarBlank size={13} className="inline" />Dates (optional)
-            </SectionLabel>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="text-xs text-muted mb-1 block">Bracketing Date</label>
-                <input
-                  type="date"
-                  value={bracketingDate}
-                  onChange={(e) => setBracketingDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Installation Target Date</label>
-                <input
-                  type="date"
-                  value={installationDate}
-                  onChange={(e) => setInstallationDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Complete By Date</label>
-                <input
-                  type="date"
-                  value={completeByDate}
-                  onChange={(e) => setCompleteByDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="pb-32">
-            {saved ? (
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-semibold"
-              >
-                <CheckCircle size={20} weight="fill" />
-                Assigned
-              </motion.div>
-            ) : (
-              <Button fullWidth size="lg" disabled={(!selectedInstaller && !bracketingDate && !installationDate && !completeByDate) || pending} onClick={handleSave}>
-                {pending ? "Saving…" : (!selectedInstaller ? `Update ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}` : `Assign ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`)}
-              </Button>
-            )}
-          </div>
-        </div>
-      </motion.div>
-    </>
-  );
-}
 
 export function UnitsList({ data }: { data: AppDataset }) {
-  const { units, clients, buildings, installers } = data;
+  const { units, clients, buildings, installers, schedulers } = data;
 
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
@@ -174,6 +33,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const [installerFilter, setInstallerFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState<DateRange>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
+  const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -183,6 +43,8 @@ export function UnitsList({ data }: { data: AppDataset }) {
     () => clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter),
     [buildings, clientFilter]
   );
+
+  const unitIdsWithIssues = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
 
   const filtered = useMemo(() => {
     return units.filter((u) => {
@@ -203,9 +65,21 @@ export function UnitsList({ data }: { data: AppDataset }) {
         return false;
       }
       if (dateFilter !== "all" && !isWithinRange(u.createdAt, dateFilter)) return false;
+      if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
+      if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
       return true;
     });
-  }, [units, search, clientFilter, buildingFilter, statusFilter, installerFilter, dateFilter]);
+  }, [
+    units,
+    search,
+    clientFilter,
+    buildingFilter,
+    statusFilter,
+    installerFilter,
+    dateFilter,
+    issueFilter,
+    unitIdsWithIssues,
+  ]);
 
   const sortedFiltered = useMemo(() => {
     if (sortOrder === "none") return filtered;
@@ -231,6 +105,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     installerFilter !== "all",
     dateFilter !== "all",
     sortOrder !== "none",
+    issueFilter !== "all",
   ].filter(Boolean).length;
 
   const allFilteredSelected = filtered.length > 0 && filtered.every((u) => selectedIds.has(u.id));
@@ -297,6 +172,11 @@ export function UnitsList({ data }: { data: AppDataset }) {
     { value: "complete_asc", label: "Complete By (Earliest)" },
     { value: "complete_desc", label: "Complete By (Latest)" },
   ];
+  const issueOptions = [
+    { value: "all", label: "All" },
+    { value: "has_issues", label: "Has issues / escalation" },
+    { value: "no_issues", label: "No issues" },
+  ];
 
   return (
     <div className="flex flex-col pb-32">
@@ -356,11 +236,25 @@ export function UnitsList({ data }: { data: AppDataset }) {
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
           <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
           <FilterDropdown label="Date Added" value={dateFilter} options={dateOptions} onChange={(v) => setDateFilter(v as DateRange)} />
+          <FilterDropdown
+            label="Issues"
+            value={issueFilter}
+            options={issueOptions}
+            onChange={(v) => setIssueFilter(v as typeof issueFilter)}
+          />
           <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
           {activeFilterCount > 0 && (
             <button
               type="button"
-              onClick={() => { setClientFilter("all"); setBuildingFilter("all"); setStatusFilter("all"); setInstallerFilter("all"); setDateFilter("all"); setSortOrder("none"); }}
+              onClick={() => {
+                setClientFilter("all");
+                setBuildingFilter("all");
+                setStatusFilter("all");
+                setInstallerFilter("all");
+                setDateFilter("all");
+                setIssueFilter("all");
+                setSortOrder("none");
+              }}
               className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
             >
               <X size={11} weight="bold" />
@@ -505,7 +399,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
                 className="!bg-white !text-zinc-900 hover:!bg-zinc-100"
               >
                 <Users size={14} />
-                Assign
+                Action
               </Button>
             </div>
           </motion.div>

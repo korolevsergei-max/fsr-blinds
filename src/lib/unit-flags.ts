@@ -3,6 +3,7 @@ import type { Unit } from "./types";
 export type UnitFlag =
   | "past_bracketing_due"
   | "past_install_due"
+  | "past_complete_by"
   | "missing_installer"
   | "missing_bracketing_date"
   | "missing_installation_date"
@@ -30,7 +31,7 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   if (
     unit.bracketingDate &&
     unit.bracketingDate < todayStr &&
-    unit.status === "scheduled_bracketing"
+    (unit.status === "pending_scheduling" || unit.status === "scheduled_bracketing")
   ) {
     flags.push("past_bracketing_due");
   }
@@ -65,6 +66,15 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
     }
   }
 
+  if (
+    unit.completeByDate &&
+    unit.completeByDate < todayStr &&
+    unit.status !== "installed_pending_approval" &&
+    unit.status !== "client_approved"
+  ) {
+    flags.push("past_complete_by");
+  }
+
   return flags;
 }
 
@@ -77,6 +87,7 @@ export function flagUnits(units: Unit[], todayStr: string): FlaggedUnit[] {
 export const FLAG_LABELS: Record<UnitFlag, string> = {
   past_bracketing_due:    "Past Bracketing Date",
   past_install_due:       "Past Install Date",
+  past_complete_by:       "Past Complete-By Date",
   missing_installer:      "No Installer Assigned",
   missing_bracketing_date:"No Bracket Date",
   missing_installation_date: "No Install Date",
@@ -87,6 +98,7 @@ export const FLAG_LABELS: Record<UnitFlag, string> = {
 export const FLAG_CLASSES: Record<UnitFlag, string> = {
   past_bracketing_due:    "bg-orange-100 text-orange-700",
   past_install_due:       "bg-red-100 text-red-700",
+  past_complete_by:       "bg-rose-100 text-rose-700",
   missing_installer:      "bg-zinc-100 text-zinc-600",
   missing_bracketing_date:"bg-zinc-100 text-zinc-600",
   missing_installation_date: "bg-zinc-100 text-zinc-600",

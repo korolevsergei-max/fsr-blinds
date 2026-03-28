@@ -73,6 +73,22 @@ export function getScheduleByBuilding(
   return data.schedule.filter((s) => buildingUnits.has(s.unitId));
 }
 
+export function getUnitIdsWithWindowEscalations(data: AppDataset): Set<string> {
+  const roomToUnit = new Map<string, string>();
+  for (const room of data.rooms) {
+    roomToUnit.set(room.id, room.unitId);
+  }
+
+  const unitIds = new Set<string>();
+  for (const w of data.windows) {
+    if (w.riskFlag === "green") continue;
+    const unitId = roomToUnit.get(w.roomId);
+    if (unitId) unitIds.add(unitId);
+  }
+
+  return unitIds;
+}
+
 export function getInstallerColor(index: number) {
   const colors = [
     { bg: "bg-blue-100", text: "text-blue-700", ring: "ring-blue-300" },

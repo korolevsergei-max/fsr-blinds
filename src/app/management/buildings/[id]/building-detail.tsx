@@ -18,6 +18,7 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { createUnit } from "@/app/actions/management-actions";
 
 export function BuildingDetail({ data }: { data: AppDataset }) {
@@ -104,18 +105,16 @@ export function BuildingDetail({ data }: { data: AppDataset }) {
               placeholder="Unit 1207"
               autoFocus
             />
-            <Input
+            <DateInput
               label="Earliest Bracketing Date"
-              type="date"
               value={earliestBracketing}
-              onChange={(e) => setEarliestBracketing(e.target.value)}
+              onChange={setEarliestBracketing}
               helper="When can bracketing start?"
             />
-            <Input
+            <DateInput
               label="Earliest Installation Date"
-              type="date"
               value={earliestInstallation}
-              onChange={(e) => setEarliestInstallation(e.target.value)}
+              onChange={setEarliestInstallation}
               helper="When can installation start?"
             />
             <div className="flex gap-2">

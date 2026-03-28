@@ -5,8 +5,6 @@ import { motion } from "framer-motion";
 import {
   CaretLeft,
   CaretRight,
-  Wrench,
-  Hammer,
   CheckCircle,
   X,
   FunnelSimple,
@@ -16,6 +14,8 @@ import { getInstallerColor, getInitials } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { DATE_RANGE_LABELS, isWithinRange, type DateRange } from "@/lib/date-range";
+import { computeUnitFlags } from "@/lib/unit-flags";
+import { ScheduleEntryCard } from "@/components/schedule/schedule-entry-card";
 
 type ViewMode = "week" | "month";
 
@@ -128,34 +128,18 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
     label,
   }));
 
-  const renderTaskChip = (entry: (typeof schedule)[0]) => {
+  const resolveEntryMeta = (entry: (typeof schedule)[0]) => {
     const unit = units.find((u) => u.id === entry.unitId);
     const instId = unit?.assignedInstallerId;
     const instColor = instId ? installerColorMap.get(instId) : null;
     const inst = instId ? installers.find((i) => i.id === instId) : null;
-
-    return (
-      <div
-        key={entry.id}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--radius-sm)] border border-border bg-card text-[11px]"
-      >
-        {entry.taskType === "bracketing" ? (
-          <Wrench size={10} className="text-sky-500 flex-shrink-0" />
-        ) : (
-          <Hammer size={10} className="text-emerald-500 flex-shrink-0" />
-        )}
-        <span className="font-medium text-zinc-900 truncate">
-          {entry.unitNumber}
-        </span>
-        {inst && instColor && (
-          <span
-            className={`w-5 h-5 rounded-full ${instColor.bg} ${instColor.text} flex items-center justify-center text-[8px] font-bold flex-shrink-0`}
-          >
-            {getInitials(inst.name)}
-          </span>
-        )}
-      </div>
-    );
+    const flags = unit ? computeUnitFlags(unit, todayStr) : [];
+    const isOverdue = flags.includes("past_install_due") || flags.includes("past_bracketing_due");
+    const installer =
+      inst && instColor
+        ? { name: inst.name, bg: instColor.bg, text: instColor.text, initials: getInitials(inst.name) }
+        : null;
+    return { isOverdue, installer };
   };
 
   return (
@@ -282,8 +266,20 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
                             <span className="text-xs text-zinc-300">No tasks</span>
                           </div>
                         ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {dayEntries.map(renderTaskChip)}
+                          <div className="flex flex-col gap-1.5">
+                            {dayEntries.map((e) => {
+                              const { isOverdue, installer } = resolveEntryMeta(e);
+                              return (
+                                <ScheduleEntryCard
+                                  key={e.id}
+                                  entry={e}
+                                  href={`/management/units/${e.unitId}`}
+                                  isOverdue={isOverdue}
+                                  installer={installer}
+                                  variant="week"
+                                />
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -328,9 +324,6 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
                 const isToday = key === todayStr;
                 const dayEntries = entriesByDate.get(key) || [];
 
-                const bracketCount = dayEntries.filter((e) => e.taskType === "bracketing").length;
-                const installCount = dayEntries.filter((e) => e.taskType === "installation").length;
-
                 return (
                   <div
                     key={key}
@@ -349,34 +342,21 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
                     </div>
                     {dayEntries.length > 0 && (
                       <div className="flex flex-col gap-0.5">
-                        {bracketCount > 0 && (
-                          <div className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-sky-50 text-[8px] font-semibold text-sky-600">
-                            <Wrench size={8} />
-                            {bracketCount}
-                          </div>
-                        )}
-                        {installCount > 0 && (
-                          <div className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-emerald-50 text-[8px] font-semibold text-emerald-600">
-                            <Hammer size={8} />
-                            {installCount}
-                          </div>
-                        )}
-                        {dayEntries.length <= 2 && dayEntries.map((e) => {
-                          const u = units.find((u) => u.id === e.unitId);
-                          const instId = u?.assignedInstallerId;
-                          const instIdx = installers.findIndex((i) => i.id === instId);
-                          const color = instIdx >= 0 ? getInstallerColor(instIdx) : null;
-                          const inst = instIdx >= 0 ? installers[instIdx] : null;
+                        {dayEntries.slice(0, 2).map((e) => {
+                          const { isOverdue } = resolveEntryMeta(e);
                           return (
-                            <div key={e.id} className="flex items-center gap-0.5">
-                              {inst && color && (
-                                <span className={`w-3 h-3 rounded-full ${color.bg} ${color.text} flex items-center justify-center text-[6px] font-bold`}>
-                                  {getInitials(inst.name)}
-                                </span>
-                              )}
-                            </div>
+                            <ScheduleEntryCard
+                              key={e.id}
+                              entry={e}
+                              href={`/management/units/${e.unitId}`}
+                              isOverdue={isOverdue}
+                              variant="month"
+                            />
                           );
                         })}
+                        {dayEntries.length > 2 && (
+                          <span className="text-[8px] text-muted">+{dayEntries.length - 2}</span>
+                        )}
                       </div>
                     )}
                   </div>

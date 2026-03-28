@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -16,23 +16,25 @@ export function AssignUnit({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const unit = data.units.find((u) => u.id === id);
-  const { installers } = data;
+  const assignees = useMemo(
+    () => data.installers.filter((installer) => Boolean(installer.id)),
+    [data.installers]
+  );
 
   const [selectedInstaller, setSelectedInstaller] = useState(
-    unit?.assignedInstallerId || ""
-  );
-  const [bracketingDate, setBracketingDate] = useState(
-    unit?.bracketingDate || ""
-  );
-  const [installationDate, setInstallationDate] = useState(
-    unit?.installationDate || ""
-  );
-  const [completeByDate, setCompleteByDate] = useState(
-    unit?.completeByDate || ""
+    unit?.assignedInstallerId && assignees.some((installer) => installer.id === unit.assignedInstallerId)
+      ? unit.assignedInstallerId
+      : ""
   );
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (selectedInstaller && !assignees.some((installer) => installer.id === selectedInstaller)) {
+      setSelectedInstaller("");
+    }
+  }, [assignees, selectedInstaller]);
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
@@ -44,9 +46,9 @@ export function AssignUnit({ data }: { data: AppDataset }) {
       const result = await updateUnitAssignment(
         unit.id,
         selectedInstaller,
-        bracketingDate,
-        installationDate,
-        completeByDate
+        unit.bracketingDate || "",
+        unit.installationDate || "",
+        unit.completeByDate ?? null
       );
       if (!result.ok) {
         setSaveError(result.error);
@@ -61,7 +63,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
-        title="Assign & Schedule"
+        title="Assign installer"
         subtitle={`${unit.unitNumber} \u2022 ${unit.buildingName}`}
         backHref={`/management/units/${unit.id}`}
       />
@@ -80,20 +82,25 @@ export function AssignUnit({ data }: { data: AppDataset }) {
           className="flex items-center gap-3"
         >
           <StatusChip status={unit.status} />
-          <SectionLabel>Assignment & Dates</SectionLabel>
+          <SectionLabel>Assignee</SectionLabel>
         </motion.div>
 
-        {/* Select installer */}
+        {/* Select assignee */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <SectionLabel as="h2">Assign installer</SectionLabel>
+          <SectionLabel as="h2">Choose installer</SectionLabel>
           <div className="flex flex-col gap-2">
-            {installers.map((inst) => (
+            {assignees.length === 0 && (
+              <p className="py-4 text-center text-[13px] text-muted">
+                No installers are available yet. Add one before assigning this unit.
+              </p>
+            )}
+            {assignees.map((inst) => (
               <button
-                key={inst.id}
+                key={`installer-${inst.id}`}
                 type="button"
                 onClick={() => setSelectedInstaller(inst.id)}
                 className={`flex items-center gap-3 px-4 py-3.5 rounded-xl border text-left transition-all active:scale-[0.98] ${
@@ -102,16 +109,26 @@ export function AssignUnit({ data }: { data: AppDataset }) {
                     : "border-border bg-white hover:bg-zinc-50"
                 }`}
               >
-                <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0">
-                  <img
-                    src={inst.avatarUrl}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[12px] font-semibold text-zinc-700">
+                  {inst.avatarUrl ? (
+                    <img
+                      src={inst.avatarUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    inst.name
+                      .split(" ")
+                      .filter(Boolean)
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-900">{inst.name}</p>
-                  <p className="text-xs text-muted">{inst.phone}</p>
+                  <p className="text-xs text-muted">Installer · {inst.phone}</p>
                 </div>
                 {selectedInstaller === inst.id && (
                   <CheckCircle
@@ -125,40 +142,19 @@ export function AssignUnit({ data }: { data: AppDataset }) {
           </div>
         </motion.div>
 
-        {/* Dates */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-4"
-        >
-          <Input
-            label="Bracketing Date"
-            type="date"
-            value={bracketingDate}
-            onChange={(e) => setBracketingDate(e.target.value)}
-          />
-          <Input
-            label="Installation Target Date"
-            type="date"
-            value={installationDate}
-            onChange={(e) => setInstallationDate(e.target.value)}
-            helper="Optional, can be set later"
-          />
-          <Input
-            label="Complete By Date"
-            type="date"
-            value={completeByDate}
-            onChange={(e) => setCompleteByDate(e.target.value)}
-            helper="Optional deadline for completing unit work"
-          />
-        </motion.div>
+        <p className="text-[13px] text-muted">
+          To edit bracketing, installation, or complete-by dates, use{" "}
+          <Link href={`/management/units/${unit.id}/dates`} className="font-semibold text-accent">
+            Key dates
+          </Link>
+          .
+        </p>
 
         {/* Save */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="pt-2 pb-24"
         >
           {saved ? (
@@ -168,7 +164,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
               className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-medium"
             >
               <CheckCircle size={20} weight="fill" />
-              Assignment Saved
+              Saved
             </motion.div>
           ) : (
             <Button
@@ -177,7 +173,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
               disabled={!selectedInstaller || pending}
               onClick={handleSave}
             >
-              {pending ? "Saving…" : "Save Assignment"}
+              {pending ? "Saving…" : "Save assignee"}
             </Button>
           )}
         </motion.div>

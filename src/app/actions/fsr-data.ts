@@ -137,6 +137,19 @@ async function refreshUnitAggregates(
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+async function resolveInstallerName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  installerId: string
+): Promise<string | null> {
+  const { data: installer } = await supabase
+    .from("installers")
+    .select("name")
+    .eq("id", installerId)
+    .single();
+  if (installer?.name) return installer.name;
+  return null;
+}
+
 async function logUnitActivity(
   supabase: Awaited<ReturnType<typeof createClient>>,
   unitId: string,
@@ -217,17 +230,15 @@ export async function bulkAssignUnits(
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
 
-    let instName = "Installer";
+    let instName = "Assignee";
     const patch: Record<string, unknown> = {};
 
     if (installerId) {
-      const { data: inst, error: ie } = await supabase
-        .from("installers")
-        .select("name")
-        .eq("id", installerId)
-        .single();
-      if (ie || !inst) return { ok: false, error: "Installer not found" };
-      instName = inst.name;
+      const installerName = await resolveInstallerName(supabase, installerId);
+      if (!installerName) {
+        return { ok: false, error: "Selected installer no longer exists. Re-open the sheet and choose a valid installer." };
+      }
+      instName = installerName;
       patch.assigned_installer_id = installerId;
       patch.assigned_installer_name = instName;
     }
@@ -328,6 +339,7 @@ export async function bulkAssignUnits(
           ...(installerId ? { installer: instName } : {}),
           ...(bracketingDate ? { bracketingDate } : {}),
           ...(installationDate ? { installationDate } : {}),
+          ...(completeByDate ? { completeByDate } : {}),
           unitCount: unitIds.length,
         })
       )
@@ -359,16 +371,12 @@ export async function updateUnitAssignment(
     };
 
     if (installerId) {
-      const { data: inst, error: ie } = await supabase
-        .from("installers")
-        .select("name")
-        .eq("id", installerId)
-        .single();
-      if (ie || !inst) {
-        return { ok: false, error: "Installer not found" };
+      const installerName = await resolveInstallerName(supabase, installerId);
+      if (!installerName) {
+        return { ok: false, error: "Selected installer no longer exists. Choose a valid installer and try again." };
       }
       patch.assigned_installer_id = installerId;
-      patch.assigned_installer_name = inst.name;
+      patch.assigned_installer_name = installerName;
     }
 
     if (bracketingDate) {
@@ -461,6 +469,7 @@ export async function updateUnitAssignment(
       ...(installerId && patch.assigned_installer_name ? { installer: patch.assigned_installer_name as string } : {}),
       ...(bracketingDate ? { bracketingDate } : {}),
       ...(installationDate ? { installationDate } : {}),
+      ...(completeByDate ? { completeByDate } : {}),
     });
 
     revalidateApp();

@@ -3,20 +3,7 @@
 import Image from "next/image";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { UNIT_PHOTO_STAGE_LABELS } from "@/lib/types";
-
-type ComparisonImageSet = {
-  before: UnitStageMediaItem | null;
-  bracketed: UnitStageMediaItem | null;
-  installed: UnitStageMediaItem | null;
-};
-
-function isPostBracketing(item: UnitStageMediaItem): boolean {
-  return /post-bracketing/i.test(item.label ?? "");
-}
-
-function getWindowDisplayName(item: UnitStageMediaItem): string {
-  return item.windowLabel ?? item.label ?? "Window";
-}
+import { buildWindowStageDisplaySets } from "@/lib/unit-media";
 
 export function UnitStageSummaryGrid({
   items,
@@ -25,70 +12,19 @@ export function UnitStageSummaryGrid({
   items: UnitStageMediaItem[];
   showStageCounters?: boolean;
 }) {
-  const bracketedCount = items.filter((item) => item.stage === "bracketed_measured").length;
-  const installedCount = items.filter(
-    (item) => item.stage === "installed_pending_approval"
-  ).length;
-
-  const byRoom = new Map<
-    string,
-    Array<{
-      windowId: string;
-      windowName: string;
-      images: ComparisonImageSet;
-    }>
-  >();
-
-  const byWindow = new Map<
-    string,
-    {
-      roomName: string;
-      windowName: string;
-      images: ComparisonImageSet;
-    }
-  >();
-
-  for (const item of items) {
-    if (!item.windowId) continue;
-    const roomName = item.roomName ?? "Unassigned Room";
-    const windowName = getWindowDisplayName(item);
-    const current = byWindow.get(item.windowId) ?? {
-      roomName,
-      windowName,
-      images: { before: null, bracketed: null, installed: null },
-    };
-
-    if (item.stage === "scheduled_bracketing") {
-      if (!current.images.before) current.images.before = item;
-    } else if (item.stage === "bracketed_measured") {
-      if (isPostBracketing(item)) {
-        if (!current.images.bracketed) current.images.bracketed = item;
-      } else if (!current.images.before) {
-        current.images.before = item;
-      }
-    } else if (item.stage === "installed_pending_approval") {
-      if (!current.images.installed) current.images.installed = item;
-    }
-
-    byWindow.set(item.windowId, current);
-  }
-
-  for (const [windowId, entry] of byWindow) {
+  const groupedSets = buildWindowStageDisplaySets(items);
+  const bracketedCount = groupedSets.filter((item) => Boolean(item.bracketed)).length;
+  const installedCount = groupedSets.filter((item) => Boolean(item.installed)).length;
+  const byRoom = new Map<string, typeof groupedSets>();
+  for (const entry of groupedSets) {
     const roomList = byRoom.get(entry.roomName) ?? [];
-    roomList.push({
-      windowId,
-      windowName: entry.windowName,
-      images: entry.images,
-    });
+    roomList.push(entry);
     byRoom.set(entry.roomName, roomList);
   }
-
-  const windowComparisons = Array.from(byRoom.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([roomName, windows]) => ({
-      roomName,
-      windows: windows.sort((a, b) => a.windowName.localeCompare(b.windowName)),
-    }));
+  const windowComparisons = Array.from(byRoom.entries()).map(([roomName, windows]) => ({
+    roomName,
+    windows,
+  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -148,16 +84,16 @@ export function UnitStageSummaryGrid({
                       </p>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         {([
-                          { key: "before", title: "Before", item: windowGroup.images.before },
+                          { key: "before", title: "Before", item: windowGroup.before },
                           {
                             key: "bracketed",
                             title: "Bracketed",
-                            item: windowGroup.images.bracketed,
+                            item: windowGroup.bracketed,
                           },
                           {
                             key: "installed",
                             title: "Installed",
-                            item: windowGroup.images.installed,
+                            item: windowGroup.installed,
                           },
                         ] as const).map((slot) => (
                           <div key={`${windowGroup.windowId}-${slot.key}`}>
