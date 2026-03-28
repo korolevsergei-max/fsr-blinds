@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwner, requireOwnerOrScheduler } from "@/lib/auth";
+import { requireOwnerOrScheduler } from "@/lib/auth";
 import {
   UNIT_PHOTO_STAGES,
   UNIT_STATUS_LABELS,
@@ -363,6 +363,25 @@ export async function updateUnitAssignment(
   try {
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
+    let unitMeta:
+      | {
+          unit_number: string;
+          building_name: string;
+          client_name: string;
+        }
+      | null
+      | undefined;
+
+    const ensureUnitMeta = async () => {
+      if (unitMeta !== undefined) return unitMeta;
+      const { data } = await supabase
+        .from("units")
+        .select("unit_number, building_name, client_name")
+        .eq("id", unitId)
+        .single();
+      unitMeta = data ?? null;
+      return unitMeta;
+    };
 
     const patch: Record<string, unknown> = {
       bracketing_date: bracketingDate || null,
@@ -408,7 +427,28 @@ export async function updateUnitAssignment(
             owner_name: owner.displayName,
           })
           .eq("id", existingBracketing.id);
+      } else {
+        const nextUnitMeta = await ensureUnitMeta();
+        await supabase.from("schedule_entries").insert({
+          id: `sch-${crypto.randomUUID().slice(0, 8)}`,
+          unit_id: unitId,
+          unit_number: nextUnitMeta?.unit_number ?? "",
+          building_name: nextUnitMeta?.building_name ?? "",
+          client_name: nextUnitMeta?.client_name ?? "",
+          owner_user_id: owner.id,
+          owner_name: owner.displayName,
+          task_type: "bracketing",
+          task_date: bracketingDate,
+          status: "scheduled_bracketing",
+          risk_flag: "green",
+        });
       }
+    } else {
+      await supabase
+        .from("schedule_entries")
+        .delete()
+        .eq("unit_id", unitId)
+        .eq("task_type", "bracketing");
     }
     if (installationDate) {
       const { data: existingInstallation } = await supabase
@@ -428,18 +468,14 @@ export async function updateUnitAssignment(
           })
           .eq("id", existingInstallation.id);
       } else {
-        const { data: unitMeta } = await supabase
-          .from("units")
-          .select("unit_number, building_name, client_name")
-          .eq("id", unitId)
-          .single();
+        const nextUnitMeta = await ensureUnitMeta();
 
         await supabase.from("schedule_entries").insert({
           id: `sch-${crypto.randomUUID().slice(0, 8)}`,
           unit_id: unitId,
-          unit_number: unitMeta?.unit_number ?? "",
-          building_name: unitMeta?.building_name ?? "",
-          client_name: unitMeta?.client_name ?? "",
+          unit_number: nextUnitMeta?.unit_number ?? "",
+          building_name: nextUnitMeta?.building_name ?? "",
+          client_name: nextUnitMeta?.client_name ?? "",
           owner_user_id: owner.id,
           owner_name: owner.displayName,
           task_type: "installation",
@@ -448,6 +484,12 @@ export async function updateUnitAssignment(
           risk_flag: "green",
         });
       }
+    } else {
+      await supabase
+        .from("schedule_entries")
+        .delete()
+        .eq("unit_id", unitId)
+        .eq("task_type", "installation");
     }
 
     if (bracketingDate) {
@@ -568,16 +610,18 @@ export async function updateUnitStatus(
             "Add at least one Before Bracketing photo (Scheduled for Bracketing stage) before marking this unit as Bracketed & Measured.",
         };
       }
-      const afterCount = await countAfterBracketingMedia(supabase, unitId);
-      if (afterCount === 0) {
-        return {
-          ok: false,
-          error: `Add at least one After Bracketing photo for ${UNIT_STATUS_LABELS[status]} before updating this status.`,
-        };
+      if (callerRole !== "installer") {
+        const afterCount = await countAfterBracketingMedia(supabase, unitId);
+        if (afterCount === 0) {
+          return {
+            ok: false,
+            error: `Add at least one After Bracketing photo for ${UNIT_STATUS_LABELS[status]} before updating this status.`,
+          };
+        }
       }
     }
 
-    if (resolvedStatus === "installed_pending_approval") {
+    if (resolvedStatus === "installed_pending_approval" && callerRole !== "installer") {
       const stagePhotoCount = await countStageMedia(supabase, unitId, "installed_pending_approval");
       if (stagePhotoCount === 0) {
         return {

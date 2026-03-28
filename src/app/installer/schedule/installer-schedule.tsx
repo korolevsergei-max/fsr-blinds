@@ -27,7 +27,10 @@ function getWeekDays(baseDate: Date): Date[] {
 }
 
 function formatDateKey(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -41,6 +44,7 @@ export function InstallerSchedule({
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const today = new Date();
+  const todayKey = formatDateKey(today);
   const baseDate = new Date(today);
   baseDate.setDate(today.getDate() + weekOffset * 7);
 
@@ -84,7 +88,7 @@ export function InstallerSchedule({
         <div className="flex flex-col gap-1">
           {weekDays.map((day, dayIdx) => {
             const key = formatDateKey(day);
-            const isToday = key === today.toISOString().split("T")[0];
+            const isToday = key === todayKey;
             const dayEntries = entriesByDate.get(key) || [];
 
             return (

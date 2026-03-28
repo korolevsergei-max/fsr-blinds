@@ -122,7 +122,8 @@ export async function createUnit(
   clientId: string,
   unitNumber: string,
   earliestBracketingDate: string,
-  earliestInstallationDate: string
+  earliestInstallationDate: string,
+  completeByDate: string | null = null
 ): Promise<ActionResult & { id?: string }> {
   try {
     const owner = await requireOwner();
@@ -148,8 +149,10 @@ export async function createUnit(
       building_name: building?.name ?? "",
       unit_number: unitNumber.trim(),
       status: "pending_scheduling",
+      risk_flag: "green",
       earliest_bracketing_date: earliestBracketingDate || null,
       earliest_installation_date: earliestInstallationDate || null,
+      complete_by_date: completeByDate || null,
       room_count: 0,
       window_count: 0,
       photos_uploaded: 0,

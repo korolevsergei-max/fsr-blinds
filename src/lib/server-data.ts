@@ -256,6 +256,60 @@ function mapSchedule(r: ScheduleRow): ScheduleEntry {
   };
 }
 
+function normalizeScheduleEntries(units: Unit[], schedule: ScheduleEntry[]): ScheduleEntry[] {
+  const existingByTask = new Map<string, ScheduleEntry>();
+
+  for (const entry of schedule) {
+    const key = `${entry.unitId}:${entry.taskType}`;
+    if (!existingByTask.has(key)) {
+      existingByTask.set(key, entry);
+    }
+  }
+
+  const normalized: ScheduleEntry[] = [];
+
+  for (const unit of units) {
+    if (unit.bracketingDate) {
+      const existing = existingByTask.get(`${unit.id}:bracketing`);
+      normalized.push({
+        id: existing?.id ?? `derived-bracketing-${unit.id}`,
+        unitId: unit.id,
+        unitNumber: unit.unitNumber,
+        buildingName: unit.buildingName,
+        clientName: unit.clientName,
+        ownerUserId: existing?.ownerUserId ?? null,
+        ownerName: existing?.ownerName ?? null,
+        taskType: "bracketing",
+        date: unit.bracketingDate,
+        status: existing?.status ?? "scheduled_bracketing",
+      });
+    }
+
+    if (unit.installationDate) {
+      const existing = existingByTask.get(`${unit.id}:installation`);
+      normalized.push({
+        id: existing?.id ?? `derived-installation-${unit.id}`,
+        unitId: unit.id,
+        unitNumber: unit.unitNumber,
+        buildingName: unit.buildingName,
+        clientName: unit.clientName,
+        ownerUserId: existing?.ownerUserId ?? null,
+        ownerName: existing?.ownerName ?? null,
+        taskType: "installation",
+        date: unit.installationDate,
+        status: existing?.status ?? "install_date_scheduled",
+      });
+    }
+  }
+
+  return normalized.sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true }) ||
+      a.taskType.localeCompare(b.taskType)
+  );
+}
+
 function mapManufacturer(r: ManufacturerRow): Manufacturer {
   return {
     id: r.id,
@@ -326,14 +380,17 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     );
   }
 
+  const units = (unitsRes.data as UnitRow[]).map(mapUnit);
+  const schedule = normalizeScheduleEntries(units, (scheduleRes.data as ScheduleRow[]).map(mapSchedule));
+
   return {
     clients: (clientsRes.data as ClientRow[]).map(mapClient),
     buildings: (buildingsRes.data as BuildingRow[]).map(mapBuilding),
-    units: (unitsRes.data as UnitRow[]).map(mapUnit),
+    units,
     rooms: (roomsRes.data as RoomRow[]).map(mapRoom),
     windows: (windowsRes.data as WindowRow[]).map(mapWindow),
     installers: (installersRes.data as InstallerRow[]).map(mapInstaller),
-    schedule: (scheduleRes.data as ScheduleRow[]).map(mapSchedule),
+    schedule,
     manufacturers: manufacturersRes.error
       ? []
       : (manufacturersRes.data as ManufacturerRow[])?.map(mapManufacturer) ?? [],
