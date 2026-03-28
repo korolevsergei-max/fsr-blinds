@@ -19,19 +19,20 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
-import { DATE_RANGE_LABELS, isWithinRange, type DateRange } from "@/lib/date-range";
+import { isCreatedOnLocalDay, type AddedDateFilter } from "@/lib/created-date";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 
 export function UnitsList({ data }: { data: AppDataset }) {
-  const { units, clients, buildings, installers, schedulers } = data;
+  const { units, clients, buildings, installers } = data;
 
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState<DateRange>("all");
+  const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
   const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
 
@@ -64,7 +65,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
       } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
         return false;
       }
-      if (dateFilter !== "all" && !isWithinRange(u.createdAt, dateFilter)) return false;
+      if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
       if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
       if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
       return true;
@@ -76,7 +77,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     buildingFilter,
     statusFilter,
     installerFilter,
-    dateFilter,
+    dateAddedFilter,
     issueFilter,
     unitIdsWithIssues,
   ]);
@@ -92,6 +93,13 @@ export function UnitsList({ data }: { data: AppDataset }) {
         const tb = new Date(b.completeByDate).getTime();
         return sortOrder === "complete_asc" ? ta - tb : tb - ta;
       }
+      if (sortOrder === "unit_asc" || sortOrder === "unit_desc") {
+        const cmp = a.unitNumber.localeCompare(b.unitNumber, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        return sortOrder === "unit_asc" ? cmp : -cmp;
+      }
       const ta = new Date(a.createdAt ?? 0).getTime();
       const tb = new Date(b.createdAt ?? 0).getTime();
       return sortOrder === "newest" ? tb - ta : ta - tb;
@@ -103,7 +111,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     buildingFilter !== "all",
     statusFilter !== "all",
     installerFilter !== "all",
-    dateFilter !== "all",
+    dateAddedFilter !== "all",
     sortOrder !== "none",
     issueFilter !== "all",
   ].filter(Boolean).length;
@@ -113,7 +121,11 @@ export function UnitsList({ data }: { data: AppDataset }) {
   function toggleUnit(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }
@@ -160,17 +172,14 @@ export function UnitsList({ data }: { data: AppDataset }) {
     ...installers.map((i) => ({ value: i.id, label: i.name })),
   ];
 
-  const dateOptions = Object.entries(DATE_RANGE_LABELS).map(([v, label]) => ({
-    value: v,
-    label,
-  }));
-
   const sortOptions = [
     { value: "none", label: "Default" },
     { value: "newest", label: "Added (Newest)" },
     { value: "oldest", label: "Added (Oldest)" },
     { value: "complete_asc", label: "Complete By (Earliest)" },
     { value: "complete_desc", label: "Complete By (Latest)" },
+    { value: "unit_asc", label: "Unit Number (Ascending)" },
+    { value: "unit_desc", label: "Unit Number (Descending)" },
   ];
   const issueOptions = [
     { value: "all", label: "All" },
@@ -235,7 +244,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
           <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
           <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-          <FilterDropdown label="Date Added" value={dateFilter} options={dateOptions} onChange={(v) => setDateFilter(v as DateRange)} />
+          <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
           <FilterDropdown
             label="Issues"
             value={issueFilter}
@@ -251,7 +260,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
                 setBuildingFilter("all");
                 setStatusFilter("all");
                 setInstallerFilter("all");
-                setDateFilter("all");
+                setDateAddedFilter("all");
                 setIssueFilter("all");
                 setSortOrder("none");
               }}

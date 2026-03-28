@@ -18,8 +18,11 @@ import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { Button } from "@/components/ui/button";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
+import { isCreatedOnLocalDay, type AddedDateFilter } from "@/lib/created-date";
+import { UNIT_STATUS_LABELS } from "@/lib/types";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 
 function FlagBadge({ flag }: { flag: UnitFlag }) {
@@ -31,13 +34,16 @@ function FlagBadge({ flag }: { flag: UnitFlag }) {
 }
 
 export function SchedulerUnitsList({ data }: { data: AppDataset }) {
-  const { units, clients, buildings, installers, schedulers } = data;
+  const { units, clients, buildings, installers } = data;
   const today = new Date().toISOString().split("T")[0];
 
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
+  const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
+  const [sortOrder, setSortOrder] = useState<string>("none");
   const [flagFilter, setFlagFilter] = useState("all");
   const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
   const [selectMode, setSelectMode] = useState(false);
@@ -53,20 +59,33 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
 
   const filteredUnits = useMemo(() => {
     return units
-      .map((u) => ({ ...u, flags: computeUnitFlags(u, today) }))
       .filter((u) => {
-        if (search && !u.unitNumber.toLowerCase().includes(search.toLowerCase()) &&
-            !u.buildingName.toLowerCase().includes(search.toLowerCase())) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          if (
+            !u.unitNumber.toLowerCase().includes(q) &&
+            !u.buildingName.toLowerCase().includes(q) &&
+            !u.clientName.toLowerCase().includes(q)
+          ) {
+            return false;
+          }
+        }
         if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
         if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+        if (statusFilter !== "all" && u.status !== statusFilter) return false;
         if (installerFilter === "__unassigned__") {
           if (u.assignedInstallerId) return false;
         } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
           return false;
         }
-        if (flagFilter !== "all" && !u.flags.includes(flagFilter as UnitFlag)) return false;
+        if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
         if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
         if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
+        return true;
+      })
+      .map((u) => ({ ...u, flags: computeUnitFlags(u, today) }))
+      .filter((u) => {
+        if (flagFilter !== "all" && !u.flags.includes(flagFilter as UnitFlag)) return false;
         return true;
       });
   }, [
@@ -75,11 +94,37 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     search,
     clientFilter,
     buildingFilter,
+    statusFilter,
     installerFilter,
+    dateAddedFilter,
     flagFilter,
     issueFilter,
     unitIdsWithIssues,
   ]);
+
+  const sortedFilteredUnits = useMemo(() => {
+    if (sortOrder === "none") return filteredUnits;
+    return [...filteredUnits].sort((a, b) => {
+      if (sortOrder === "complete_asc" || sortOrder === "complete_desc") {
+        if (!a.completeByDate && !b.completeByDate) return 0;
+        if (!a.completeByDate) return 1;
+        if (!b.completeByDate) return -1;
+        const ta = new Date(a.completeByDate).getTime();
+        const tb = new Date(b.completeByDate).getTime();
+        return sortOrder === "complete_asc" ? ta - tb : tb - ta;
+      }
+      if (sortOrder === "unit_asc" || sortOrder === "unit_desc") {
+        const cmp = a.unitNumber.localeCompare(b.unitNumber, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        return sortOrder === "unit_asc" ? cmp : -cmp;
+      }
+      const ta = new Date(a.createdAt ?? 0).getTime();
+      const tb = new Date(b.createdAt ?? 0).getTime();
+      return sortOrder === "newest" ? tb - ta : ta - tb;
+    });
+  }, [filteredUnits, sortOrder]);
 
   const clientOptions = [
     { value: "all", label: "All clients" },
@@ -108,21 +153,43 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     { value: "no_issues", label: "No issues" },
   ];
 
+  const statusOptions = [
+    { value: "all", label: "All statuses" },
+    ...Object.entries(UNIT_STATUS_LABELS).map(([v, label]) => ({ value: v, label })),
+  ];
+
+  const sortOptions = [
+    { value: "none", label: "Default" },
+    { value: "newest", label: "Added (Newest)" },
+    { value: "oldest", label: "Added (Oldest)" },
+    { value: "complete_asc", label: "Complete By (Earliest)" },
+    { value: "complete_desc", label: "Complete By (Latest)" },
+    { value: "unit_asc", label: "Unit Number (Ascending)" },
+    { value: "unit_desc", label: "Unit Number (Descending)" },
+  ];
+
   const activeFilterCount = [
     clientFilter !== "all",
     buildingFilter !== "all",
+    statusFilter !== "all",
     installerFilter !== "all",
+    dateFilter !== "all",
+    sortOrder !== "none",
     flagFilter !== "all",
     issueFilter !== "all",
   ].filter(Boolean).length;
 
   const allFilteredSelected =
-    filteredUnits.length > 0 && filteredUnits.every((unit) => selectedIds.has(unit.id));
+    sortedFilteredUnits.length > 0 && sortedFilteredUnits.every((unit) => selectedIds.has(unit.id));
 
   function toggleUnit(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }
@@ -131,7 +198,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     if (allFilteredSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        filteredUnits.forEach((unit) => next.delete(unit.id));
+        sortedFilteredUnits.forEach((unit) => next.delete(unit.id));
         return next;
       });
       return;
@@ -139,7 +206,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
 
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      filteredUnits.forEach((unit) => next.add(unit.id));
+      sortedFilteredUnits.forEach((unit) => next.add(unit.id));
       return next;
     });
   }
@@ -153,7 +220,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     <div className="flex flex-col pb-32">
       <PageHeader
         title="Units"
-        subtitle={`${filteredUnits.length} of ${units.length} units`}
+        subtitle={`${sortedFilteredUnits.length} of ${units.length} units`}
         actions={
           selectMode ? (
             <button
@@ -183,7 +250,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
           <MagnifyingGlass size={15} className="text-zinc-400 flex-shrink-0" />
           <input
             type="search"
-            placeholder="Search by unit or building…"
+            placeholder="Search units, buildings, clients…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted"
@@ -213,23 +280,29 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
           onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); }}
         />
         <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
+        <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
         <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-        <FilterDropdown label="Flag" value={flagFilter} options={flagOptions} onChange={setFlagFilter} />
+        <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
         <FilterDropdown
           label="Issues"
           value={issueFilter}
           options={issueOptions}
           onChange={(v) => setIssueFilter(v as typeof issueFilter)}
         />
+        <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
+        <FilterDropdown label="Flag" value={flagFilter} options={flagOptions} onChange={setFlagFilter} />
         {activeFilterCount > 0 && (
           <button
             type="button"
             onClick={() => {
               setClientFilter("all");
               setBuildingFilter("all");
+              setStatusFilter("all");
               setInstallerFilter("all");
-              setFlagFilter("all");
+              setDateAddedFilter("all");
               setIssueFilter("all");
+              setSortOrder("none");
+              setFlagFilter("all");
             }}
             className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
           >
@@ -256,7 +329,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
               ) : (
                 <Square size={16} className="text-zinc-400" />
               )}
-              {allFilteredSelected ? "Deselect all" : `Select all ${filteredUnits.length}`}
+              {allFilteredSelected ? "Deselect all" : `Select all ${sortedFilteredUnits.length}`}
             </button>
           </motion.div>
         )}
@@ -264,12 +337,12 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
 
       {/* List */}
       <div className="px-4 flex flex-col gap-2 pb-24">
-        {filteredUnits.length === 0 && (
+        {sortedFilteredUnits.length === 0 && (
           <div className="text-center py-12 text-[13px] text-tertiary">
             No units match your filters.
           </div>
         )}
-        {filteredUnits.map((unit, index) => {
+        {sortedFilteredUnits.map((unit, index) => {
           const isSelected = selectedIds.has(unit.id);
 
           return (
