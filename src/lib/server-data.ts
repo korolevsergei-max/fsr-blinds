@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppDataset } from "@/lib/app-dataset";
 import type {
   Building,
@@ -399,6 +400,115 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       : (schedulersRes.data as SchedulerRow[])?.map(mapScheduler) ?? [],
   };
 });
+
+function emptyDataset(): AppDataset {
+  return {
+    clients: [],
+    buildings: [],
+    units: [],
+    rooms: [],
+    windows: [],
+    installers: [],
+    schedule: [],
+    manufacturers: [],
+    schedulers: [],
+  };
+}
+
+/** Loads a map of schedulerId → allowed buildingIds (for the owner Accounts UI). */
+export async function loadAllSchedulerBuildingAccess(): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("scheduler_building_access")
+    .select("scheduler_id, building_id");
+  if (error) return {};
+
+  const map: Record<string, string[]> = {};
+  for (const row of data ?? []) {
+    if (!map[row.scheduler_id]) map[row.scheduler_id] = [];
+    map[row.scheduler_id].push(row.building_id);
+  }
+  return map;
+}
+
+/**
+ * Loads a dataset scoped to the buildings the current scheduler is allowed to see.
+ * Returns an empty dataset if the scheduler has no building assignments.
+ */
+export async function loadSchedulerDataset(): Promise<AppDataset> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "scheduler") {
+    return emptyDataset();
+  }
+
+  const schedulerId = await getLinkedSchedulerId(user.id);
+  if (!schedulerId) return emptyDataset();
+
+  const supabase = await createClient();
+
+  const { data: accessRows } = await supabase
+    .from("scheduler_building_access")
+    .select("building_id")
+    .eq("scheduler_id", schedulerId);
+
+  const allowedBuildingIds = (accessRows ?? []).map(
+    (r: { building_id: string }) => r.building_id
+  );
+
+  if (allowedBuildingIds.length === 0) return emptyDataset();
+
+  const [buildingRows, unitRows, installerRows] = await Promise.all([
+    supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name"),
+    supabase.from("units").select("*").in("building_id", allowedBuildingIds).order("unit_number"),
+    supabase.from("installers").select("*").order("name"),
+  ]);
+
+  const buildings = ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding);
+  const units = ((unitRows.data as UnitRow[]) ?? []).map(mapUnit);
+  const installers = ((installerRows.data as InstallerRow[]) ?? []).map(mapInstaller);
+
+  const allowedClientIds = [...new Set(buildings.map((b) => b.clientId))];
+  const allowedUnitIds = units.map((u) => u.id);
+
+  const [clientRows, roomRows, scheduleRows] = await Promise.all([
+    allowedClientIds.length > 0
+      ? supabase.from("clients").select("*").in("id", allowedClientIds).order("name")
+      : Promise.resolve({ data: [] }),
+    allowedUnitIds.length > 0
+      ? supabase.from("rooms").select("*").in("unit_id", allowedUnitIds).order("name")
+      : Promise.resolve({ data: [] }),
+    allowedUnitIds.length > 0
+      ? supabase.from("schedule_entries").select("*").in("unit_id", allowedUnitIds).order("task_date")
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const clients = ((clientRows.data as ClientRow[]) ?? []).map(mapClient);
+  const rooms = ((roomRows.data as RoomRow[]) ?? []).map(mapRoom);
+
+  const allowedRoomIds = rooms.map((r) => r.id);
+  const windowRows =
+    allowedRoomIds.length > 0
+      ? await supabase.from("windows").select("*").in("room_id", allowedRoomIds).order("label")
+      : { data: [] };
+
+  const windows = ((windowRows.data as WindowRow[]) ?? []).map(mapWindow);
+  const schedule = normalizeScheduleEntries(
+    units,
+    ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
+  );
+
+  return {
+    clients,
+    buildings,
+    units,
+    rooms,
+    windows,
+    installers,
+    schedule,
+    manufacturers: [],
+    schedulers: [],
+  };
+}
 
 export type InstallerMediaItem = {
   id: string;

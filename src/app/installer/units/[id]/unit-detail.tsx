@@ -90,7 +90,7 @@ export function UnitDetail({
     const match = activityLog.find((log) => {
       if (log.action !== "status_changed") return false;
       const details = log.details as Record<string, unknown> | null;
-      return details?.to === status;
+      return details?.to === status || details?.requestedTo === status;
     });
     return match?.createdAt ?? null;
   };

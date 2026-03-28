@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getInstallerManufacturerAuthDrift } from "@/lib/account-sync";
-import { loadFullDataset } from "@/lib/server-data";
+import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-data";
 import { AccountsManager } from "./accounts-manager";
 
 export default async function AccountsPage() {
@@ -10,10 +10,11 @@ export default async function AccountsPage() {
     redirect("/management");
   }
 
-  const [data, authDrift] = await Promise.all([
+  const [data, authDrift, schedulerAccess] = await Promise.all([
     loadFullDataset(),
     getInstallerManufacturerAuthDrift(),
+    loadAllSchedulerBuildingAccess(),
   ]);
 
-  return <AccountsManager data={data} authDrift={authDrift} />;
+  return <AccountsManager data={data} authDrift={authDrift} schedulerAccess={schedulerAccess} />;
 }

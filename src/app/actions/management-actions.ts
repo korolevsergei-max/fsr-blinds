@@ -2,13 +2,46 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwner, requireOwnerOrScheduler } from "@/lib/auth";
+import { requireOwner, requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
+import type { AppUser } from "@/lib/auth";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 function revalidateApp() {
   revalidatePath("/management", "layout");
+  revalidatePath("/scheduler", "layout");
   revalidatePath("/installer", "layout");
+}
+
+/** For scheduler callers, verifies the unit's building is in their allowed list. */
+async function assertSchedulerUnitScope(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caller: AppUser,
+  unitId: string
+): Promise<ActionResult | null> {
+  if (caller.role === "owner") return null;
+
+  const schedulerId = await getLinkedSchedulerId(caller.id);
+  if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
+
+  const { data: unit } = await supabase
+    .from("units")
+    .select("building_id")
+    .eq("id", unitId)
+    .single();
+  if (!unit) return { ok: false, error: "Unit not found." };
+
+  const { count } = await supabase
+    .from("scheduler_building_access")
+    .select("*", { count: "exact", head: true })
+    .eq("scheduler_id", schedulerId)
+    .eq("building_id", unit.building_id);
+
+  if ((count ?? 0) === 0) {
+    return { ok: false, error: "Access denied: this unit is not in your assigned buildings." };
+  }
+
+  return null;
 }
 
 async function logUnitActivity(
@@ -215,6 +248,10 @@ export async function updateUnitCompleteByDate(
   try {
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
+
+    const scopeErr = await assertSchedulerUnitScope(supabase, owner, unitId);
+    if (scopeErr) return scopeErr;
+
     const nextDate = completeByDate || null;
     const { data: current } = await supabase
       .from("units")

@@ -51,6 +51,11 @@ export function RoomDetail({
           getEditHref={(winId) =>
             `/installer/units/${id}/rooms/${roomId}/windows/new?edit=${winId}`
           }
+          getStageNavProps={(winId) => ({
+            unitId: id,
+            roomId,
+            windowId: winId,
+          })}
           addWindowHref={`/installer/units/${id}/rooms/${roomId}/windows/new`}
         />
       </div>

@@ -173,7 +173,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     buildingFilter !== "all",
     statusFilter !== "all",
     installerFilter !== "all",
-    dateFilter !== "all",
+    dateAddedFilter !== "all",
     sortOrder !== "none",
     flagFilter !== "all",
     issueFilter !== "all",

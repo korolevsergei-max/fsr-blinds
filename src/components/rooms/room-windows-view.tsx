@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, CheckCircle, Images, Ruler, X } from "@phosphor-icons/react";
 import { getWindowsByRoom } from "@/lib/app-dataset";
@@ -8,6 +9,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RiskBadge } from "@/components/ui/risk-badge";
+import { WindowStageNav } from "@/components/window-stage-nav";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
 type ImageOrientation = "portrait" | "landscape" | "square";
@@ -26,6 +28,8 @@ interface RoomWindowsViewProps {
   roomId: string;
   /** When provided, renders an edit link per window (installer only). */
   getEditHref?: (windowId: string) => string;
+  /** When provided, renders direct stage upload/edit links (installer only). */
+  getStageNavProps?: (windowId: string) => { unitId: string; roomId: string; windowId: string };
   /** When provided, renders an "Add Window" CTA (installer only). */
   addWindowHref?: string;
 }
@@ -44,6 +48,7 @@ export function RoomWindowsView({
   mediaItems,
   roomId,
   getEditHref,
+  getStageNavProps,
   addWindowHref,
 }: RoomWindowsViewProps) {
   const windowsList = getWindowsByRoom(data, roomId);
@@ -275,6 +280,26 @@ export function RoomWindowsView({
                   </div>
                 )}
 
+                {getStageNavProps && (
+                  <div
+                    className="mb-3"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <WindowStageNav
+                      {...getStageNavProps(win.id)}
+                      active={
+                        stageMedia.installed
+                          ? "installed"
+                          : stageMedia.bracketed
+                            ? "bracketed"
+                            : "before"
+                      }
+                      compact
+                    />
+                  </div>
+                )}
+
                 <div className="mb-2.5 flex items-start justify-between">
                   <div>
                     <p className="text-sm font-bold tracking-tight text-foreground">{win.label}</p>
@@ -330,13 +355,13 @@ export function RoomWindowsView({
 
                 {getEditHref && (
                   <div className="mt-3">
-                    <a
+                    <Link
                       href={getEditHref(win.id)}
                       onClick={(event) => event.stopPropagation()}
                       className="inline-flex items-center rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-foreground"
                     >
                       Edit Window
-                    </a>
+                    </Link>
                   </div>
                 )}
               </div>

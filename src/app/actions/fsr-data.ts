@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwnerOrScheduler } from "@/lib/auth";
+import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
+import type { AppUser } from "@/lib/auth";
 import {
   UNIT_PHOTO_STAGES,
   UNIT_STATUS_LABELS,
@@ -13,6 +14,37 @@ import {
 } from "@/lib/types";
 
 const BUCKET = "fsr-media";
+
+/** For scheduler callers, verifies the unit's building is in their allowed list. */
+async function assertSchedulerUnitScope(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caller: AppUser,
+  unitId: string
+): Promise<ActionResult | null> {
+  if (caller.role === "owner") return null;
+
+  const schedulerId = await getLinkedSchedulerId(caller.id);
+  if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
+
+  const { data: unit } = await supabase
+    .from("units")
+    .select("building_id")
+    .eq("id", unitId)
+    .single();
+  if (!unit) return { ok: false, error: "Unit not found." };
+
+  const { count } = await supabase
+    .from("scheduler_building_access")
+    .select("*", { count: "exact", head: true })
+    .eq("scheduler_id", schedulerId)
+    .eq("building_id", unit.building_id);
+
+  if ((count ?? 0) === 0) {
+    return { ok: false, error: "Access denied: this unit is not in your assigned buildings." };
+  }
+
+  return null;
+}
 
 function normalizeStorageError(message: string): string {
   if (/bucket not found/i.test(message)) {
@@ -45,6 +77,7 @@ function removeUnsupportedBlindSizeColumns(
 
 function revalidateApp() {
   revalidatePath("/management", "layout");
+  revalidatePath("/scheduler", "layout");
   revalidatePath("/installer", "layout");
 }
 
@@ -230,6 +263,35 @@ export async function bulkAssignUnits(
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
 
+    // For schedulers: filter unitIds to only those in allowed buildings.
+    let scopedUnitIds = unitIds;
+    if (owner.role === "scheduler") {
+      const schedulerId = await getLinkedSchedulerId(owner.id);
+      if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
+
+      const { data: accessRows } = await supabase
+        .from("scheduler_building_access")
+        .select("building_id")
+        .eq("scheduler_id", schedulerId);
+      const allowedBuildingIds = new Set(
+        (accessRows ?? []).map((r: { building_id: string }) => r.building_id)
+      );
+
+      const { data: unitRows } = await supabase
+        .from("units")
+        .select("id, building_id")
+        .in("id", unitIds);
+      scopedUnitIds = (unitRows ?? [])
+        .filter((u: { id: string; building_id: string }) =>
+          allowedBuildingIds.has(u.building_id)
+        )
+        .map((u: { id: string; building_id: string }) => u.id);
+
+      if (scopedUnitIds.length === 0) {
+        return { ok: false, error: "None of the selected units are in your assigned buildings." };
+      }
+    }
+
     let instName = "Assignee";
     const patch: Record<string, unknown> = {};
 
@@ -253,13 +315,13 @@ export async function bulkAssignUnits(
       patch.risk_flag = priority === "clear" ? null : priority;
     }
 
-    const { error } = await supabase.from("units").update(patch).in("id", unitIds);
+    const { error } = await supabase.from("units").update(patch).in("id", scopedUnitIds);
     if (error) return { ok: false, error: error.message };
 
     const { data: unitRows } = await supabase
       .from("units")
       .select("id, unit_number, building_name, client_name")
-      .in("id", unitIds);
+      .in("id", scopedUnitIds);
 
     for (const unit of unitRows ?? []) {
       if (bracketingDate) {
@@ -363,6 +425,10 @@ export async function updateUnitAssignment(
   try {
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
+
+    const scopeErr = await assertSchedulerUnitScope(supabase, owner, unitId);
+    if (scopeErr) return scopeErr;
+
     let unitMeta:
       | {
           unit_number: string;

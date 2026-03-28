@@ -7,11 +7,13 @@ export function WindowStageNav({
   roomId,
   windowId,
   active,
+  compact = false,
 }: {
   unitId: string;
   roomId: string;
   windowId: string;
   active: "before" | "bracketed" | "installed";
+  compact?: boolean;
 }) {
   const items = [
     {
@@ -32,12 +34,18 @@ export function WindowStageNav({
   ];
 
   return (
-    <div className="mb-2 grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-1.5">
+    <div
+      className={`grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-1.5 ${
+        compact ? "" : "mb-2"
+      }`}
+    >
       {items.map((item) => (
         <Link
           key={item.key}
           href={item.href}
-          className={`rounded-xl px-3 py-2 text-center text-xs font-semibold transition-all ${
+          className={`rounded-xl text-center font-semibold transition-all ${
+            compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
+          } ${
             item.key === active
               ? "bg-accent text-white"
               : "bg-white text-zinc-600 hover:bg-zinc-100"

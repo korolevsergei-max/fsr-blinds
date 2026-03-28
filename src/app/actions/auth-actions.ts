@@ -444,6 +444,43 @@ export async function deleteManufacturerAccount(
   }
 }
 
+export async function setSchedulerBuildingAccess(
+  schedulerId: string,
+  buildingIds: string[]
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    const supabase = await createClient();
+
+    // Replace access list atomically: delete existing, then insert new.
+    const { error: delErr } = await supabase
+      .from("scheduler_building_access")
+      .delete()
+      .eq("scheduler_id", schedulerId);
+    if (delErr) return { ok: false, error: delErr.message };
+
+    if (buildingIds.length > 0) {
+      const rows = buildingIds.map((buildingId) => ({
+        id: `sba-${crypto.randomUUID().slice(0, 8)}`,
+        scheduler_id: schedulerId,
+        building_id: buildingId,
+      }));
+      const { error: insErr } = await supabase
+        .from("scheduler_building_access")
+        .insert(rows);
+      if (insErr) return { ok: false, error: insErr.message };
+    }
+
+    revalidatePath("/management", "layout");
+    revalidatePath("/scheduler", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to update access" };
+  }
+}
+
 /** Remove scheduler rows for this email so re-invite is not blocked by stale/orphan rows. */
 async function deleteSchedulersByEmail(admin: SupabaseClient, email: string) {
   const e = email.trim();
