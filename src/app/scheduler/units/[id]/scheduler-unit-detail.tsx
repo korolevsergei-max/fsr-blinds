@@ -124,21 +124,21 @@ export function SchedulerUnitDetail({
   const milestoneField = (
     label: string,
     scheduled: string | null | undefined,
-    completed: string | null | undefined
+    phaseDone: boolean,
+    completedAt: string | null | undefined
   ) => (
     <div className="flex flex-col gap-0.5">
       <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted">{label}</p>
-      <p className={`text-[13px] font-semibold ${isPastDue(scheduled) && !completed ? "text-red-600" : "text-foreground"}`}>
+      <p className={`text-[13px] font-semibold ${isPastDue(scheduled) && !phaseDone ? "text-red-600" : "text-foreground"}`}>
         {formatShort(scheduled) ?? "—"}
-        {isPastDue(scheduled) && !completed && (
+        {isPastDue(scheduled) && !phaseDone && (
           <span className="ml-1 text-[10px] font-bold text-red-500">OVERDUE</span>
         )}
       </p>
-      {completed && (
-        <p className="text-[11px] font-medium text-accent">
-          Done: {formatShort(completed)}
-        </p>
-      )}
+      <p className={`text-[11px] font-medium ${phaseDone && completedAt ? "text-accent" : "text-muted"}`}>
+        Completed:{" "}
+        {phaseDone ? formatShort(completedAt) ?? "—" : "—"}
+      </p>
     </div>
   );
 
@@ -186,9 +186,9 @@ export function SchedulerUnitDetail({
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {milestoneField("Measurement", unit.measurementDate, milestones.allMeasured ? milestones.measuredCompletedAt : null)}
-            {milestoneField("Bracketing", unit.bracketingDate, milestones.allBracketed ? milestones.bracketedCompletedAt : null)}
-            {milestoneField("Installation", unit.installationDate, milestones.allInstalled ? milestones.installedCompletedAt : null)}
+            {milestoneField("Measurement", unit.measurementDate, milestones.allMeasured, milestones.measuredCompletedAt)}
+            {milestoneField("Bracketing", unit.bracketingDate, milestones.allBracketed, milestones.bracketedCompletedAt)}
+            {milestoneField("Installation", unit.installationDate, milestones.allInstalled, milestones.installedCompletedAt)}
           </div>
         </motion.div>
 

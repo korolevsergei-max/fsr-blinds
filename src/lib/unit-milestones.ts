@@ -2,6 +2,68 @@ import { createClient } from "@/lib/supabase/server";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
+/** When `windows.updated_at` is missing, infer measurement completion time. */
+async function resolveMeasuredCompletedAt(
+  supabase: SupabaseClient,
+  unitId: string,
+  windowIds: string[]
+): Promise<string | null> {
+  const { data: measuredWithTs, error } = await supabase
+    .from("windows")
+    .select("updated_at")
+    .in("id", windowIds)
+    .eq("measured", true)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const row = measuredWithTs?.[0] as { updated_at?: string } | undefined;
+  const fromColumn = !error && row?.updated_at ? row.updated_at : null;
+  if (fromColumn) return fromColumn;
+
+  const { data: logs } = await supabase
+    .from("unit_activity_log")
+    .select("created_at, details")
+    .eq("unit_id", unitId)
+    .eq("action", "status_changed")
+    .order("created_at", { ascending: false })
+    .limit(80);
+  const toMeasured = logs?.find(
+    (row) => (row.details as { to?: string } | null)?.to === "measured"
+  );
+  if (toMeasured?.created_at) return toMeasured.created_at;
+
+  const { data: preBracket } = await supabase
+    .from("media_uploads")
+    .select("created_at")
+    .eq("unit_id", unitId)
+    .eq("stage", "scheduled_bracketing")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (preBracket?.[0]?.created_at) return preBracket[0].created_at;
+
+  return null;
+}
+
+/** If media timestamps are empty but status is installed, use activity log. */
+async function resolveInstalledCompletedAtFallback(
+  supabase: SupabaseClient,
+  unitId: string,
+  fromMedia: string | null
+): Promise<string | null> {
+  if (fromMedia) return fromMedia;
+
+  const { data: logs } = await supabase
+    .from("unit_activity_log")
+    .select("created_at, details")
+    .eq("unit_id", unitId)
+    .eq("action", "status_changed")
+    .order("created_at", { ascending: false })
+    .limit(80);
+  const toInstalled = logs?.find(
+    (row) => (row.details as { to?: string } | null)?.to === "installed"
+  );
+  return toInstalled?.created_at ?? null;
+}
+
 export type UnitMilestoneCoverage = {
   totalWindows: number;
   measuredCount: number;
@@ -73,18 +135,9 @@ export async function getUnitMilestoneCoverageWithClient(
   const measuredCount = measuredWindows.length;
   const allMeasured = measuredCount >= totalWindows;
 
-  // Use updated_at on the windows table as the measurement timestamp proxy.
-  // If the column isn't present yet, fall back to null.
   let measuredCompletedAt: string | null = null;
   if (allMeasured) {
-    const { data: measuredWithTs } = await supabase
-      .from("windows")
-      .select("updated_at")
-      .in("id", windowIds)
-      .eq("measured", true)
-      .order("updated_at", { ascending: false })
-      .limit(1);
-    measuredCompletedAt = (measuredWithTs ?? [])[0]?.updated_at ?? null;
+    measuredCompletedAt = await resolveMeasuredCompletedAt(supabase, unitId, windowIds);
   }
 
   // Bracketed coverage: every window has a qualifying bracketed media row.
@@ -142,8 +195,12 @@ export async function getUnitMilestoneCoverageWithClient(
 
   let installedCompletedAt: string | null = null;
   if (allInstalled) {
-    const timestamps = windowIds.map((id) => installedByWindow.get(id) ?? "");
-    installedCompletedAt = timestamps.sort().reverse()[0] ?? null;
+    const timestamps = windowIds.map((id) => installedByWindow.get(id) ?? "").filter(Boolean);
+    installedCompletedAt = await resolveInstalledCompletedAtFallback(
+      supabase,
+      unitId,
+      timestamps.length > 0 ? timestamps.sort().reverse()[0]! : null
+    );
   }
 
   return {

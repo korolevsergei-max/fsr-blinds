@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { MagnifyingGlass, Buildings, ArrowRight } from "@phosphor-icons/react";
+import { MagnifyingGlass, Buildings, ArrowRight, SignOut } from "@phosphor-icons/react";
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { Unit } from "@/lib/types";
 import { StatusChip } from "@/components/ui/status-chip";
-import { RiskDot } from "@/components/ui/risk-badge";
-import { PageHeader } from "@/components/ui/page-header";
+import { signOut } from "@/app/actions/auth-actions";
 
 export function InstallerHome({
   data,
@@ -18,6 +18,8 @@ export function InstallerHome({
   data: AppDataset;
   installerId?: string;
 }) {
+  const router = useRouter();
+  const [signingOut, startSignOut] = useTransition();
   const [search, setSearch] = useState("");
 
   const installer = data.installers.find((i) => i.id === installerId);
@@ -50,18 +52,32 @@ export function InstallerHome({
 
   return (
     <div className="flex flex-col">
-      <PageHeader
-        title="FSR Blinds"
-        actions={
-          <Link
-            href="/installer/profile"
-            className="w-9 h-9 rounded-full bg-accent flex items-center justify-center text-white text-[13px] font-bold hover:bg-accent-hover transition-colors"
-            aria-label="Profile"
+      <header className="px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-5 bg-card border-b border-border-subtle">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[12px] text-tertiary font-medium mb-0.5">
+              {installer?.name ? `Hello, ${installer.name}` : "Installer"}
+            </p>
+            <h1 className="text-[1.625rem] font-bold tracking-[-0.03em] text-foreground leading-none">
+              FSR Blinds
+            </h1>
+          </div>
+          <button
+            onClick={() =>
+              startSignOut(async () => {
+                await signOut();
+                router.push("/login");
+                router.refresh();
+              })
+            }
+            disabled={signingOut}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-[12px] font-medium text-tertiary hover:text-secondary hover:bg-surface transition-colors disabled:opacity-50"
           >
-            {installer?.name?.[0] ?? "I"}
-          </Link>
-        }
-      />
+            <SignOut size={14} />
+            {signingOut ? "…" : "Sign out"}
+          </button>
+        </div>
+      </header>
 
       {/* Search */}
       <div className="px-4 pt-4 pb-2">

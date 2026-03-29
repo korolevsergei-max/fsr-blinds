@@ -85,11 +85,6 @@ export function UnitDetail({
     return day.getTime() < todayDay.getTime();
   };
 
-  // Evidence-based completion dates from the milestone coverage helper
-  const measurementCompleted = milestones.allMeasured ? milestones.measuredCompletedAt : null;
-  const bracketingCompleted = milestones.allBracketed ? milestones.bracketedCompletedAt : null;
-  const installationCompleted = milestones.allInstalled ? milestones.installedCompletedAt : null;
-
   const measurementPastDue = isPastDue(unit.measurementDate) && !milestones.allMeasured;
   const bracketingPastDue = isPastDue(unit.bracketingDate) && !milestones.allBracketed;
   const installationPastDue = isPastDue(unit.installationDate) && !milestones.allInstalled;
@@ -157,14 +152,20 @@ export function UnitDetail({
                   {formatDate(unit.measurementDate)}
                 </p>
               </div>
-              {measurementCompleted && (
-                <div>
-                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                  <p className="mt-0.5 text-sm font-semibold text-accent">
-                    {formatDate(measurementCompleted)}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                <p
+                  className={`mt-0.5 text-sm font-semibold ${
+                    milestones.allMeasured && milestones.measuredCompletedAt
+                      ? "text-accent"
+                      : "text-foreground"
+                  }`}
+                >
+                  {milestones.allMeasured
+                    ? formatDate(milestones.measuredCompletedAt)
+                    : "Not set"}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -198,14 +199,20 @@ export function UnitDetail({
                   {formatDate(unit.bracketingDate)}
                 </p>
               </div>
-              {bracketingCompleted && (
-                <div>
-                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                  <p className="mt-0.5 text-sm font-semibold text-accent">
-                    {formatDate(bracketingCompleted)}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                <p
+                  className={`mt-0.5 text-sm font-semibold ${
+                    milestones.allBracketed && milestones.bracketedCompletedAt
+                      ? "text-accent"
+                      : "text-foreground"
+                  }`}
+                >
+                  {milestones.allBracketed
+                    ? formatDate(milestones.bracketedCompletedAt)
+                    : "Not set"}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -239,14 +246,20 @@ export function UnitDetail({
                   {formatDate(unit.installationDate)}
                 </p>
               </div>
-              {installationCompleted && (
-                <div>
-                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                  <p className="mt-0.5 text-sm font-semibold text-accent">
-                    {formatDate(installationCompleted)}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                <p
+                  className={`mt-0.5 text-sm font-semibold ${
+                    milestones.allInstalled && milestones.installedCompletedAt
+                      ? "text-accent"
+                      : "text-foreground"
+                  }`}
+                >
+                  {milestones.allInstalled
+                    ? formatDate(milestones.installedCompletedAt)
+                    : "Not set"}
+                </p>
+              </div>
             </div>
           </div>
         </motion.div>
