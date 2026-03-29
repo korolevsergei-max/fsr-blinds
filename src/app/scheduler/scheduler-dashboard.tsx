@@ -3,23 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  Warning,
-  CheckCircle,
-  CaretDown,
-  CaretRight,
-  SignOut,
-  Buildings,
-  FunnelSimple,
-  X,
-} from "@phosphor-icons/react";
+import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import { UNIT_STATUS_ORDER, type UnitStatus } from "@/lib/types";
-import { computeUnitFlags } from "@/lib/unit-flags";
+import { UNIT_STATUSES, type UnitStatus } from "@/lib/types";
+import {
+  buildMonthFilterOptions,
+  buildYearOptions,
+  unitMatchesYearMonth,
+} from "@/lib/dashboard-scope-filters";
 import { signOut } from "@/app/actions/auth-actions";
 import { ScopedResultsPanel } from "@/components/dashboard/scoped-results-panel";
 import {
@@ -57,6 +52,8 @@ export function SchedulerDashboard({
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
 
   // Selection state — status + issue can combine
   const [selectedStatus, setSelectedStatus] = useState<UnitStatus | null>(null);
@@ -72,6 +69,7 @@ export function SchedulerDashboard({
 
   // All counts derived from scopedUnits — never global units
   const scopedUnits = useMemo(() => {
+    const effectiveMonth = yearFilter === "all" ? "all" : monthFilter;
     return units.filter((u) => {
       if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
       if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
@@ -80,9 +78,13 @@ export function SchedulerDashboard({
       } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
         return false;
       }
+      if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
     });
-  }, [units, clientFilter, buildingFilter, installerFilter]);
+  }, [units, clientFilter, buildingFilter, installerFilter, yearFilter, monthFilter]);
+
+  const yearOptions = useMemo(() => buildYearOptions(units), [units]);
+  const monthOptions = useMemo(() => buildMonthFilterOptions(), []);
 
   const escalationIds = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
   const escalationDetailsByUnitId = useMemo(() => {
@@ -116,26 +118,6 @@ export function SchedulerDashboard({
     return computeIssueCounts(source, today, escalationIds);
   }, [scopedUnits, selectedStatus, today, escalationIds]);
 
-  // KPIs
-  const totalCount = scopedUnits.length;
-  const completedCount = useMemo(
-    () => scopedUnits.filter((u) => u.status === "client_approved").length,
-    [scopedUnits]
-  );
-  const overdueCount = useMemo(
-    () =>
-      scopedUnits.filter((u) => {
-        const f = computeUnitFlags(u, today);
-        return (
-          f.includes("past_bracketing_due") ||
-          f.includes("past_install_due")
-        );
-      }).length,
-    [scopedUnits, today]
-  );
-  const completionPct =
-    totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
   // Results = scopedUnits narrowed by selected status + selected issue (intersection)
   const resultsUnits = useMemo(() => {
     let result = scopedUnits;
@@ -153,6 +135,8 @@ export function SchedulerDashboard({
     clientFilter !== "all",
     buildingFilter !== "all",
     installerFilter !== "all",
+    yearFilter !== "all",
+    yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
 
   const clientOptions = [
@@ -200,72 +184,8 @@ export function SchedulerDashboard({
       </header>
 
       <div className="px-4 flex flex-col gap-5 pt-5">
-        {/* KPI strip */}
-        <motion.div {...fadeUp(0)} className="grid grid-cols-3 gap-3">
-          {(
-            [
-              {
-                label: "Total",
-                value: totalCount,
-                Icon: Buildings,
-                cls: "text-zinc-500",
-                bg: "bg-zinc-50",
-              },
-              {
-                label: "Completed",
-                value: completedCount,
-                Icon: CheckCircle,
-                cls: "text-emerald-500",
-                bg: "bg-emerald-50",
-              },
-              {
-                label: "Overdue",
-                value: overdueCount,
-                Icon: Warning,
-                cls: "text-red-500",
-                bg: "bg-red-50",
-              },
-            ] as const
-          ).map(({ label, value, Icon, cls, bg }) => (
-            <div key={label} className="surface-card p-3.5">
-              <div
-                className={`w-7 h-7 rounded-[var(--radius-sm)] ${bg} flex items-center justify-center mb-2`}
-              >
-                <Icon size={14} weight="fill" className={cls} />
-              </div>
-              <p className="text-[1.5rem] font-bold text-foreground font-mono leading-none mb-0.5">
-                {value}
-              </p>
-              <p className="text-[10px] text-tertiary font-medium">{label}</p>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Progress bar */}
-        <motion.div {...fadeUp(0.04)}>
-          <div className="surface-card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-semibold text-tertiary uppercase tracking-wider">
-                Overall progress
-              </p>
-              <p className="text-[13px] font-bold text-foreground font-mono">
-                {completedCount} / {totalCount}
-                <span className="text-tertiary font-normal ml-1">({completionPct}%)</span>
-              </p>
-            </div>
-            <div className="h-2.5 bg-zinc-100 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-emerald-500 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${completionPct}%` }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </div>
-          </div>
-        </motion.div>
-
         {/* Scope bar — always visible, never hidden during drill-down */}
-        <motion.div {...fadeUp(0.06)}>
+        <motion.div {...fadeUp(0)}>
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
             <div className="flex items-center gap-1 flex-shrink-0 text-zinc-400">
               <FunnelSimple size={13} />
@@ -296,6 +216,23 @@ export function SchedulerDashboard({
               options={installerOptions}
               onChange={setInstallerFilter}
             />
+            <FilterDropdown
+              label="Year"
+              value={yearFilter}
+              options={yearOptions}
+              onChange={(v) => {
+                setYearFilter(v);
+                if (v === "all") setMonthFilter("all");
+              }}
+            />
+            {yearFilter !== "all" && (
+              <FilterDropdown
+                label="Month"
+                value={monthFilter}
+                options={monthOptions}
+                onChange={setMonthFilter}
+              />
+            )}
             {activeFilterCount > 0 && (
               <button
                 type="button"
@@ -303,6 +240,8 @@ export function SchedulerDashboard({
                   setClientFilter("all");
                   setBuildingFilter("all");
                   setInstallerFilter("all");
+                  setYearFilter("all");
+                  setMonthFilter("all");
                 }}
                 className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
               >
@@ -312,20 +251,18 @@ export function SchedulerDashboard({
           </div>
         </motion.div>
 
-        {/* Pipeline by status — clickable */}
-        <motion.div {...fadeUp(0.08)}>
+        {/* Pipeline by status — clickable, all statuses including zero counts */}
+        <motion.div {...fadeUp(0.06)}>
           <SectionLabel as="h2">Pipeline by status</SectionLabel>
           <div
             className="surface-card divide-y divide-border-subtle"
             style={{ padding: 0 }}
           >
-            {Array.from(statusCounts.entries())
-              .sort(
-                (a, b) =>
-                  UNIT_STATUS_ORDER[a[0] as UnitStatus] -
-                  UNIT_STATUS_ORDER[b[0] as UnitStatus]
-              )
-              .map(([status, count]) => {
+            {scopedUnits.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-muted">No units in this scope</div>
+            ) : (
+              UNIT_STATUSES.map((status) => {
+                const count = statusCounts.get(status) ?? 0;
                 const isActive = selectedStatus === status;
                 return (
                   <button
@@ -355,15 +292,13 @@ export function SchedulerDashboard({
                     </div>
                   </button>
                 );
-              })}
-            {statusCounts.size === 0 && (
-              <div className="px-4 py-6 text-center text-xs text-muted">No units yet</div>
+              })
             )}
           </div>
         </motion.div>
 
         {/* Issue buckets — clickable, combinable with status */}
-        <motion.div {...fadeUp(0.1)}>
+        <motion.div {...fadeUp(0.08)}>
           <SectionLabel as="h2">Issues</SectionLabel>
           <div
             className="surface-card divide-y divide-border-subtle"

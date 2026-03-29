@@ -89,9 +89,8 @@ export function UnitsList({ data }: { data: AppDataset }) {
         if (!a.installationDate && !b.installationDate) return 0;
         if (!a.installationDate) return 1;
         if (!b.installationDate) return -1;
-        const ta = new Date(a.installationDate).getTime();
-        const tb = new Date(b.installationDate).getTime();
-        return sortOrder === "install_asc" ? ta - tb : tb - ta;
+        const cmp = a.installationDate.localeCompare(b.installationDate);
+        return sortOrder === "install_asc" ? cmp : -cmp;
       }
       if (sortOrder === "unit_asc" || sortOrder === "unit_desc") {
         const cmp = a.unitNumber.localeCompare(b.unitNumber, undefined, {

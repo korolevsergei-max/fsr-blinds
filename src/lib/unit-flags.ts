@@ -1,3 +1,4 @@
+import { parseStoredDate } from "./created-date";
 import type { Unit } from "./types";
 
 export type UnitFlag =
@@ -51,9 +52,12 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
     }
 
     // Warn if installation is within 3 days and not yet installed
-    const daysUntilInstall = Math.floor(
-      (new Date(unit.installationDate).getTime() - new Date(todayStr).getTime()) / 86400000
-    );
+    const installDay = parseStoredDate(unit.installationDate);
+    const todayDay = parseStoredDate(todayStr);
+    const daysUntilInstall =
+      installDay && todayDay
+        ? Math.floor((installDay.getTime() - todayDay.getTime()) / 86400000)
+        : NaN;
     if (
       daysUntilInstall >= 0 &&
       daysUntilInstall <= 3 &&

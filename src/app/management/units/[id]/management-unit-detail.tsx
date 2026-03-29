@@ -39,6 +39,7 @@ import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
+import { formatStoredDateForDisplay } from "@/lib/created-date";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the system",
@@ -251,14 +252,8 @@ export function ManagementUnitDetail({
   const bracketingCompleted = milestones.allBracketed ? milestones.bracketedCompletedAt : null;
   const installationCompleted = milestones.allInstalled ? milestones.installedCompletedAt : null;
 
-  const formatDate = (value: string | null | undefined) => {
-    if (!value) return null;
-    return new Date(value).toLocaleDateString("en-CA", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+  const formatDate = (value: string | null | undefined) =>
+    formatStoredDateForDisplay(value);
 
   return (
     <div className="flex flex-col">

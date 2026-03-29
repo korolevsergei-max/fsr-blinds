@@ -28,6 +28,7 @@ import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
+import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 
 export function UnitDetail({
   data,
@@ -73,19 +74,14 @@ export function UnitDetail({
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const formatDate = (value: string | null | undefined) => {
-    if (!value) return "Not set";
-    return new Date(value).toLocaleDateString("en-CA", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
+  const formatDate = (value: string | null | undefined) =>
+    formatStoredDateForDisplay(value) ?? "Not set";
 
   const isPastDue = (value: string | null | undefined) => {
     if (!value) return false;
-    const date = new Date(value);
-    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const parsed = parseStoredDate(value);
+    if (!parsed) return false;
+    const day = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
     return day.getTime() < todayDay.getTime();
   };
 
@@ -333,7 +329,7 @@ export function UnitDetail({
                     </span>
                     {status === "not_started" && isCurrent && unit.measurementDate && (
                       <p className="text-[11px] text-muted mt-0.5">
-                        Measurement scheduled: {unit.measurementDate}
+                        Measurement scheduled: {formatDate(unit.measurementDate)}
                       </p>
                     )}
                   </div>

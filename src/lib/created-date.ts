@@ -1,6 +1,42 @@
 /** "all" or local calendar day as `YYYY-MM-DD` (from `<input type="date">`). */
 export type AddedDateFilter = "all" | string;
 
+const YMD_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Parse stored dates the same way as `DateInput`: plain `YYYY-MM-DD` is a local calendar day,
+ * not UTC midnight (which would shift the displayed day behind UTC-0 in many timezones).
+ * Any other string is parsed as a full ISO timestamp.
+ */
+export function parseStoredDate(value: string): Date | null {
+  const v = value.trim();
+  if (YMD_ONLY.test(v)) {
+    const [y, m, d] = v.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+  }
+  const t = new Date(v);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+
+const DEFAULT_STORED_DATE_DISPLAY: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
+
+/** Short label for scheduled (`YYYY-MM-DD`) or completion (ISO) timestamps. */
+export function formatStoredDateForDisplay(
+  value: string | null | undefined,
+  locale: string | undefined = "en-CA",
+  options: Intl.DateTimeFormatOptions = DEFAULT_STORED_DATE_DISPLAY
+): string | null {
+  if (!value) return null;
+  const parsed = parseStoredDate(value);
+  if (!parsed) return null;
+  return parsed.toLocaleDateString(locale, options);
+}
+
 /**
  * True if `createdAt` falls on the given calendar day in the user's local timezone.
  */
@@ -13,14 +49,5 @@ export function isCreatedOnLocalDay(createdAt: string | null, ymd: string): bool
 }
 
 export function formatAddedDateLabel(ymd: string): string {
-  const parts = ymd.split("-").map(Number);
-  const y = parts[0];
-  const m = parts[1];
-  const day = parts[2];
-  if (!y || !m || !day) return ymd;
-  return new Date(y, m - 1, day).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatStoredDateForDisplay(ymd, undefined, DEFAULT_STORED_DATE_DISPLAY) ?? ymd;
 }

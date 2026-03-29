@@ -24,6 +24,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
+import { formatStoredDateForDisplay } from "@/lib/created-date";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -117,10 +118,8 @@ export function SchedulerUnitDetail({
   const isPastDue = (dateStr: string | null | undefined) =>
     dateStr ? dateStr < today : false;
 
-  const formatShort = (value: string | null | undefined) => {
-    if (!value) return null;
-    return new Date(value).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
-  };
+  const formatShort = (value: string | null | undefined) =>
+    formatStoredDateForDisplay(value);
 
   const milestoneField = (
     label: string,
