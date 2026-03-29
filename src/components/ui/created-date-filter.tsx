@@ -9,9 +9,10 @@ import { formatAddedDateLabel } from "@/lib/created-date";
 type CreatedDateFilterProps = {
   value: AddedDateFilter;
   onChange: (value: AddedDateFilter) => void;
+  label?: string;
 };
 
-export function CreatedDateFilter({ value, onChange }: CreatedDateFilterProps) {
+export function CreatedDateFilter({ value, onChange, label = "Date Added" }: CreatedDateFilterProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -46,7 +47,7 @@ export function CreatedDateFilter({ value, onChange }: CreatedDateFilterProps) {
             : "border-border bg-card text-secondary hover:border-zinc-300",
         ].join(" ")}
       >
-        <span className="truncate">{active ? formatAddedDateLabel(value) : "Date Added"}</span>
+        <span className="truncate">{active ? formatAddedDateLabel(value) : label}</span>
         <CaretDown
           size={11}
           weight="bold"
@@ -68,7 +69,7 @@ export function CreatedDateFilter({ value, onChange }: CreatedDateFilterProps) {
               onClick={(e) => e.stopPropagation()}
             >
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">
-                Added on
+                {label}
               </p>
               <input
                 type="date"

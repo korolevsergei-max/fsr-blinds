@@ -34,6 +34,12 @@ export function SchedulerRoomDetail({
           data={data}
           mediaItems={mediaItems}
           roomId={roomId}
+          getStageNavProps={(winId) => ({
+            unitId: id,
+            roomId,
+            windowId: winId,
+            routeBasePath: "/scheduler/units",
+          })}
         />
       </div>
     </div>

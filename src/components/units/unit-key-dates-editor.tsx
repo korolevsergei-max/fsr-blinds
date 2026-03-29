@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
+import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateInput } from "@/components/ui/date-input";
@@ -25,6 +26,7 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
   const [measurementDate, setMeasurementDate] = useState(unit?.measurementDate ?? "");
   const [bracketingDate, setBracketingDate] = useState(unit?.bracketingDate ?? "");
   const [installationDate, setInstallationDate] = useState(unit?.installationDate ?? "");
+  const [completeByDate, setCompleteByDate] = useState(unit?.completeByDate ?? "");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -38,15 +40,22 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
   const handleSave = () => {
     setSaveError("");
     startTransition(async () => {
-      const result = await updateUnitAssignment(
-        unit.id,
-        unit.assignedInstallerId || undefined,
-        measurementDate,
-        bracketingDate,
-        installationDate
-      );
-      if (!result.ok) {
-        setSaveError(result.error);
+      const [datesResult, completeByResult] = await Promise.all([
+        updateUnitAssignment(
+          unit.id,
+          unit.assignedInstallerId || undefined,
+          measurementDate,
+          bracketingDate,
+          installationDate
+        ),
+        updateUnitCompleteByDate(unit.id, completeByDate || null),
+      ]);
+      if (!datesResult.ok) {
+        setSaveError(datesResult.error);
+        return;
+      }
+      if (!completeByResult.ok) {
+        setSaveError(completeByResult.error);
         return;
       }
       setSaved(true);
@@ -97,6 +106,12 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
             value={installationDate}
             onChange={setInstallationDate}
             helper="Scheduled date for installation (also serves as the target completion date)"
+          />
+          <DateInput
+            label="Complete by"
+            value={completeByDate}
+            onChange={setCompleteByDate}
+            helper="Static client deadline for prioritization — does not affect unit status"
           />
         </motion.div>
 

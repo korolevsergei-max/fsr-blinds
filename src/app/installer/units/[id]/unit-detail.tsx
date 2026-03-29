@@ -26,6 +26,7 @@ import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
@@ -128,6 +129,14 @@ export function UnitDetail({
         </motion.div>
 
         {/* Key Dates */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <CompleteByHighlightCard completeByDate={unit.completeByDate} />
+        </motion.div>
+
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

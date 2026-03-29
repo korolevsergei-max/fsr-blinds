@@ -23,6 +23,7 @@ import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
+import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
 
@@ -166,6 +167,14 @@ export function SchedulerUnitDetail({
               {flags.map((f) => <FlagBadge key={f} flag={f} />)}
             </div>
           )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.04, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <CompleteByHighlightCard completeByDate={unit.completeByDate} />
         </motion.div>
 
         {/* Key dates */}

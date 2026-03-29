@@ -7,37 +7,42 @@ export function WindowStageNav({
   roomId,
   windowId,
   active,
+  routeBasePath = "/installer/units",
   compact = false,
+  flushBottom = false,
 }: {
   unitId: string;
   roomId: string;
   windowId: string;
   active: "before" | "bracketed" | "installed";
+  routeBasePath?: "/installer/units" | "/management/units" | "/scheduler/units";
   compact?: boolean;
+  /** Omit bottom margin when nested in a header or tight layout. */
+  flushBottom?: boolean;
 }) {
   const items = [
     {
       key: "before" as const,
       label: "Before",
-      href: `/installer/units/${unitId}/rooms/${roomId}/windows/new?edit=${windowId}`,
+      href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/new?edit=${windowId}`,
     },
     {
       key: "bracketed" as const,
       label: "Bracketed",
-      href: `/installer/units/${unitId}/rooms/${roomId}/windows/${windowId}/bracketing`,
+      href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/bracketing`,
     },
     {
       key: "installed" as const,
       label: "Installed",
-      href: `/installer/units/${unitId}/rooms/${roomId}/windows/${windowId}/installed`,
+      href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/installed`,
     },
   ];
 
+  const bottomSpacing = flushBottom ? "" : compact ? "" : "mb-2";
+
   return (
     <div
-      className={`grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-1.5 ${
-        compact ? "" : "mb-2"
-      }`}
+      className={`grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-1.5 ${bottomSpacing}`}
     >
       {items.map((item) => (
         <Link

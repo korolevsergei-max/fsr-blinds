@@ -26,6 +26,7 @@ export function BulkAssignSheet({
   const [measurementDate, setMeasurementDate] = useState("");
   const [bracketingDate, setBracketingDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
+  const [completeByDate, setCompleteByDate] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -48,7 +49,7 @@ export function BulkAssignSheet({
   }, [selectedInstaller, validInstallerIds]);
 
   const handleSave = () => {
-    if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate) return;
+    if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate && !completeByDate) return;
 
     setError("");
     startTransition(async () => {
@@ -58,7 +59,8 @@ export function BulkAssignSheet({
         bracketingDate,
         installationDate,
         undefined,
-        measurementDate
+        measurementDate,
+        completeByDate
       );
       if (!result.ok) {
         setError(result.error);
@@ -171,6 +173,11 @@ export function BulkAssignSheet({
                 value={installationDate}
                 onChange={setInstallationDate}
               />
+              <DateInput
+                label="Complete by"
+                value={completeByDate}
+                onChange={setCompleteByDate}
+              />
             </div>
           </div>
 
@@ -192,7 +199,8 @@ export function BulkAssignSheet({
                   (!hasValidSelectedInstaller &&
                     !measurementDate &&
                     !bracketingDate &&
-                    !installationDate) ||
+                    !installationDate &&
+                    !completeByDate) ||
                   pending
                 }
                 onClick={handleSave}

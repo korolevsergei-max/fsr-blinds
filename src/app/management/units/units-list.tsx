@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
-import { isCreatedOnLocalDay, type AddedDateFilter } from "@/lib/created-date";
+import { isCreatedOnLocalDay, isStoredDateOnLocalDay, formatStoredDateForDisplay, type AddedDateFilter } from "@/lib/created-date";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 
 export function UnitsList({ data }: { data: AppDataset }) {
@@ -33,6 +33,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
   const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
+  const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
   const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
 
@@ -66,6 +67,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
         return false;
       }
       if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
+      if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
       if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
       if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
       return true;
@@ -78,6 +80,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     statusFilter,
     installerFilter,
     dateAddedFilter,
+    completeByFilter,
     issueFilter,
     unitIdsWithIssues,
   ]);
@@ -111,6 +114,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     statusFilter !== "all",
     installerFilter !== "all",
     dateAddedFilter !== "all",
+    completeByFilter !== "all",
     sortOrder !== "none",
     issueFilter !== "all",
   ].filter(Boolean).length;
@@ -244,6 +248,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
           <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
           <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
+          <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
           <FilterDropdown
             label="Issues"
             value={issueFilter}
@@ -260,6 +265,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
                 setStatusFilter("all");
                 setInstallerFilter("all");
                 setDateAddedFilter("all");
+                setCompleteByFilter("all");
                 setIssueFilter("all");
                 setSortOrder("none");
               }}
@@ -369,6 +375,11 @@ export function UnitsList({ data }: { data: AppDataset }) {
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono">
                             <CheckSquare size={12} />
                             Install: {unit.installationDate}
+                          </span>
+                        )}
+                        {unit.completeByDate && (
+                          <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+                            Due: {formatStoredDateForDisplay(unit.completeByDate)}
                           </span>
                         )}
                       </div>

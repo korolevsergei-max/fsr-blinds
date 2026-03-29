@@ -37,6 +37,7 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { DateInput } from "@/components/ui/date-input";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
@@ -288,6 +289,14 @@ export function ManagementUnitDetail({
       />
 
       <div className="px-4 py-5 flex flex-col gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <CompleteByHighlightCard completeByDate={unit.completeByDate} />
+        </motion.div>
+
         {/* Risk + Assignment */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}

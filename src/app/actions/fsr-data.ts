@@ -16,6 +16,7 @@ import {
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 
 const BUCKET = "fsr-media";
+const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB hard safety cap
 
 /** For scheduler callers, verifies the unit's building is in their allowed list. */
 async function assertSchedulerUnitScope(
@@ -53,6 +54,31 @@ function normalizeStorageError(message: string): string {
     return `Storage bucket "${BUCKET}" is missing. Run supabase/migrations/20250322140000_storage_and_media.sql in Supabase SQL Editor, then retry.`;
   }
   return message;
+}
+
+function validateIncomingImageFile(
+  file: File,
+  {
+    fieldLabel = "Image",
+    maxBytes = MAX_IMAGE_UPLOAD_BYTES,
+  }: {
+    fieldLabel?: string;
+    maxBytes?: number;
+  } = {}
+): ActionResult | null {
+  if (!(file instanceof File) || file.size <= 0) {
+    return { ok: false, error: `${fieldLabel} is required.` };
+  }
+  if (!file.type || !file.type.startsWith("image/")) {
+    return { ok: false, error: `${fieldLabel} must be an image file.` };
+  }
+  if (file.size > maxBytes) {
+    return {
+      ok: false,
+      error: `${fieldLabel} is too large. Please upload an image under ${Math.round(maxBytes / (1024 * 1024))}MB.`,
+    };
+  }
+  return null;
 }
 
 function isMissingSchemaColumn(message: string, column: string): boolean {
@@ -249,7 +275,8 @@ export async function bulkAssignUnits(
   bracketingDate: string,
   installationDate: string,
   priority?: string,
-  measurementDate?: string
+  measurementDate?: string,
+  completeByDate?: string
 ): Promise<ActionResult> {
   if (unitIds.length === 0) return { ok: false, error: "No units selected" };
   try {
@@ -303,6 +330,7 @@ export async function bulkAssignUnits(
     }
     if (installationDate) patch.installation_date = installationDate;
     if (measurementDate) patch.measurement_date = measurementDate;
+    if (completeByDate) patch.complete_by_date = completeByDate;
     if (priority) {
       patch.risk_flag = priority === "clear" ? null : priority;
     }
@@ -426,6 +454,7 @@ export async function bulkAssignUnits(
           ...(measurementDate ? { measurementDate } : {}),
           ...(bracketingDate ? { bracketingDate } : {}),
           ...(installationDate ? { installationDate } : {}),
+          ...(completeByDate ? { completeByDate } : {}),
           unitCount: unitIds.length,
         })
       )
@@ -706,6 +735,10 @@ export async function uploadUnitStagePhotos(
     if (files.length === 0) {
       return { ok: false, error: "Add at least one photo" };
     }
+    for (const file of files) {
+      const validation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+      if (validation) return validation;
+    }
 
     const supabase = await createClient();
     const { data: unit, error: unitError } = await supabase
@@ -946,6 +979,8 @@ export async function createWindowWithPhoto(
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Photo is required" };
     }
+    const fileValidation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+    if (fileValidation) return fileValidation;
 
     if (blindType !== "screen" && blindType !== "blackout") {
       return { ok: false, error: "Invalid blind type" };
@@ -1124,6 +1159,10 @@ export async function updateWindowWithOptionalPhoto(
     if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
       return { ok: false, error: "Notes are required for yellow or red risk." };
     }
+    if (file instanceof File && file.size > 0) {
+      const fileValidation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+      if (fileValidation) return fileValidation;
+    }
 
     const supabase = await createClient();
     const { data: win, error: we } = await supabase
@@ -1284,6 +1323,10 @@ export async function uploadWindowPostBracketingPhoto(
     if (!(photo instanceof File) || photo.size === 0) {
       return { ok: false, error: "Post-bracketing photo is required." };
     }
+    const photoValidation = validateIncomingImageFile(photo, {
+      fieldLabel: "Post-bracketing photo",
+    });
+    if (photoValidation) return photoValidation;
     if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
       return { ok: false, error: "Invalid risk flag." };
     }
@@ -1398,6 +1441,10 @@ export async function uploadWindowInstalledPhoto(
     if (!(photo instanceof File) || photo.size === 0) {
       return { ok: false, error: "Installed photo is required." };
     }
+    const photoValidation = validateIncomingImageFile(photo, {
+      fieldLabel: "Installed photo",
+    });
+    if (photoValidation) return photoValidation;
     if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
       return { ok: false, error: "Invalid risk flag." };
     }

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
+import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -116,6 +117,7 @@ export function WindowForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [optimizingPhoto, setOptimizingPhoto] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -157,6 +159,13 @@ export function WindowForm({
   const onFileChange = (f: File | null) => {
     setPhotoFile(f);
     setFormError("");
+    if (f) {
+      const validationError = validateUploadImage(f);
+      if (validationError) {
+        setErrors((prev) => ({ ...prev, photo: validationError }));
+        return;
+      }
+    }
     setErrors((prev) => {
       const next = { ...prev };
       delete next.photo;
@@ -173,24 +182,35 @@ export function WindowForm({
     setFormError("");
     if (!validate() || !unit || !room) return;
 
-    const fd = new FormData();
-    fd.set("unitId", unit.id);
-    fd.set("roomId", room.id);
-    fd.set("label", label.trim());
-    fd.set("blindType", blindType);
-    fd.set("riskFlag", riskFlag);
-    fd.set("width", width);
-    fd.set("height", height);
-    fd.set("depth", depth);
-    fd.set("blindWidth", blindWidth);
-    fd.set("blindHeight", blindHeight);
-    fd.set("blindDepth", blindDepth);
-    fd.set("notes", notes);
-    if (photoFile) {
-      fd.set("photo", photoFile);
-    }
-
     startTransition(async () => {
+      const fd = new FormData();
+      fd.set("unitId", unit.id);
+      fd.set("roomId", room.id);
+      fd.set("label", label.trim());
+      fd.set("blindType", blindType);
+      fd.set("riskFlag", riskFlag);
+      fd.set("width", width);
+      fd.set("height", height);
+      fd.set("depth", depth);
+      fd.set("blindWidth", blindWidth);
+      fd.set("blindHeight", blindHeight);
+      fd.set("blindDepth", blindDepth);
+      fd.set("notes", notes);
+      try {
+        if (photoFile) {
+          const validationError = validateUploadImage(photoFile);
+          if (validationError) {
+            setFormError(validationError);
+            return;
+          }
+          setOptimizingPhoto(true);
+          const compressedPhoto = await compressImageForUpload(photoFile);
+          fd.set("photo", compressedPhoto, compressedPhoto.name);
+        }
+      } finally {
+        setOptimizingPhoto(false);
+      }
+
       let result;
       if (existingWindow) {
         fd.set("windowId", existingWindow.id);
@@ -438,9 +458,11 @@ export function WindowForm({
         </motion.div>
 
         <div className="pt-2 pb-24">
-          <Button type="submit" fullWidth size="lg" disabled={pending}>
+          <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>
             <UploadSimple size={18} weight="bold" />
-            {pending
+            {optimizingPhoto
+              ? "Optimizing photo…"
+              : pending
               ? "Saving…"
               : existingWindow
                 ? "Update Window"

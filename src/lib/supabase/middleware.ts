@@ -2,6 +2,16 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("message" in error)) return false;
+  const message = String(error.message).toLowerCase();
+  return message.includes("invalid refresh token") || message.includes("refresh token not found");
+}
+
+function isSupabaseAuthCookie(name: string): boolean {
+  return name.startsWith("sb-") && name.includes("-auth-token");
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -31,9 +41,24 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (error) {
+    // Stale/invalid refresh token cookies can throw AuthApiError in middleware.
+    // Clear Supabase auth cookies and continue as signed out.
+    if (isInvalidRefreshTokenError(error)) {
+      request.cookies.getAll().forEach(({ name }) => {
+        if (!isSupabaseAuthCookie(name)) return;
+        supabaseResponse.cookies.set(name, "", {
+          path: "/",
+          maxAge: 0,
+        });
+      });
+    }
+    user = null;
+  }
 
   const pathname = request.nextUrl.pathname;
 

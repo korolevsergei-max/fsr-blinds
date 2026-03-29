@@ -8,6 +8,8 @@ interface PageHeaderProps {
   subtitle?: string;
   backHref?: string;
   actions?: React.ReactNode;
+  /** Renders below the title row inside the sticky header (e.g. in-page tabs). */
+  belowTitle?: React.ReactNode;
 }
 
 export function PageHeader({
@@ -15,6 +17,7 @@ export function PageHeader({
   subtitle,
   backHref,
   actions,
+  belowTitle,
 }: PageHeaderProps) {
   const router = useRouter();
 
@@ -44,6 +47,11 @@ export function PageHeader({
           <div className="flex items-center gap-2">{actions}</div>
         )}
       </div>
+      {belowTitle && (
+        <div className="px-4 pb-3 pt-0 border-t border-border/60 bg-card/95">
+          {belowTitle}
+        </div>
+      )}
     </header>
   );
 }

@@ -94,7 +94,7 @@ export interface Unit {
   installationDate: string | null;
   earliestBracketingDate: string | null;
   earliestInstallationDate?: string | null;
-  /** @deprecated kept for historical activity logs only; not actively scheduled */
+  /** Static client deadline set by owner or scheduler; does not drive status or flags. */
   completeByDate?: string | null;
   roomCount: number;
   windowCount: number;

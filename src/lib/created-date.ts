@@ -51,3 +51,16 @@ export function isCreatedOnLocalDay(createdAt: string | null, ymd: string): bool
 export function formatAddedDateLabel(ymd: string): string {
   return formatStoredDateForDisplay(ymd, undefined, DEFAULT_STORED_DATE_DISPLAY) ?? ymd;
 }
+
+/**
+ * True if a `YYYY-MM-DD` stored date string matches the filter day.
+ * Uses `parseStoredDate` so plain date strings are treated as local calendar days.
+ */
+export function isStoredDateOnLocalDay(storedDate: string | null | undefined, ymd: string): boolean {
+  if (!storedDate) return false;
+  const parsed = parseStoredDate(storedDate);
+  if (!parsed) return false;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const local = `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+  return local === ymd;
+}

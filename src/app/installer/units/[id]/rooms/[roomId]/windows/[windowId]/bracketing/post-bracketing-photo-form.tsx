@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
+import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 
 export function PostBracketingPhotoForm({
   data,
@@ -49,6 +50,7 @@ export function PostBracketingPhotoForm({
   const [notesError, setNotesError] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const [optimizingPhoto, setOptimizingPhoto] = useState(false);
 
   if (!unit || !room || !windowItem) {
     return <div className="p-6 text-center text-muted">Window not found</div>;
@@ -71,6 +73,13 @@ export function PostBracketingPhotoForm({
 
   const onFileChange = (file: File | null) => {
     setError("");
+    if (file) {
+      const validationError = validateUploadImage(file);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
     setPhotoFile(file);
     setPhotoPreview((current) => {
       if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
@@ -92,15 +101,27 @@ export function PostBracketingPhotoForm({
       return;
     }
 
-    const fd = new FormData();
-    fd.set("unitId", unit.id);
-    fd.set("roomId", room.id);
-    fd.set("windowId", windowItem.id);
-    fd.set("photo", photoFile);
-    fd.set("riskFlag", riskFlag);
-    fd.set("notes", notes);
-
     startTransition(async () => {
+      const validationError = validateUploadImage(photoFile);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+      setOptimizingPhoto(true);
+      let compressedPhoto: File;
+      try {
+        compressedPhoto = await compressImageForUpload(photoFile);
+      } finally {
+        setOptimizingPhoto(false);
+      }
+      const fd = new FormData();
+      fd.set("unitId", unit.id);
+      fd.set("roomId", room.id);
+      fd.set("windowId", windowItem.id);
+      fd.set("photo", compressedPhoto, compressedPhoto.name);
+      fd.set("riskFlag", riskFlag);
+      fd.set("notes", notes);
+
       const result = await uploadWindowPostBracketingPhoto(fd);
       if (!result.ok) {
         setError(result.error);
@@ -207,9 +228,11 @@ export function PostBracketingPhotoForm({
         </div>
 
         <div className="pb-24 pt-2">
-          <Button type="submit" fullWidth size="lg" disabled={pending}>
+          <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>
             <UploadSimple size={18} weight="bold" />
-            {pending
+            {optimizingPhoto
+              ? "Optimizing photo…"
+              : pending
               ? "Saving…"
               : existingPostBracketing
                 ? "Update Post-Bracketing Photo"

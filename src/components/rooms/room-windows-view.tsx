@@ -29,7 +29,12 @@ interface RoomWindowsViewProps {
   /** When provided, renders an edit link per window (installer only). */
   getEditHref?: (windowId: string) => string;
   /** When provided, renders direct stage upload/edit links (installer only). */
-  getStageNavProps?: (windowId: string) => { unitId: string; roomId: string; windowId: string };
+  getStageNavProps?: (windowId: string) => {
+    unitId: string;
+    roomId: string;
+    windowId: string;
+    routeBasePath?: "/installer/units" | "/management/units" | "/scheduler/units";
+  };
   /** When provided, renders an "Add Window" CTA (installer only). */
   addWindowHref?: string;
 }
@@ -196,7 +201,7 @@ export function RoomWindowsView({
           return (
             <motion.div
               key={win.id}
-              initial={{ opacity: 0, y: 8 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
@@ -287,7 +292,7 @@ export function RoomWindowsView({
                   <RiskBadge flag={win.riskFlag} />
                 </div>
 
-                {postBracketingWindowIds.has(win.id) && (
+                {postBracketingWindowIds.has(win.id) && !stageMedia.installed && (
                   <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700">
                     Post-bracketing photo saved
                   </div>

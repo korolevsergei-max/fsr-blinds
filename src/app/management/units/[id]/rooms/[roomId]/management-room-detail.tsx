@@ -34,6 +34,12 @@ export function ManagementRoomDetail({
           data={data}
           mediaItems={mediaItems}
           roomId={roomId}
+          getStageNavProps={(winId) => ({
+            unitId: id,
+            roomId,
+            windowId: winId,
+            routeBasePath: "/management/units",
+          })}
         />
       </div>
     </div>
