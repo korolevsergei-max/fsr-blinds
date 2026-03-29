@@ -255,7 +255,7 @@ export function SchedulerDashboard({
         <motion.div {...fadeUp(0.06)}>
           <SectionLabel as="h2">Pipeline by status</SectionLabel>
           <div
-            className="surface-card divide-y divide-border-subtle"
+            className="surface-card divide-y divide-border-subtle overflow-hidden"
             style={{ padding: 0 }}
           >
             {scopedUnits.length === 0 ? (
@@ -301,7 +301,7 @@ export function SchedulerDashboard({
         <motion.div {...fadeUp(0.08)}>
           <SectionLabel as="h2">Issues</SectionLabel>
           <div
-            className="surface-card divide-y divide-border-subtle"
+            className="surface-card divide-y divide-border-subtle overflow-hidden"
             style={{ padding: 0 }}
           >
             {ISSUE_ORDER.map((issue) => {

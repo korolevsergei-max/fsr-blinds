@@ -164,7 +164,7 @@ export function StatusDrilldownPanel({
             Exceptions
           </SectionLabel>
           <div
-            className="surface-card divide-y divide-border-subtle"
+            className="surface-card divide-y divide-border-subtle overflow-hidden"
             style={{ padding: 0 }}
           >
             {flagCounts.map(([flag, count]) => (

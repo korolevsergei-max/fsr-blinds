@@ -297,7 +297,7 @@ export function ManagementUnitDetail({
         >
           <div></div>
 
-          <div className="surface-card divide-y divide-border-subtle" style={{ padding: 0 }}>
+          <div className="surface-card divide-y divide-border-subtle overflow-hidden" style={{ padding: 0 }}>
             <div className="flex items-center gap-3 px-4 py-3">
               <UserCircle size={17} className="text-tertiary" />
               <div>
@@ -467,7 +467,7 @@ export function ManagementUnitDetail({
             transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
             <SectionLabel as="h2">Rooms</SectionLabel>
-            <div className="surface-card divide-y divide-border-subtle" style={{ padding: 0 }}>
+            <div className="surface-card divide-y divide-border-subtle overflow-hidden" style={{ padding: 0 }}>
               {rooms.map((room) => (
                 <Link
                   key={room.id}
