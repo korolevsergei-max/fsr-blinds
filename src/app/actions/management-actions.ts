@@ -181,7 +181,7 @@ export async function createUnit(
       client_name: client?.name ?? "",
       building_name: building?.name ?? "",
       unit_number: unitNumber.trim(),
-      status: "pending_scheduling",
+      status: "not_started",
       risk_flag: "green",
       earliest_bracketing_date: earliestBracketingDate || null,
       earliest_installation_date: earliestInstallationDate || null,
@@ -203,7 +203,7 @@ export async function createUnit(
       owner_name: owner.displayName,
       task_type: "bracketing",
       task_date: earliestBracketingDate || "9999-12-31",
-      status: "pending_scheduling",
+      status: "not_started",
       risk_flag: "green",
     };
     await supabase.from("schedule_entries").insert(bracketEntry);
@@ -336,7 +336,7 @@ export async function bulkImportUnits(
       client_name: client?.name ?? "",
       building_name: building?.name ?? "",
       unit_number: row.unitNumber.trim(),
-      status: "pending_scheduling",
+      status: "not_started",
       risk_flag: "green",
       earliest_bracketing_date: row.earliestBracketing || null,
       earliest_installation_date: row.earliestInstallation || null,
@@ -362,7 +362,7 @@ export async function bulkImportUnits(
       owner_name: owner.displayName,
       task_type: "bracketing",
       task_date: row.earliestBracketing || "9999-12-31",
-      status: "pending_scheduling",
+      status: "not_started",
       risk_flag: "green",
     });
 

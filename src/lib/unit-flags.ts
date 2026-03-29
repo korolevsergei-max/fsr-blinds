@@ -10,7 +10,7 @@ export type UnitFlag =
   | "late_schedule"
   | "at_risk";
 
-export const DONE_STATUSES = new Set(["installed_pending_approval", "client_approved"]);
+export const DONE_STATUSES = new Set(["installed", "client_approved"]);
 
 export function isUnitDone(unit: Unit): boolean {
   return DONE_STATUSES.has(unit.status);
@@ -31,22 +31,19 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   if (
     unit.bracketingDate &&
     unit.bracketingDate < todayStr &&
-    (unit.status === "pending_scheduling" || unit.status === "scheduled_bracketing")
+    unit.status === "not_started"
   ) {
     flags.push("past_bracketing_due");
   }
 
   if (!unit.installationDate) {
-    if (
-      unit.status === "bracketed_measured" ||
-      unit.status === "install_date_scheduled"
-    ) {
+    if (unit.status === "measured" || unit.status === "bracketed") {
       flags.push("missing_installation_date");
     }
   } else {
     if (
       unit.installationDate < todayStr &&
-      unit.status !== "installed_pending_approval" &&
+      unit.status !== "installed" &&
       unit.status !== "client_approved"
     ) {
       flags.push("past_install_due");
@@ -69,7 +66,7 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   if (
     unit.completeByDate &&
     unit.completeByDate < todayStr &&
-    unit.status !== "installed_pending_approval" &&
+    unit.status !== "installed" &&
     unit.status !== "client_approved"
   ) {
     flags.push("past_complete_by");
@@ -85,23 +82,23 @@ export function flagUnits(units: Unit[], todayStr: string): FlaggedUnit[] {
 }
 
 export const FLAG_LABELS: Record<UnitFlag, string> = {
-  past_bracketing_due:    "Past Bracketing Date",
-  past_install_due:       "Past Install Date",
-  past_complete_by:       "Past Complete-By Date",
-  missing_installer:      "No Installer Assigned",
-  missing_bracketing_date:"No Bracket Date",
+  past_bracketing_due:       "Past Bracketing Date",
+  past_install_due:          "Past Install Date",
+  past_complete_by:          "Past Complete-By Date",
+  missing_installer:         "No Installer Assigned",
+  missing_bracketing_date:   "No Bracket Date",
   missing_installation_date: "No Install Date",
-  late_schedule:          "Install After Deadline",
-  at_risk:                "At Risk",
+  late_schedule:             "Install After Deadline",
+  at_risk:                   "At Risk",
 };
 
 export const FLAG_CLASSES: Record<UnitFlag, string> = {
-  past_bracketing_due:    "bg-orange-100 text-orange-700",
-  past_install_due:       "bg-red-100 text-red-700",
-  past_complete_by:       "bg-rose-100 text-rose-700",
-  missing_installer:      "bg-zinc-100 text-zinc-600",
-  missing_bracketing_date:"bg-zinc-100 text-zinc-600",
+  past_bracketing_due:       "bg-orange-100 text-orange-700",
+  past_install_due:          "bg-red-100 text-red-700",
+  past_complete_by:          "bg-rose-100 text-rose-700",
+  missing_installer:         "bg-zinc-100 text-zinc-600",
+  missing_bracketing_date:   "bg-zinc-100 text-zinc-600",
   missing_installation_date: "bg-zinc-100 text-zinc-600",
-  late_schedule:          "bg-amber-100 text-amber-700",
-  at_risk:                "bg-orange-100 text-orange-700",
+  late_schedule:             "bg-amber-100 text-amber-700",
+  at_risk:                   "bg-orange-100 text-orange-700",
 };

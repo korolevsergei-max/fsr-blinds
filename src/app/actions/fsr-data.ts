@@ -2,16 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
+import { requireOwnerOrScheduler, getLinkedSchedulerId, requireOwner } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import {
   UNIT_PHOTO_STAGES,
   UNIT_STATUS_LABELS,
+  UNIT_PHOTO_STAGE_LABELS,
   type BlindType,
   type RiskFlag,
   type UnitPhotoStage,
   type UnitStatus,
 } from "@/lib/types";
+import { recomputeUnitStatus } from "@/lib/unit-progress";
 
 const BUCKET = "fsr-media";
 
@@ -85,18 +87,9 @@ function getPhaseForStage(stage: UnitPhotoStage): "bracketing" | "installation" 
   return stage === "installed_pending_approval" ? "installation" : "bracketing";
 }
 
-function getStageForWindowUpload(status: UnitStatus | null | undefined): UnitPhotoStage {
-  if (status === "pending_scheduling" || status === "scheduled_bracketing") {
-    return "scheduled_bracketing";
-  }
-  if (
-    status === "install_date_scheduled" ||
-    status === "installed_pending_approval" ||
-    status === "client_approved"
-  ) {
-    return "installed_pending_approval";
-  }
-  return "bracketed_measured";
+function getStageForWindowUpload(): UnitPhotoStage {
+  // Measurement/creation photos are always "before" photos (pre-bracket stage).
+  return "scheduled_bracketing";
 }
 
 function formatStagePhotoLabel(
@@ -105,7 +98,7 @@ function formatStagePhotoLabel(
   index: number,
   total: number
 ): string {
-  const base = customLabel.trim() || UNIT_STATUS_LABELS[stage];
+  const base = customLabel.trim() || UNIT_PHOTO_STAGE_LABELS[stage];
   return total > 1 ? `${base} ${index + 1}` : base;
 }
 
@@ -307,7 +300,6 @@ export async function bulkAssignUnits(
 
     if (bracketingDate) {
       patch.bracketing_date = bracketingDate;
-      patch.status = "scheduled_bracketing";
     }
     if (installationDate) patch.installation_date = installationDate;
     if (completeByDate) patch.complete_by_date = completeByDate;
@@ -337,7 +329,6 @@ export async function bulkAssignUnits(
             .from("schedule_entries")
             .update({
               task_date: bracketingDate,
-              status: "scheduled_bracketing",
               owner_user_id: owner.id,
               owner_name: owner.displayName,
             })
@@ -353,7 +344,7 @@ export async function bulkAssignUnits(
             owner_name: owner.displayName,
             task_type: "bracketing",
             task_date: bracketingDate,
-            status: "scheduled_bracketing",
+            status: "not_started",
             risk_flag: "green",
           });
         }
@@ -372,7 +363,6 @@ export async function bulkAssignUnits(
             .from("schedule_entries")
             .update({
               task_date: installationDate,
-              status: "install_date_scheduled",
               owner_user_id: owner.id,
               owner_name: owner.displayName,
             })
@@ -388,7 +378,7 @@ export async function bulkAssignUnits(
             owner_name: owner.displayName,
             task_type: "installation",
             task_date: installationDate,
-            status: "install_date_scheduled",
+            status: "not_started",
             risk_flag: "green",
           });
         }
@@ -465,7 +455,7 @@ export async function updateUnitAssignment(
     }
 
     if (bracketingDate) {
-      patch.status = "scheduled_bracketing";
+      patch.bracketing_date = bracketingDate;
     }
 
     const { error } = await supabase
@@ -505,7 +495,7 @@ export async function updateUnitAssignment(
           owner_name: owner.displayName,
           task_type: "bracketing",
           task_date: bracketingDate,
-          status: "scheduled_bracketing",
+          status: "not_started",
           risk_flag: "green",
         });
       }
@@ -546,7 +536,7 @@ export async function updateUnitAssignment(
           owner_name: owner.displayName,
           task_type: "installation",
           task_date: installationDate,
-          status: "install_date_scheduled",
+          status: "not_started",
           risk_flag: "green",
         });
       }
@@ -554,21 +544,6 @@ export async function updateUnitAssignment(
       await supabase
         .from("schedule_entries")
         .delete()
-        .eq("unit_id", unitId)
-        .eq("task_type", "installation");
-    }
-
-    if (bracketingDate) {
-      await supabase
-        .from("schedule_entries")
-        .update({ status: "scheduled_bracketing" })
-        .eq("unit_id", unitId)
-        .eq("task_type", "bracketing");
-    }
-    if (installationDate) {
-      await supabase
-        .from("schedule_entries")
-        .update({ status: "install_date_scheduled" })
         .eq("unit_id", unitId)
         .eq("task_type", "installation");
     }
@@ -588,140 +563,43 @@ export async function updateUnitAssignment(
   }
 }
 
+/** @deprecated Use recomputeUnitStatus (auto-derived) or approveUnit (owner) instead. */
 export async function updateUnitStatus(
-  unitId: string,
-  status: UnitStatus,
-  note: string
+  _unitId: string,
+  _status: UnitStatus,
+  _note: string
 ): Promise<ActionResult> {
+  return { ok: false, error: "Manual status updates are no longer supported. Status is auto-derived from window data." };
+}
+
+export async function approveUnit(unitId: string): Promise<ActionResult> {
   try {
+    const owner = await requireOwner();
     const supabase = await createClient();
 
-    // Enforce: installers cannot manually set schedule-driven statuses.
-    // scheduled_bracketing is set automatically when a bracketing date is assigned.
-    // install_date_scheduled is set automatically when bracketed_measured is reached
-    // and an installation date already exists.
-    const { data: callerProfile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", (await supabase.auth.getUser()).data.user?.id ?? "")
-      .single();
-    const callerRole = callerProfile?.role ?? "installer";
-
-    if (
-      callerRole === "installer" &&
-      (status === "scheduled_bracketing" || status === "install_date_scheduled")
-    ) {
-      return {
-        ok: false,
-        error: `"${status === "scheduled_bracketing" ? "Scheduled for Bracketing" : "Install Scheduled"}" is set automatically when a date is assigned. Installers cannot manually select this status.`,
-      };
-    }
-
-    // Enforce: can only move to bracketed_measured if every window is measured
-    if (status === "bracketed_measured") {
-      const { data: rooms } = await supabase
-        .from("rooms")
-        .select("id")
-        .eq("unit_id", unitId);
-      const roomIds = (rooms ?? []).map((r) => r.id);
-
-      let totalWindows = 0;
-      let measuredWindows = 0;
-
-      if (roomIds.length > 0) {
-        const { count: total } = await supabase
-          .from("windows")
-          .select("*", { count: "exact", head: true })
-          .in("room_id", roomIds);
-        const { count: measured } = await supabase
-          .from("windows")
-          .select("*", { count: "exact", head: true })
-          .in("room_id", roomIds)
-          .eq("measured", true);
-        totalWindows = total ?? 0;
-        measuredWindows = measured ?? 0;
-      }
-
-      if (totalWindows === 0) {
-        return {
-          ok: false,
-          error: "No windows have been added to this unit. Add and measure all windows before marking as Bracketed & Measured.",
-        };
-      }
-      if (measuredWindows < totalWindows) {
-        return {
-          ok: false,
-          error: `${measuredWindows} of ${totalWindows} windows measured. All windows must be measured with photos before marking as Bracketed & Measured.`,
-        };
-      }
-    }
-
-    const { data: currentUnit } = await supabase
+    const { data: current } = await supabase
       .from("units")
-      .select("status, assigned_installer_name, installation_date")
+      .select("status, assigned_installer_name")
       .eq("id", unitId)
       .single();
 
-    const resolvedStatus: UnitStatus =
-      status === "bracketed_measured" && Boolean(currentUnit?.installation_date)
-        ? "install_date_scheduled"
-        : status;
-
-    if (status === "bracketed_measured") {
-      const beforeCount = await countBeforeBracketingMedia(supabase, unitId);
-      if (beforeCount === 0) {
-        return {
-          ok: false,
-          error:
-            "Add at least one Before Bracketing photo (Scheduled for Bracketing stage) before marking this unit as Bracketed & Measured.",
-        };
-      }
-      if (callerRole !== "installer") {
-        const afterCount = await countAfterBracketingMedia(supabase, unitId);
-        if (afterCount === 0) {
-          return {
-            ok: false,
-            error: `Add at least one After Bracketing photo for ${UNIT_STATUS_LABELS[status]} before updating this status.`,
-          };
-        }
-      }
-    }
-
-    if (resolvedStatus === "installed_pending_approval" && callerRole !== "installer") {
-      const stagePhotoCount = await countStageMedia(supabase, unitId, "installed_pending_approval");
-      if (stagePhotoCount === 0) {
-        return {
-          ok: false,
-          error: `Add at least one photo for ${UNIT_STATUS_LABELS[resolvedStatus]} before updating this status.`,
-        };
-      }
+    if (!current) return { ok: false, error: "Unit not found." };
+    if (current.status !== "installed") {
+      return {
+        ok: false,
+        error: "Unit must be fully installed before it can be approved.",
+      };
     }
 
     const { error } = await supabase
       .from("units")
-      .update({
-        status: resolvedStatus,
-        status_note: note.trim() || null,
-      })
+      .update({ status: "client_approved" })
       .eq("id", unitId);
-    if (error) {
-      return { ok: false, error: error.message };
-    }
+    if (error) return { ok: false, error: error.message };
 
-    if (resolvedStatus === "install_date_scheduled") {
-      await supabase
-        .from("schedule_entries")
-        .update({ status: "install_date_scheduled" })
-        .eq("unit_id", unitId)
-        .eq("task_type", "installation");
-    }
-
-    const actorName = currentUnit?.assigned_installer_name ?? "Installer";
-    await logUnitActivity(supabase, unitId, "installer", actorName, "status_changed", {
-      from: currentUnit?.status,
-      to: resolvedStatus,
-      requestedTo: status,
-      note: note.trim() || null,
+    await logUnitActivity(supabase, unitId, owner.role, owner.displayName, "status_changed", {
+      from: "installed",
+      to: "client_approved",
     });
 
     revalidateApp();
@@ -1019,7 +897,7 @@ export async function createWindowWithPhoto(
       .select("status")
       .eq("id", unitId)
       .single();
-    const uploadStage = getStageForWindowUpload(unitRow?.status);
+    const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
     const ext =
@@ -1123,6 +1001,7 @@ export async function createWindowWithPhoto(
 
     await refreshRoomAggregates(supabase, roomId);
     await refreshUnitAggregates(supabase, unitId);
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {
@@ -1194,7 +1073,7 @@ export async function updateWindowWithOptionalPhoto(
       .select("status")
       .eq("id", unitId)
       .single();
-    const uploadStage = getStageForWindowUpload(unitRow?.status);
+    const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
     let publicUrl: string | undefined;
@@ -1303,6 +1182,7 @@ export async function updateWindowWithOptionalPhoto(
 
     await refreshRoomAggregates(supabase, roomId);
     await refreshUnitAggregates(supabase, unitId);
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {
@@ -1396,6 +1276,8 @@ export async function uploadWindowPostBracketingPhoto(
       "post_bracketing_photo_added",
       { roomId, windowId, windowLabel: windowRow.label }
     );
+    await refreshUnitAggregates(supabase, unitId);
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {
@@ -1489,6 +1371,7 @@ export async function uploadWindowInstalledPhoto(
       "installed_photo_added",
       { roomId, windowId, windowLabel: windowRow.label }
     );
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {

@@ -30,6 +30,7 @@ import {
   UNIT_STATUS_LABELS,
   UNIT_STATUS_ORDER,
 } from "@/lib/types";
+import type { UnitStatus } from "@/lib/types";
 import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,22 @@ function formatDateTime(dateStr: string): string {
   });
 }
 
+const LEGACY_STATUS_LABELS: Record<string, string> = {
+  pending_scheduling: "Not Yet Started",
+  scheduled_bracketing: "Not Yet Started",
+  bracketed_measured: "Measured",
+  install_date_scheduled: "Bracketed",
+  installed_pending_approval: "Installed",
+};
+
+function resolveStatusLabel(value: unknown): string {
+  if (!value) return "";
+  const s = String(value);
+  return UNIT_STATUS_LABELS[s as keyof typeof UNIT_STATUS_LABELS]
+    ?? LEGACY_STATUS_LABELS[s]
+    ?? s;
+}
+
 function buildLogDescription(log: UnitActivityLog): string {
   const d = log.details ?? {};
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
@@ -108,8 +125,8 @@ function buildLogDescription(log: UnitActivityLog): string {
     return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
-    const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
-    const to = d.to ? UNIT_STATUS_LABELS[d.to as keyof typeof UNIT_STATUS_LABELS] ?? String(d.to) : "";
+    const from = resolveStatusLabel(d.from);
+    const to = resolveStatusLabel(d.to);
     const note = d.note ? ` — "${d.note}"` : "";
     return from && to ? `${from} → ${to}${note}` : to || from;
   }
@@ -223,7 +240,7 @@ export function ManagementUnitDetail({
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
 
-  const currentStep = UNIT_STATUS_ORDER[unit.status];
+  const currentStep = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
 
@@ -247,12 +264,14 @@ export function ManagementUnitDetail({
                 Assign
               </Button>
             </Link>
-            <Link href={`/management/units/${unit.id}/status`}>
-              <Button size="sm" variant="secondary">
-                <ArrowRight size={14} />
-                Status
-              </Button>
-            </Link>
+            {(unit.status as UnitStatus) === "installed" && (
+              <Link href={`/management/units/${unit.id}/status`}>
+                <Button size="sm">
+                  <ArrowRight size={14} />
+                  Approve
+                </Button>
+              </Link>
+            )}
           </div>
         }
       />
@@ -326,7 +345,7 @@ export function ManagementUnitDetail({
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
-            <SectionLabel as="h2" noMargin>Status</SectionLabel>
+            <SectionLabel as="h2" noMargin>Progress</SectionLabel>
             <UnitStageMediaViewer items={mediaItems} />
           </div>
           <div className="flex flex-col">
@@ -356,6 +375,14 @@ export function ManagementUnitDetail({
                     }`}
                   >
                     {UNIT_STATUS_LABELS[status]}
+                    {status === "client_approved" && (unit.status as UnitStatus) === "installed" && (
+                      <Link
+                        href={`/management/units/${unit.id}/status`}
+                        className="ml-2 text-[10px] font-bold text-accent underline underline-offset-2"
+                      >
+                        Approve →
+                      </Link>
+                    )}
                   </span>
                 </div>
               );

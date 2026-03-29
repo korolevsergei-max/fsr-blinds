@@ -136,7 +136,7 @@ export function ManagementDashboard({
     [scopedUnits, today]
   );
   const pendingApprovalCount = useMemo(
-    () => scopedUnits.filter((u) => u.status === "installed_pending_approval").length,
+    () => scopedUnits.filter((u) => u.status === "installed").length,
     [scopedUnits]
   );
   const atRiskCount = useMemo(

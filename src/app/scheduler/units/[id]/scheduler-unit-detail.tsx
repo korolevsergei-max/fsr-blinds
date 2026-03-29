@@ -19,6 +19,7 @@ import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
+import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -49,6 +50,22 @@ function formatRelative(dateStr: string): string {
   return date.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
 }
 
+const LEGACY_STATUS_LABELS: Record<string, string> = {
+  pending_scheduling: "Not Yet Started",
+  scheduled_bracketing: "Not Yet Started",
+  bracketed_measured: "Measured",
+  install_date_scheduled: "Bracketed",
+  installed_pending_approval: "Installed",
+};
+
+function resolveStatusLabel(value: unknown): string {
+  if (!value) return "";
+  const s = String(value);
+  return UNIT_STATUS_LABELS[s as UnitStatus]
+    ?? LEGACY_STATUS_LABELS[s]
+    ?? s;
+}
+
 function buildLogDescription(log: UnitActivityLog): string {
   const d = log.details ?? {};
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
@@ -65,8 +82,8 @@ function buildLogDescription(log: UnitActivityLog): string {
     return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
-    const from = d.from ? UNIT_STATUS_LABELS[d.from as keyof typeof UNIT_STATUS_LABELS] ?? String(d.from) : "";
-    const to = d.to ? UNIT_STATUS_LABELS[d.to as keyof typeof UNIT_STATUS_LABELS] ?? String(d.to) : "";
+    const from = resolveStatusLabel(d.from);
+    const to = resolveStatusLabel(d.to);
     const note = d.note ? ` — "${d.note}"` : "";
     return from && to ? `${from} → ${to}${note}` : to || from;
   }
@@ -129,15 +146,8 @@ export function SchedulerUnitDetail({
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3"
         >
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             <StatusChip status={unit.status} />
-            <Link
-              href={`/scheduler/units/${id}/status`}
-              className="flex items-center gap-1 text-[12px] font-semibold text-accent"
-            >
-              <ArrowRight size={13} />
-              Update status
-            </Link>
           </div>
           {flags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

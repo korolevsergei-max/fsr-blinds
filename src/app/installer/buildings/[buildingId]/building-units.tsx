@@ -35,7 +35,7 @@ function filterUnits(units: Unit[], filter: Filter): Unit[] {
           u.status !== "client_approved" &&
           u.bracketingDate &&
           u.bracketingDate < today &&
-          u.status === "scheduled_bracketing"
+          u.status === "not_started"
       );
     case "completed":
       return units.filter((u) => u.status === "client_approved");

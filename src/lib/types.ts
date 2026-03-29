@@ -1,30 +1,27 @@
 export const UNIT_STATUSES = [
-  "pending_scheduling",
-  "scheduled_bracketing",
-  "bracketed_measured",
-  "install_date_scheduled",
-  "installed_pending_approval",
+  "not_started",
+  "measured",
+  "bracketed",
+  "installed",
   "client_approved",
 ] as const;
 
 export type UnitStatus = (typeof UNIT_STATUSES)[number];
 
 export const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
-  pending_scheduling: "Pending Scheduling",
-  scheduled_bracketing: "Scheduled for Bracketing",
-  bracketed_measured: "Bracketed & Measured",
-  install_date_scheduled: "Install Scheduled",
-  installed_pending_approval: "Installed, Awaiting Approval",
-  client_approved: "Client Approved",
+  not_started: "Not Yet Started",
+  measured: "Measured",
+  bracketed: "Bracketed",
+  installed: "Installed",
+  client_approved: "Approved",
 };
 
 export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
-  pending_scheduling: 0,
-  scheduled_bracketing: 1,
-  bracketed_measured: 2,
-  install_date_scheduled: 3,
-  installed_pending_approval: 4,
-  client_approved: 5,
+  not_started: 0,
+  measured: 1,
+  bracketed: 2,
+  installed: 3,
+  client_approved: 4,
 };
 
 export const UNIT_PHOTO_STAGES = [
@@ -175,7 +172,8 @@ export interface ScheduleEntry {
   ownerName: string | null;
   taskType: "bracketing" | "installation";
   date: string;
-  status: UnitStatus;
+  /** Derived unit progress status; kept as string to handle legacy DB values safely. */
+  status: string;
 }
 
 export interface Notification {

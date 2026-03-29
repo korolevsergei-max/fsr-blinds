@@ -19,6 +19,7 @@ import {
   UNIT_STATUS_ORDER,
   type UnitActivityLog,
 } from "@/lib/types";
+import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MetricTile } from "@/components/ui/metric-tile";
@@ -64,7 +65,7 @@ export function UnitDetail({
     );
   }
 
-  const currentStep = UNIT_STATUS_ORDER[unit.status];
+  const currentStep = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
   const today = new Date();
@@ -86,21 +87,21 @@ export function UnitDetail({
     return day.getTime() < todayDay.getTime();
   };
 
-  const getStatusChangeDate = (status: "bracketed_measured" | "installed_pending_approval") => {
+  const getStatusChangeDate = (targetStatus: string) => {
     const match = activityLog.find((log) => {
       if (log.action !== "status_changed") return false;
       const details = log.details as Record<string, unknown> | null;
-      return details?.to === status || details?.requestedTo === status;
+      return details?.to === targetStatus || details?.requestedTo === targetStatus;
     });
     return match?.createdAt ?? null;
   };
 
-  const bracketedDate = getStatusChangeDate("bracketed_measured");
-  const installedDate = getStatusChangeDate("installed_pending_approval");
+  const bracketedDate = getStatusChangeDate("bracketed");
+  const installedDate = getStatusChangeDate("installed");
 
-  const showBracketedDate = UNIT_STATUS_ORDER[unit.status] >= UNIT_STATUS_ORDER.bracketed_measured;
-  const showInstalledDate =
-    UNIT_STATUS_ORDER[unit.status] >= UNIT_STATUS_ORDER.installed_pending_approval;
+  const currentStatusOrder = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
+  const showBracketedDate = currentStatusOrder >= UNIT_STATUS_ORDER.bracketed;
+  const showInstalledDate = currentStatusOrder >= UNIT_STATUS_ORDER.installed;
 
   // Scheduled dates come from the unit record; actual completed dates come from the activity log.
   const scheduledBracketingDate = unit.bracketingDate;
@@ -340,9 +341,9 @@ export function UnitDetail({
                     >
                       {UNIT_STATUS_LABELS[status]}
                     </span>
-                    {isCurrent && unit.bracketingDate && (
+                    {status === "not_started" && isCurrent && unit.bracketingDate && (
                       <p className="text-[11px] text-muted mt-0.5">
-                        {unit.bracketingDate}
+                        Scheduled: {unit.bracketingDate}
                       </p>
                     )}
                   </div>
@@ -419,7 +420,7 @@ export function UnitDetail({
           </Link>
           <Link href={`/installer/units/${unit.id}/status`}>
             <Button variant="secondary" fullWidth size="lg">
-              Update Status
+              View Progress
             </Button>
           </Link>
           <Link href={`/installer/units/${unit.id}/summary`}>

@@ -282,7 +282,7 @@ function normalizeScheduleEntries(units: Unit[], schedule: ScheduleEntry[]): Sch
         ownerName: existing?.ownerName ?? null,
         taskType: "bracketing",
         date: unit.bracketingDate,
-        status: existing?.status ?? "scheduled_bracketing",
+        status: existing?.status ?? "not_started",
       });
     }
 
@@ -298,7 +298,7 @@ function normalizeScheduleEntries(units: Unit[], schedule: ScheduleEntry[]): Sch
         ownerName: existing?.ownerName ?? null,
         taskType: "installation",
         date: unit.installationDate,
-        status: existing?.status ?? "install_date_scheduled",
+        status: existing?.status ?? "not_started",
       });
     }
   }
