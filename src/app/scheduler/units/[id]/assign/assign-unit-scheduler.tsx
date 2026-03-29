@@ -46,9 +46,9 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
       const result = await updateUnitAssignment(
         unit.id,
         selectedInstaller,
+        unit.measurementDate || "",
         unit.bracketingDate || "",
-        unit.installationDate || "",
-        unit.completeByDate ?? null
+        unit.installationDate || ""
       );
       if (!result.ok) {
         setSaveError(result.error);
@@ -135,7 +135,7 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
         </motion.div>
 
         <p className="text-[13px] text-muted">
-          To edit bracketing, installation, or complete-by dates, use{" "}
+          To edit measurement, bracketing, or installation dates, use{" "}
           <Link href={`/scheduler/units/${unit.id}/dates`} className="font-semibold text-accent">
             Key dates
           </Link>

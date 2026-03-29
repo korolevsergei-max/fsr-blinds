@@ -71,15 +71,10 @@ function buildLogDescription(log: UnitActivityLog): string {
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
     const parts: string[] = [];
     if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.measurementDate) parts.push(`Measurement: ${d.measurementDate}`);
     if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
     if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
-    if (d.completeByDate) parts.push(`Complete by: ${d.completeByDate}`);
     return parts.join(" · ");
-  }
-  if (log.action === "complete_by_date_set") {
-    const from = d.from ? String(d.from) : "—";
-    const to = d.to ? String(d.to) : "—";
-    return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
     const from = resolveStatusLabel(d.from);
@@ -101,9 +96,11 @@ function FlagBadge({ flag }: { flag: UnitFlag }) {
 export function SchedulerUnitDetail({
   data,
   activityLog,
+  milestones,
 }: {
   data: AppDataset;
   activityLog: UnitActivityLog[];
+  milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
@@ -120,13 +117,29 @@ export function SchedulerUnitDetail({
   const isPastDue = (dateStr: string | null | undefined) =>
     dateStr ? dateStr < today : false;
 
-  const dateField = (label: string, value: string | null | undefined) => (
+  const formatShort = (value: string | null | undefined) => {
+    if (!value) return null;
+    return new Date(value).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const milestoneField = (
+    label: string,
+    scheduled: string | null | undefined,
+    completed: string | null | undefined
+  ) => (
     <div className="flex flex-col gap-0.5">
       <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted">{label}</p>
-      <p className={`text-[13px] font-semibold ${isPastDue(value) ? "text-red-600" : "text-foreground"}`}>
-        {value ?? "—"}
-        {isPastDue(value) && <span className="ml-1 text-[10px] font-bold text-red-500">OVERDUE</span>}
+      <p className={`text-[13px] font-semibold ${isPastDue(scheduled) && !completed ? "text-red-600" : "text-foreground"}`}>
+        {formatShort(scheduled) ?? "—"}
+        {isPastDue(scheduled) && !completed && (
+          <span className="ml-1 text-[10px] font-bold text-red-500">OVERDUE</span>
+        )}
       </p>
+      {completed && (
+        <p className="text-[11px] font-medium text-accent">
+          Done: {formatShort(completed)}
+        </p>
+      )}
     </div>
   );
 
@@ -174,9 +187,9 @@ export function SchedulerUnitDetail({
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {dateField("Bracketing", unit.bracketingDate)}
-            {dateField("Installation", unit.installationDate)}
-            {dateField("Complete By", unit.completeByDate)}
+            {milestoneField("Measurement", unit.measurementDate, milestones.allMeasured ? milestones.measuredCompletedAt : null)}
+            {milestoneField("Bracketing", unit.bracketingDate, milestones.allBracketed ? milestones.bracketedCompletedAt : null)}
+            {milestoneField("Installation", unit.installationDate, milestones.allInstalled ? milestones.installedCompletedAt : null)}
           </div>
         </motion.div>
 

@@ -32,7 +32,7 @@ export function BuildingDetail({ data }: { data: AppDataset }) {
   const [unitNumber, setUnitNumber] = useState("");
   const [earliestBracketing, setEarliestBracketing] = useState("");
   const [earliestInstallation, setEarliestInstallation] = useState("");
-  const [completeByDate, setCompleteByDate] = useState("");
+  const [completeByDate, setCompleteByDate] = useState(""); // kept for createUnit API compat
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -119,12 +119,6 @@ export function BuildingDetail({ data }: { data: AppDataset }) {
               value={earliestInstallation}
               onChange={setEarliestInstallation}
               helper="When can installation start?"
-            />
-            <DateInput
-              label="Complete By Date"
-              value={completeByDate}
-              onChange={setCompleteByDate}
-              helper="Optional deadline for completing the unit"
             />
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>

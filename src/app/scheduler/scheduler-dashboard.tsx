@@ -128,8 +128,7 @@ export function SchedulerDashboard({
         const f = computeUnitFlags(u, today);
         return (
           f.includes("past_bracketing_due") ||
-          f.includes("past_install_due") ||
-          f.includes("past_complete_by")
+          f.includes("past_install_due")
         );
       }).length,
     [scopedUnits, today]

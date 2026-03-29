@@ -60,7 +60,7 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
-  const [completeByFilter, setCompleteByFilter] = useState<DateRange>("all");
+  const [installFilter, setInstallFilter] = useState<DateRange>("all");
 
   const availableBuildings = useMemo(
     () => (clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter)),
@@ -73,12 +73,14 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
       if (!unit) return false;
       if (clientFilter !== "all" && unit.clientId !== clientFilter) return false;
       if (buildingFilter !== "all" && unit.buildingId !== buildingFilter) return false;
-      if (completeByFilter !== "all" && !isWithinRange(unit.completeByDate ?? null, completeByFilter)) return false;
+      if (installFilter !== "all" && !isWithinRange(unit.installationDate ?? null, installFilter)) return false;
       if (!s.date) return false;
 
-      // Defensive guard:
-      // Only show bracketing tasks when the unit has a scheduled bracketing date,
-      // and only show installation tasks when the unit has a scheduled installation date.
+      // Defensive guard: match task type to the corresponding unit date field
+      if (s.taskType === "measurement") {
+        if (!unit.measurementDate) return false;
+        if (unit.measurementDate.slice(0, 10) !== s.date.slice(0, 10)) return false;
+      }
       if (s.taskType === "bracketing") {
         if (!unit.bracketingDate) return false;
         if (unit.bracketingDate.slice(0, 10) !== s.date.slice(0, 10)) return false;
@@ -89,7 +91,7 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
       }
       return true;
     });
-  }, [schedule, units, clientFilter, buildingFilter, completeByFilter]);
+  }, [schedule, units, clientFilter, buildingFilter, installFilter]);
 
   const entriesByDate = useMemo(() => {
     const map = new Map<string, typeof schedule>();
@@ -104,7 +106,7 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
   const activeFilterCount = [
     clientFilter !== "all",
     buildingFilter !== "all",
-    completeByFilter !== "all",
+    installFilter !== "all",
   ].filter(Boolean).length;
 
   const installerColorMap = new Map<string, ReturnType<typeof getInstallerColor>>();
@@ -169,15 +171,15 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
           />
           <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
           <FilterDropdown
-            label="Complete By"
-            value={completeByFilter}
+            label="Installation Date"
+            value={installFilter}
             options={completeByOptions}
-            onChange={(v) => setCompleteByFilter(v as DateRange)}
+            onChange={(v) => setInstallFilter(v as DateRange)}
           />
           {activeFilterCount > 0 && (
             <button
               type="button"
-              onClick={() => { setClientFilter("all"); setBuildingFilter("all"); setCompleteByFilter("all"); }}
+              onClick={() => { setClientFilter("all"); setBuildingFilter("all"); setInstallFilter("all"); }}
               className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50"
             >
               <X size={11} weight="bold" /> Clear

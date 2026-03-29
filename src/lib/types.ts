@@ -89,10 +89,12 @@ export interface Unit {
   status: UnitStatus;
   assignedInstallerId: string | null;
   assignedInstallerName: string | null;
+  measurementDate: string | null;
   bracketingDate: string | null;
   installationDate: string | null;
   earliestBracketingDate: string | null;
   earliestInstallationDate?: string | null;
+  /** @deprecated kept for historical activity logs only; not actively scheduled */
   completeByDate?: string | null;
   roomCount: number;
   windowCount: number;
@@ -170,7 +172,7 @@ export interface ScheduleEntry {
   clientName: string;
   ownerUserId: string | null;
   ownerName: string | null;
-  taskType: "bracketing" | "installation";
+  taskType: "measurement" | "bracketing" | "installation";
   date: string;
   /** Derived unit progress status; kept as string to handle legacy DB values safely. */
   status: string;

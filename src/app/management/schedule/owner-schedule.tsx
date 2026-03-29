@@ -61,7 +61,7 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
   const [monthOffset, setMonthOffset] = useState(0);
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
-  const [completeByFilter, setCompleteByFilter] = useState<DateRange>("all");
+  const [installFilter, setInstallFilter] = useState<DateRange>("all");
   const [actionResult, setActionResult] = useState<string>("");
 
   const availableBuildings = useMemo(
@@ -76,11 +76,11 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
 
       if (clientFilter !== "all" && unit.clientId !== clientFilter) return false;
       if (buildingFilter !== "all" && unit.buildingId !== buildingFilter) return false;
-      if (completeByFilter !== "all" && !isWithinRange(unit.completeByDate ?? null, completeByFilter)) return false;
+      if (installFilter !== "all" && !isWithinRange(unit.installationDate ?? null, installFilter)) return false;
 
       return true;
     });
-  }, [schedule, units, clientFilter, buildingFilter, completeByFilter]);
+  }, [schedule, units, clientFilter, buildingFilter, installFilter]);
 
   const entriesByDate = useMemo(() => {
     const map = new Map<string, typeof schedule>();
@@ -95,7 +95,7 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
   const activeFilterCount = [
     clientFilter !== "all",
     buildingFilter !== "all",
-    completeByFilter !== "all",
+    installFilter !== "all",
   ].filter(Boolean).length;
 
   const installerColorMap = new Map<string, ReturnType<typeof getInstallerColor>>();
@@ -182,10 +182,10 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
             onChange={setBuildingFilter}
           />
           <FilterDropdown
-            label="Complete By"
-            value={completeByFilter}
+            label="Installation Date"
+            value={installFilter}
             options={completeByOptions}
-            onChange={(v) => setCompleteByFilter(v as DateRange)}
+            onChange={(v) => setInstallFilter(v as DateRange)}
           />
           {activeFilterCount > 0 && (
             <button
@@ -193,7 +193,7 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
               onClick={() => {
                 setClientFilter("all");
                 setBuildingFilter("all");
-                setCompleteByFilter("all");
+                setInstallFilter("all");
               }}
               className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
             >

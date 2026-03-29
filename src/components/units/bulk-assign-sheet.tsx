@@ -23,9 +23,9 @@ export function BulkAssignSheet({
   onSuccess,
 }: BulkAssignSheetProps) {
   const [selectedInstaller, setSelectedInstaller] = useState("");
+  const [measurementDate, setMeasurementDate] = useState("");
   const [bracketingDate, setBracketingDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
-  const [completeByDate, setCompleteByDate] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -48,7 +48,7 @@ export function BulkAssignSheet({
   }, [selectedInstaller, validInstallerIds]);
 
   const handleSave = () => {
-    if (!selectedInstaller && !bracketingDate && !installationDate && !completeByDate) return;
+    if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate) return;
 
     setError("");
     startTransition(async () => {
@@ -58,7 +58,7 @@ export function BulkAssignSheet({
         bracketingDate,
         installationDate,
         undefined,
-        completeByDate
+        measurementDate
       );
       if (!result.ok) {
         setError(result.error);
@@ -156,27 +156,21 @@ export function BulkAssignSheet({
               Dates (optional)
             </SectionLabel>
             <div className="flex flex-col gap-3">
-              <div>
-                <DateInput
-                  label="Bracketing Date"
-                  value={bracketingDate}
-                  onChange={setBracketingDate}
-                />
-              </div>
-              <div>
-                <DateInput
-                  label="Installation Target Date"
-                  value={installationDate}
-                  onChange={setInstallationDate}
-                />
-              </div>
-              <div>
-                <DateInput
-                  label="Complete By Date"
-                  value={completeByDate}
-                  onChange={setCompleteByDate}
-                />
-              </div>
+              <DateInput
+                label="Measurement Date"
+                value={measurementDate}
+                onChange={setMeasurementDate}
+              />
+              <DateInput
+                label="Bracketing Date"
+                value={bracketingDate}
+                onChange={setBracketingDate}
+              />
+              <DateInput
+                label="Installation Date"
+                value={installationDate}
+                onChange={setInstallationDate}
+              />
             </div>
           </div>
 
@@ -196,9 +190,9 @@ export function BulkAssignSheet({
                 size="lg"
                 disabled={
                   (!hasValidSelectedInstaller &&
+                    !measurementDate &&
                     !bracketingDate &&
-                    !installationDate &&
-                    !completeByDate) ||
+                    !installationDate) ||
                   pending
                 }
                 onClick={handleSave}

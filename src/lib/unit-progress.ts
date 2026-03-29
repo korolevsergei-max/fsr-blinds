@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUnitMilestoneCoverageWithClient } from "@/lib/unit-milestones";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -25,72 +26,22 @@ export async function recomputeUnitStatus(
 
   if (current?.status === "client_approved") return;
 
-  const newStatus = await deriveUnitStatus(supabase, unitId);
+  const coverage = await getUnitMilestoneCoverageWithClient(supabase, unitId);
+  const newStatus = deriveStatusFromCoverage(coverage);
+
   if (newStatus !== current?.status) {
     await supabase.from("units").update({ status: newStatus }).eq("id", unitId);
     await logStatusChange(supabase, unitId, current?.status ?? "not_started", newStatus);
   }
 }
 
-async function deriveUnitStatus(
-  supabase: SupabaseClient,
-  unitId: string
-): Promise<string> {
-  const { data: rooms } = await supabase
-    .from("rooms")
-    .select("id")
-    .eq("unit_id", unitId);
-  const roomIds = (rooms ?? []).map((r) => r.id);
-
-  if (roomIds.length === 0) return "not_started";
-
-  const { data: windows } = await supabase
-    .from("windows")
-    .select("id")
-    .in("room_id", roomIds);
-  const windowIds = (windows ?? []).map((w) => w.id);
-
-  if (windowIds.length === 0) return "not_started";
-
-  // Gate 1: all windows measured?
-  const { count: measuredCount } = await supabase
-    .from("windows")
-    .select("*", { count: "exact", head: true })
-    .in("id", windowIds)
-    .eq("measured", true);
-
-  if ((measuredCount ?? 0) < windowIds.length) return "not_started";
-
-  // Gate 2: all windows have a post-bracketing photo?
-  const { data: bracketedMedia } = await supabase
-    .from("media_uploads")
-    .select("window_id")
-    .eq("unit_id", unitId)
-    .eq("stage", "bracketed_measured")
-    .eq("upload_kind", "window_measure")
-    .not("window_id", "is", null);
-
-  const bracketedWindowIds = new Set(
-    (bracketedMedia ?? []).map((m: { window_id: string }) => m.window_id)
-  );
-  const allBracketed = windowIds.every((id) => bracketedWindowIds.has(id));
-  if (!allBracketed) return "measured";
-
-  // Gate 3: all windows have an installed photo?
-  const { data: installedMedia } = await supabase
-    .from("media_uploads")
-    .select("window_id")
-    .eq("unit_id", unitId)
-    .eq("stage", "installed_pending_approval")
-    .eq("upload_kind", "window_measure")
-    .not("window_id", "is", null);
-
-  const installedWindowIds = new Set(
-    (installedMedia ?? []).map((m: { window_id: string }) => m.window_id)
-  );
-  const allInstalled = windowIds.every((id) => installedWindowIds.has(id));
-  if (!allInstalled) return "bracketed";
-
+function deriveStatusFromCoverage(
+  coverage: Awaited<ReturnType<typeof getUnitMilestoneCoverageWithClient>>
+): string {
+  if (coverage.totalWindows === 0) return "not_started";
+  if (!coverage.allMeasured) return "not_started";
+  if (!coverage.allBracketed) return "measured";
+  if (!coverage.allInstalled) return "bracketed";
   return "installed";
 }
 

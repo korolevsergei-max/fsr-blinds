@@ -105,13 +105,13 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const sortedFilteredUnits = useMemo(() => {
     if (sortOrder === "none") return filteredUnits;
     return [...filteredUnits].sort((a, b) => {
-      if (sortOrder === "complete_asc" || sortOrder === "complete_desc") {
-        if (!a.completeByDate && !b.completeByDate) return 0;
-        if (!a.completeByDate) return 1;
-        if (!b.completeByDate) return -1;
-        const ta = new Date(a.completeByDate).getTime();
-        const tb = new Date(b.completeByDate).getTime();
-        return sortOrder === "complete_asc" ? ta - tb : tb - ta;
+      if (sortOrder === "install_asc" || sortOrder === "install_desc") {
+        if (!a.installationDate && !b.installationDate) return 0;
+        if (!a.installationDate) return 1;
+        if (!b.installationDate) return -1;
+        const ta = new Date(a.installationDate).getTime();
+        const tb = new Date(b.installationDate).getTime();
+        return sortOrder === "install_asc" ? ta - tb : tb - ta;
       }
       if (sortOrder === "unit_asc" || sortOrder === "unit_desc") {
         const cmp = a.unitNumber.localeCompare(b.unitNumber, undefined, {
@@ -162,8 +162,8 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     { value: "none", label: "Default" },
     { value: "newest", label: "Added (Newest)" },
     { value: "oldest", label: "Added (Oldest)" },
-    { value: "complete_asc", label: "Complete By (Earliest)" },
-    { value: "complete_desc", label: "Complete By (Latest)" },
+    { value: "install_asc", label: "Installation (Earliest)" },
+    { value: "install_desc", label: "Installation (Latest)" },
     { value: "unit_asc", label: "Unit Number (Ascending)" },
     { value: "unit_desc", label: "Unit Number (Descending)" },
   ];

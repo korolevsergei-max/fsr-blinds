@@ -31,7 +31,6 @@ import {
   UNIT_STATUS_ORDER,
 } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
-import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -114,15 +113,10 @@ function buildLogDescription(log: UnitActivityLog): string {
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
     const parts: string[] = [];
     if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.measurementDate) parts.push(`Measurement: ${d.measurementDate}`);
     if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
     if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
-    if (d.completeByDate) parts.push(`Complete by: ${d.completeByDate}`);
     return parts.join(" · ");
-  }
-  if (log.action === "complete_by_date_set") {
-    const from = d.from ? String(d.from) : "—";
-    const to = d.to ? String(d.to) : "—";
-    return `${from} → ${to}`;
   }
   if (log.action === "status_changed") {
     const from = resolveStatusLabel(d.from);
@@ -192,10 +186,12 @@ export function ManagementUnitDetail({
   data,
   activityLog,
   mediaItems,
+  milestones,
 }: {
   data: AppDataset;
   activityLog: UnitActivityLog[];
   mediaItems: UnitStageMediaItem[];
+  milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
@@ -203,22 +199,15 @@ export function ManagementUnitDetail({
 
   const [isUpdatingDate, startDateTransition] = useTransition();
 
-  const handleCompleteDateChange = (dateString: string) => {
-    if (!unit) return;
-    startDateTransition(async () => {
-      await updateUnitCompleteByDate(unit.id, dateString || null);
-    });
-  };
-
   const handleBracketingDateChange = (dateString: string) => {
     if (!unit) return;
     startDateTransition(async () => {
       await updateUnitAssignment(
         unit.id,
         unit.assignedInstallerId,
+        unit.measurementDate || "",
         dateString,
-        unit.installationDate || "",
-        unit.completeByDate || null
+        unit.installationDate || ""
       );
     });
   };
@@ -229,9 +218,22 @@ export function ManagementUnitDetail({
       await updateUnitAssignment(
         unit.id,
         unit.assignedInstallerId,
+        unit.measurementDate || "",
         unit.bracketingDate || "",
+        dateString
+      );
+    });
+  };
+
+  const handleMeasurementDateChange = (dateString: string) => {
+    if (!unit) return;
+    startDateTransition(async () => {
+      await updateUnitAssignment(
+        unit.id,
+        unit.assignedInstallerId,
         dateString,
-        unit.completeByDate || null
+        unit.bracketingDate || "",
+        unit.installationDate || ""
       );
     });
   };
@@ -243,6 +245,20 @@ export function ManagementUnitDetail({
   const currentStep = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
+
+  // Evidence-based completion dates
+  const measurementCompleted = milestones.allMeasured ? milestones.measuredCompletedAt : null;
+  const bracketingCompleted = milestones.allBracketed ? milestones.bracketedCompletedAt : null;
+  const installationCompleted = milestones.allInstalled ? milestones.installedCompletedAt : null;
+
+  const formatDate = (value: string | null | undefined) => {
+    if (!value) return null;
+    return new Date(value).toLocaleDateString("en-CA", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   return (
     <div className="flex flex-col">
@@ -299,10 +315,10 @@ export function ManagementUnitDetail({
             <div className="flex items-center gap-3 px-4 py-3">
               <CalendarBlank size={17} className="text-tertiary" />
               <div>
-                <p className="text-[11px] text-tertiary">Complete by</p>
+                <p className="text-[11px] text-tertiary">Measurement date</p>
                 <DateInput
-                  value={unit.completeByDate || ""}
-                  onChange={handleCompleteDateChange}
+                  value={unit.measurementDate || ""}
+                  onChange={handleMeasurementDateChange}
                   disabled={isUpdatingDate}
                   compact
                   className="-ml-1"
@@ -353,6 +369,19 @@ export function ManagementUnitDetail({
               const step = UNIT_STATUS_ORDER[status];
               const isComplete = step < currentStep;
               const isCurrent = step === currentStep;
+
+              // Map each progress status to its scheduled/completed dates
+              const scheduledDate =
+                status === "measured" ? formatDate(unit.measurementDate)
+                : status === "bracketed" ? formatDate(unit.bracketingDate)
+                : status === "installed" ? formatDate(unit.installationDate)
+                : null;
+              const completedDate =
+                status === "measured" ? formatDate(measurementCompleted)
+                : status === "bracketed" ? formatDate(bracketingCompleted)
+                : status === "installed" ? formatDate(installationCompleted)
+                : null;
+
               return (
                 <div key={status} className="flex items-start gap-3">
                   <div className="flex flex-col items-center">
@@ -369,21 +398,33 @@ export function ManagementUnitDetail({
                       <div className={`w-px h-5 ${isComplete ? "bg-emerald-300" : "bg-zinc-200"}`} />
                     )}
                   </div>
-                  <span
-                    className={`text-[12px] pb-4 ${
-                      isCurrent ? "font-semibold text-foreground" : isComplete ? "text-secondary" : "text-tertiary"
-                    }`}
-                  >
-                    {UNIT_STATUS_LABELS[status]}
-                    {status === "client_approved" && (unit.status as UnitStatus) === "installed" && (
-                      <Link
-                        href={`/management/units/${unit.id}/status`}
-                        className="ml-2 text-[10px] font-bold text-accent underline underline-offset-2"
-                      >
-                        Approve →
-                      </Link>
+                  <div className={`pb-4 flex-1 ${isCurrent ? "text-foreground" : isComplete ? "text-secondary" : "text-tertiary"}`}>
+                    <span className={`text-[12px] ${isCurrent ? "font-semibold" : isComplete ? "font-medium" : ""}`}>
+                      {UNIT_STATUS_LABELS[status]}
+                      {status === "client_approved" && (unit.status as UnitStatus) === "installed" && (
+                        <Link
+                          href={`/management/units/${unit.id}/status`}
+                          className="ml-2 text-[10px] font-bold text-accent underline underline-offset-2"
+                        >
+                          Approve →
+                        </Link>
+                      )}
+                    </span>
+                    {(scheduledDate || completedDate) && (
+                      <div className="flex gap-4 mt-0.5">
+                        {scheduledDate && (
+                          <p className="text-[10px] text-tertiary">
+                            Sched: {scheduledDate}
+                          </p>
+                        )}
+                        {completedDate && (
+                          <p className="text-[10px] text-accent font-medium">
+                            Done: {completedDate}
+                          </p>
+                        )}
+                      </div>
                     )}
-                  </span>
+                  </div>
                 </div>
               );
             })}

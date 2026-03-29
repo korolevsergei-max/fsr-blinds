@@ -33,10 +33,12 @@ export function UnitDetail({
   data,
   mediaItems,
   activityLog,
+  milestones,
 }: {
   data: AppDataset;
   mediaItems: UnitStageMediaItem[];
   activityLog: UnitActivityLog[];
+  milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
@@ -87,31 +89,14 @@ export function UnitDetail({
     return day.getTime() < todayDay.getTime();
   };
 
-  const getStatusChangeDate = (targetStatus: string) => {
-    const match = activityLog.find((log) => {
-      if (log.action !== "status_changed") return false;
-      const details = log.details as Record<string, unknown> | null;
-      return details?.to === targetStatus || details?.requestedTo === targetStatus;
-    });
-    return match?.createdAt ?? null;
-  };
+  // Evidence-based completion dates from the milestone coverage helper
+  const measurementCompleted = milestones.allMeasured ? milestones.measuredCompletedAt : null;
+  const bracketingCompleted = milestones.allBracketed ? milestones.bracketedCompletedAt : null;
+  const installationCompleted = milestones.allInstalled ? milestones.installedCompletedAt : null;
 
-  const bracketedDate = getStatusChangeDate("bracketed");
-  const installedDate = getStatusChangeDate("installed");
-
-  const currentStatusOrder = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
-  const showBracketedDate = currentStatusOrder >= UNIT_STATUS_ORDER.bracketed;
-  const showInstalledDate = currentStatusOrder >= UNIT_STATUS_ORDER.installed;
-
-  // Scheduled dates come from the unit record; actual completed dates come from the activity log.
-  const scheduledBracketingDate = unit.bracketingDate;
-  const scheduledInstallationDate = unit.installationDate;
-  const actualBracketingDate = showBracketedDate ? bracketedDate : null;
-  const actualInstallationDate = showInstalledDate ? installedDate : null;
-
-  const bracketingPastDue = isPastDue(scheduledBracketingDate) && !showBracketedDate;
-  const installationPastDue = isPastDue(scheduledInstallationDate) && !showInstalledDate;
-  const completeByPastDue = isPastDue(unit.completeByDate);
+  const measurementPastDue = isPastDue(unit.measurementDate) && !milestones.allMeasured;
+  const bracketingPastDue = isPastDue(unit.bracketingDate) && !milestones.allBracketed;
+  const installationPastDue = isPastDue(unit.installationDate) && !milestones.allInstalled;
 
   return (
     <div className="flex flex-col">
@@ -150,6 +135,43 @@ export function UnitDetail({
           transition={{ delay: 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="grid grid-cols-1 gap-3"
         >
+          {/* Measurement milestone */}
+          <div
+            className={`rounded-2xl border px-4 py-3 ${
+              measurementPastDue
+                ? "border-red-200 bg-red-50"
+                : "border-border bg-white"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className={`text-[10px] font-bold uppercase tracking-[0.12em] ${measurementPastDue ? "text-red-600" : "text-muted"}`}>
+                Measurement
+              </p>
+              {measurementPastDue && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                  <WarningCircle size={12} weight="fill" />
+                  Overdue
+                </span>
+              )}
+            </div>
+            <div className="flex items-start gap-6">
+              <div>
+                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
+                <p className={`mt-0.5 text-sm font-semibold ${measurementPastDue ? "text-red-700" : "text-foreground"}`}>
+                  {formatDate(unit.measurementDate)}
+                </p>
+              </div>
+              {measurementCompleted && (
+                <div>
+                  <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
+                  <p className="mt-0.5 text-sm font-semibold text-accent">
+                    {formatDate(measurementCompleted)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Bracketing milestone */}
           <div
             className={`rounded-2xl border px-4 py-3 ${
@@ -169,7 +191,7 @@ export function UnitDetail({
               {bracketingPastDue && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
                   <WarningCircle size={12} weight="fill" />
-                  Overdue *
+                  Overdue
                 </span>
               )}
             </div>
@@ -177,14 +199,14 @@ export function UnitDetail({
               <div>
                 <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
                 <p className={`mt-0.5 text-sm font-semibold ${bracketingPastDue ? "text-red-700" : "text-foreground"}`}>
-                  {formatDate(scheduledBracketingDate)}
+                  {formatDate(unit.bracketingDate)}
                 </p>
               </div>
-              {actualBracketingDate && (
+              {bracketingCompleted && (
                 <div>
                   <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
                   <p className="mt-0.5 text-sm font-semibold text-accent">
-                    {formatDate(actualBracketingDate)}
+                    {formatDate(bracketingCompleted)}
                   </p>
                 </div>
               )}
@@ -210,7 +232,7 @@ export function UnitDetail({
               {installationPastDue && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
                   <WarningCircle size={12} weight="fill" />
-                  Overdue *
+                  Overdue
                 </span>
               )}
             </div>
@@ -218,50 +240,18 @@ export function UnitDetail({
               <div>
                 <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
                 <p className={`mt-0.5 text-sm font-semibold ${installationPastDue ? "text-red-700" : "text-foreground"}`}>
-                  {formatDate(scheduledInstallationDate)}
+                  {formatDate(unit.installationDate)}
                 </p>
               </div>
-              {actualInstallationDate && (
+              {installationCompleted && (
                 <div>
                   <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
                   <p className="mt-0.5 text-sm font-semibold text-accent">
-                    {formatDate(actualInstallationDate)}
+                    {formatDate(installationCompleted)}
                   </p>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Complete By deadline */}
-          <div
-            className={`rounded-2xl border px-4 py-3 ${
-              completeByPastDue
-                ? "border-red-200 bg-red-50"
-                : "border-border bg-white"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <p
-                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-                  completeByPastDue ? "text-red-600" : "text-muted"
-                }`}
-              >
-                Complete By
-              </p>
-              {completeByPastDue && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                  <WarningCircle size={12} weight="fill" />
-                  Overdue *
-                </span>
-              )}
-            </div>
-            <p
-              className={`mt-1 text-sm font-semibold ${
-                completeByPastDue ? "text-red-700" : "text-foreground"
-              }`}
-            >
-              {formatDate(unit.completeByDate)}
-            </p>
           </div>
         </motion.div>
 
@@ -341,9 +331,9 @@ export function UnitDetail({
                     >
                       {UNIT_STATUS_LABELS[status]}
                     </span>
-                    {status === "not_started" && isCurrent && unit.bracketingDate && (
+                    {status === "not_started" && isCurrent && unit.measurementDate && (
                       <p className="text-[11px] text-muted mt-0.5">
-                        Scheduled: {unit.bracketingDate}
+                        Measurement scheduled: {unit.measurementDate}
                       </p>
                     )}
                   </div>

@@ -85,13 +85,13 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const sortedFiltered = useMemo(() => {
     if (sortOrder === "none") return filtered;
     return [...filtered].sort((a, b) => {
-      if (sortOrder === "complete_asc" || sortOrder === "complete_desc") {
-        if (!a.completeByDate && !b.completeByDate) return 0;
-        if (!a.completeByDate) return 1;
-        if (!b.completeByDate) return -1;
-        const ta = new Date(a.completeByDate).getTime();
-        const tb = new Date(b.completeByDate).getTime();
-        return sortOrder === "complete_asc" ? ta - tb : tb - ta;
+      if (sortOrder === "install_asc" || sortOrder === "install_desc") {
+        if (!a.installationDate && !b.installationDate) return 0;
+        if (!a.installationDate) return 1;
+        if (!b.installationDate) return -1;
+        const ta = new Date(a.installationDate).getTime();
+        const tb = new Date(b.installationDate).getTime();
+        return sortOrder === "install_asc" ? ta - tb : tb - ta;
       }
       if (sortOrder === "unit_asc" || sortOrder === "unit_desc") {
         const cmp = a.unitNumber.localeCompare(b.unitNumber, undefined, {
@@ -176,8 +176,8 @@ export function UnitsList({ data }: { data: AppDataset }) {
     { value: "none", label: "Default" },
     { value: "newest", label: "Added (Newest)" },
     { value: "oldest", label: "Added (Oldest)" },
-    { value: "complete_asc", label: "Complete By (Earliest)" },
-    { value: "complete_desc", label: "Complete By (Latest)" },
+    { value: "install_asc", label: "Installation (Earliest)" },
+    { value: "install_desc", label: "Installation (Latest)" },
     { value: "unit_asc", label: "Unit Number (Ascending)" },
     { value: "unit_desc", label: "Unit Number (Descending)" },
   ];
@@ -336,10 +336,10 @@ export function UnitsList({ data }: { data: AppDataset }) {
                   <div className="flex items-center justify-between pl-[26px]">
                     <div className="flex flex-col gap-1 items-start">
                       <StatusChip status={unit.status} />
-                      {unit.completeByDate && (
+                      {unit.installationDate && (
                         <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono">
                           <CheckSquare size={12} />
-                          Due: {unit.completeByDate}
+                          Install: {unit.installationDate}
                         </span>
                       )}
                     </div>
@@ -366,10 +366,10 @@ export function UnitsList({ data }: { data: AppDataset }) {
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col gap-1 items-start">
                         <StatusChip status={unit.status} />
-                        {unit.completeByDate && (
+                        {unit.installationDate && (
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono">
                             <CheckSquare size={12} />
-                            Due: {unit.completeByDate}
+                            Install: {unit.installationDate}
                           </span>
                         )}
                       </div>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { loadSchedulerDataset, loadUnitActivityLog } from "@/lib/server-data";
+import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { SchedulerUnitDetail } from "./scheduler-unit-detail";
 
 export default async function SchedulerUnitPage({
@@ -8,9 +9,10 @@ export default async function SchedulerUnitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [data, activityLog] = await Promise.all([
+  const [data, activityLog, milestones] = await Promise.all([
     loadSchedulerDataset(),
     loadUnitActivityLog(id),
+    getUnitMilestoneCoverage(id),
   ]);
 
   // Guard: if the unit isn't in the scoped dataset, it's out of scope.
@@ -19,5 +21,5 @@ export default async function SchedulerUnitPage({
     redirect("/scheduler/units");
   }
 
-  return <SchedulerUnitDetail data={data} activityLog={activityLog} />;
+  return <SchedulerUnitDetail data={data} activityLog={activityLog} milestones={milestones} />;
 }

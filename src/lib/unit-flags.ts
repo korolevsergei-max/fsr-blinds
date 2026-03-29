@@ -3,11 +3,10 @@ import type { Unit } from "./types";
 export type UnitFlag =
   | "past_bracketing_due"
   | "past_install_due"
-  | "past_complete_by"
   | "missing_installer"
+  | "missing_measurement_date"
   | "missing_bracketing_date"
   | "missing_installation_date"
-  | "late_schedule"
   | "at_risk";
 
 export const DONE_STATUSES = new Set(["installed", "client_approved"]);
@@ -19,6 +18,7 @@ export function isUnitDone(unit: Unit): boolean {
 /**
  * Compute operational flags for a unit based on today's date string (YYYY-MM-DD).
  * Returns an empty array for completed/approved units.
+ * Installation date is the target completion date.
  */
 export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   if (isUnitDone(unit)) return [];
@@ -26,6 +26,7 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   const flags: UnitFlag[] = [];
 
   if (!unit.assignedInstallerId) flags.push("missing_installer");
+  if (!unit.measurementDate) flags.push("missing_measurement_date");
   if (!unit.bracketingDate) flags.push("missing_bracketing_date");
 
   if (
@@ -49,27 +50,18 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
       flags.push("past_install_due");
     }
 
-    if (unit.completeByDate && unit.installationDate > unit.completeByDate) {
-      flags.push("late_schedule");
-    }
-  }
-
-  if (unit.completeByDate && !flags.includes("past_install_due")) {
-    const daysUntilDue = Math.floor(
-      (new Date(unit.completeByDate).getTime() - new Date(todayStr).getTime()) / 86400000
+    // Warn if installation is within 3 days and not yet installed
+    const daysUntilInstall = Math.floor(
+      (new Date(unit.installationDate).getTime() - new Date(todayStr).getTime()) / 86400000
     );
-    if (daysUntilDue >= 0 && daysUntilDue <= 3) {
+    if (
+      daysUntilInstall >= 0 &&
+      daysUntilInstall <= 3 &&
+      unit.status !== "installed" &&
+      unit.status !== "client_approved"
+    ) {
       flags.push("at_risk");
     }
-  }
-
-  if (
-    unit.completeByDate &&
-    unit.completeByDate < todayStr &&
-    unit.status !== "installed" &&
-    unit.status !== "client_approved"
-  ) {
-    flags.push("past_complete_by");
   }
 
   return flags;
@@ -84,21 +76,19 @@ export function flagUnits(units: Unit[], todayStr: string): FlaggedUnit[] {
 export const FLAG_LABELS: Record<UnitFlag, string> = {
   past_bracketing_due:       "Past Bracketing Date",
   past_install_due:          "Past Install Date",
-  past_complete_by:          "Past Complete-By Date",
   missing_installer:         "No Installer Assigned",
+  missing_measurement_date:  "No Measurement Date",
   missing_bracketing_date:   "No Bracket Date",
   missing_installation_date: "No Install Date",
-  late_schedule:             "Install After Deadline",
-  at_risk:                   "At Risk",
+  at_risk:                   "Install Soon",
 };
 
 export const FLAG_CLASSES: Record<UnitFlag, string> = {
   past_bracketing_due:       "bg-orange-100 text-orange-700",
   past_install_due:          "bg-red-100 text-red-700",
-  past_complete_by:          "bg-rose-100 text-rose-700",
   missing_installer:         "bg-zinc-100 text-zinc-600",
+  missing_measurement_date:  "bg-zinc-100 text-zinc-600",
   missing_bracketing_date:   "bg-zinc-100 text-zinc-600",
   missing_installation_date: "bg-zinc-100 text-zinc-600",
-  late_schedule:             "bg-amber-100 text-amber-700",
   at_risk:                   "bg-orange-100 text-orange-700",
 };

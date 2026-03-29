@@ -29,7 +29,9 @@ export function ScheduleEntryCard({
   variant = "week",
 }: ScheduleEntryCardProps) {
   const TaskIcon =
-    entry.taskType === "bracketing" ? (
+    entry.taskType === "measurement" ? (
+      <Wrench size={10} className="text-violet-500 flex-shrink-0" weight="bold" />
+    ) : entry.taskType === "bracketing" ? (
       <Wrench size={10} className="text-sky-500 flex-shrink-0" weight="bold" />
     ) : (
       <Hammer size={10} className="text-emerald-500 flex-shrink-0" weight="bold" />
@@ -42,9 +44,11 @@ export function ScheduleEntryCard({
         className={`flex items-center gap-1 px-1 py-0.5 rounded text-[8px] font-medium truncate active:scale-[0.97] transition-transform ${
           isOverdue
             ? "bg-red-100 text-red-700"
-            : entry.taskType === "bracketing"
-              ? "bg-sky-100 text-sky-700"
-              : "bg-emerald-100 text-emerald-700"
+            : entry.taskType === "measurement"
+              ? "bg-violet-100 text-violet-700"
+              : entry.taskType === "bracketing"
+                ? "bg-sky-100 text-sky-700"
+                : "bg-emerald-100 text-emerald-700"
         }`}
         title={`${entry.clientName} — ${entry.buildingName} — ${entry.unitNumber}`}
       >

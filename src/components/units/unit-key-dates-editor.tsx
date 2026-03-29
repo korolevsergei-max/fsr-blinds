@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
@@ -22,19 +22,12 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
   const router = useRouter();
   const unit = data.units.find((u) => u.id === id);
 
+  const [measurementDate, setMeasurementDate] = useState(unit?.measurementDate ?? "");
   const [bracketingDate, setBracketingDate] = useState(unit?.bracketingDate ?? "");
   const [installationDate, setInstallationDate] = useState(unit?.installationDate ?? "");
-  const [completeByDate, setCompleteByDate] = useState(unit?.completeByDate ?? "");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (!unit) return;
-    setBracketingDate(unit.bracketingDate ?? "");
-    setInstallationDate(unit.installationDate ?? "");
-    setCompleteByDate(unit.completeByDate ?? "");
-  }, [unit]);
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
@@ -48,9 +41,9 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
       const result = await updateUnitAssignment(
         unit.id,
         unit.assignedInstallerId || undefined,
+        measurementDate,
         bracketingDate,
-        installationDate,
-        completeByDate || null
+        installationDate
       );
       if (!result.ok) {
         setSaveError(result.error);
@@ -88,22 +81,22 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
           className="flex flex-col gap-4"
         >
           <DateInput
+            label="Measurement date"
+            value={measurementDate}
+            onChange={setMeasurementDate}
+            helper="Scheduled date for taking window measurements"
+          />
+          <DateInput
             label="Bracketing date"
             value={bracketingDate}
             onChange={setBracketingDate}
-            helper="Setting this date moves the unit toward Scheduled for Bracketing when applicable"
+            helper="Scheduled date for the bracketing visit"
           />
           <DateInput
-            label="Installation target date"
+            label="Installation date"
             value={installationDate}
             onChange={setInstallationDate}
-            helper="Optional; can be set later"
-          />
-          <DateInput
-            label="Complete by date"
-            value={completeByDate}
-            onChange={setCompleteByDate}
-            helper="Optional deadline for completing unit work"
+            helper="Scheduled date for installation (also serves as the target completion date)"
           />
         </motion.div>
 

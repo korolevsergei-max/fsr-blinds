@@ -249,7 +249,7 @@ export async function bulkAssignUnits(
   bracketingDate: string,
   installationDate: string,
   priority?: string,
-  completeByDate?: string
+  measurementDate?: string
 ): Promise<ActionResult> {
   if (unitIds.length === 0) return { ok: false, error: "No units selected" };
   try {
@@ -302,7 +302,7 @@ export async function bulkAssignUnits(
       patch.bracketing_date = bracketingDate;
     }
     if (installationDate) patch.installation_date = installationDate;
-    if (completeByDate) patch.complete_by_date = completeByDate;
+    if (measurementDate) patch.measurement_date = measurementDate;
     if (priority) {
       patch.risk_flag = priority === "clear" ? null : priority;
     }
@@ -316,6 +316,40 @@ export async function bulkAssignUnits(
       .in("id", scopedUnitIds);
 
     for (const unit of unitRows ?? []) {
+      if (measurementDate) {
+        const { data: existingMeasurement } = await supabase
+          .from("schedule_entries")
+          .select("id")
+          .eq("unit_id", unit.id)
+          .eq("task_type", "measurement")
+          .single();
+
+        if (existingMeasurement) {
+          await supabase
+            .from("schedule_entries")
+            .update({
+              task_date: measurementDate,
+              owner_user_id: owner.id,
+              owner_name: owner.displayName,
+            })
+            .eq("id", existingMeasurement.id);
+        } else {
+          await supabase.from("schedule_entries").insert({
+            id: `sch-${crypto.randomUUID().slice(0, 8)}`,
+            unit_id: unit.id,
+            unit_number: unit.unit_number,
+            building_name: unit.building_name,
+            client_name: unit.client_name,
+            owner_user_id: owner.id,
+            owner_name: owner.displayName,
+            task_type: "measurement",
+            task_date: measurementDate,
+            status: "not_started",
+            risk_flag: "green",
+          });
+        }
+      }
+
       if (bracketingDate) {
         const { data: existingBracketing } = await supabase
           .from("schedule_entries")
@@ -389,9 +423,9 @@ export async function bulkAssignUnits(
       unitIds.map((unitId) =>
         logUnitActivity(supabase, unitId, owner.role, owner.displayName, "bulk_assigned", {
           ...(installerId ? { installer: instName } : {}),
+          ...(measurementDate ? { measurementDate } : {}),
           ...(bracketingDate ? { bracketingDate } : {}),
           ...(installationDate ? { installationDate } : {}),
-          ...(completeByDate ? { completeByDate } : {}),
           unitCount: unitIds.length,
         })
       )
@@ -408,9 +442,9 @@ export async function bulkAssignUnits(
 export async function updateUnitAssignment(
   unitId: string,
   installerId: string | undefined | null,
+  measurementDate: string,
   bracketingDate: string,
-  installationDate: string,
-  completeByDate: string | null = null
+  installationDate: string
 ): Promise<ActionResult> {
   try {
     const owner = await requireOwnerOrScheduler();
@@ -440,9 +474,9 @@ export async function updateUnitAssignment(
     };
 
     const patch: Record<string, unknown> = {
+      measurement_date: measurementDate || null,
       bracketing_date: bracketingDate || null,
       installation_date: installationDate || null,
-      complete_by_date: completeByDate || null,
     };
 
     if (installerId) {
@@ -464,6 +498,48 @@ export async function updateUnitAssignment(
       .eq("id", unitId);
     if (error) {
       return { ok: false, error: error.message };
+    }
+
+    // Upsert measurement schedule entry
+    if (measurementDate) {
+      const { data: existingMeasurement } = await supabase
+        .from("schedule_entries")
+        .select("id")
+        .eq("unit_id", unitId)
+        .eq("task_type", "measurement")
+        .single();
+
+      if (existingMeasurement) {
+        await supabase
+          .from("schedule_entries")
+          .update({
+            task_date: measurementDate,
+            owner_user_id: owner.id,
+            owner_name: owner.displayName,
+          })
+          .eq("id", existingMeasurement.id);
+      } else {
+        const nextUnitMeta = await ensureUnitMeta();
+        await supabase.from("schedule_entries").insert({
+          id: `sch-${crypto.randomUUID().slice(0, 8)}`,
+          unit_id: unitId,
+          unit_number: nextUnitMeta?.unit_number ?? "",
+          building_name: nextUnitMeta?.building_name ?? "",
+          client_name: nextUnitMeta?.client_name ?? "",
+          owner_user_id: owner.id,
+          owner_name: owner.displayName,
+          task_type: "measurement",
+          task_date: measurementDate,
+          status: "not_started",
+          risk_flag: "green",
+        });
+      }
+    } else {
+      await supabase
+        .from("schedule_entries")
+        .delete()
+        .eq("unit_id", unitId)
+        .eq("task_type", "measurement");
     }
 
     if (bracketingDate) {
@@ -550,9 +626,9 @@ export async function updateUnitAssignment(
 
     await logUnitActivity(supabase, unitId, owner.role, owner.displayName, "installer_assigned", {
       ...(installerId && patch.assigned_installer_name ? { installer: patch.assigned_installer_name as string } : {}),
+      ...(measurementDate ? { measurementDate } : {}),
       ...(bracketingDate ? { bracketingDate } : {}),
       ...(installationDate ? { installationDate } : {}),
-      ...(completeByDate ? { completeByDate } : {}),
     });
 
     revalidateApp();

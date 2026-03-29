@@ -3,14 +3,12 @@ import { computeUnitFlags } from "./unit-flags";
 
 export type DashboardIssue =
   | "past_scheduled"
-  | "past_complete_by"
   | "escalations"
   | "missing"
   | "at_risk";
 
 export const ISSUE_ORDER: DashboardIssue[] = [
   "past_scheduled",
-  "past_complete_by",
   "escalations",
   "missing",
   "at_risk",
@@ -18,10 +16,9 @@ export const ISSUE_ORDER: DashboardIssue[] = [
 
 export const DASHBOARD_ISSUE_LABELS: Record<DashboardIssue, string> = {
   past_scheduled: "Past scheduled date",
-  past_complete_by: "Past complete-by date",
   escalations: "Escalations",
   missing: "Missing dates / unassigned",
-  at_risk: "At risk",
+  at_risk: "Installation soon",
 };
 
 export const DASHBOARD_ISSUE_CLASSES: Record<
@@ -29,7 +26,6 @@ export const DASHBOARD_ISSUE_CLASSES: Record<
   { badge: string; text: string }
 > = {
   past_scheduled: { badge: "bg-red-100 text-red-700", text: "text-red-600" },
-  past_complete_by: { badge: "bg-rose-100 text-rose-700", text: "text-rose-600" },
   escalations: { badge: "bg-orange-100 text-orange-700", text: "text-orange-600" },
   missing: { badge: "bg-zinc-100 text-zinc-600", text: "text-zinc-500" },
   at_risk: { badge: "bg-amber-100 text-amber-700", text: "text-amber-600" },
@@ -46,9 +42,6 @@ export function getUnitIssues(
   if (flags.includes("past_bracketing_due") || flags.includes("past_install_due")) {
     issues.push("past_scheduled");
   }
-  if (flags.includes("past_complete_by")) {
-    issues.push("past_complete_by");
-  }
   if (escalationIds.has(unit.id)) {
     issues.push("escalations");
   }
@@ -59,7 +52,7 @@ export function getUnitIssues(
   ) {
     issues.push("missing");
   }
-  if (flags.includes("at_risk") || flags.includes("late_schedule")) {
+  if (flags.includes("at_risk")) {
     issues.push("at_risk");
   }
 

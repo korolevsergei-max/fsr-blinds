@@ -129,8 +129,7 @@ export function ManagementDashboard({
         const f = computeUnitFlags(u, today);
         return (
           f.includes("past_bracketing_due") ||
-          f.includes("past_install_due") ||
-          f.includes("past_complete_by")
+          f.includes("past_install_due")
         );
       }).length,
     [scopedUnits, today]
@@ -143,7 +142,7 @@ export function ManagementDashboard({
     () =>
       scopedUnits.filter((u) => {
         const f = computeUnitFlags(u, today);
-        return f.includes("at_risk") || f.includes("late_schedule");
+        return f.includes("at_risk");
       }).length,
     [scopedUnits, today]
   );

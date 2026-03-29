@@ -55,6 +55,7 @@ type UnitRow = {
   risk_flag: RiskFlag;
   assigned_installer_id: string | null;
   assigned_installer_name: string | null;
+  measurement_date: string | null;
   bracketing_date: string | null;
   installation_date: string | null;
   earliest_bracketing_date: string | null;
@@ -111,7 +112,7 @@ type ScheduleRow = {
   client_name: string;
   owner_user_id: string | null;
   owner_name: string | null;
-  task_type: "bracketing" | "installation";
+  task_type: "measurement" | "bracketing" | "installation";
   task_date: string;
   status: UnitStatus;
   risk_flag: RiskFlag;
@@ -188,6 +189,7 @@ function mapUnit(r: UnitRow): Unit {
     status: r.status,
     assignedInstallerId: r.assigned_installer_id,
     assignedInstallerName: r.assigned_installer_name,
+    measurementDate: r.measurement_date || null,
     bracketingDate: r.bracketing_date,
     installationDate: r.installation_date || null,
     earliestBracketingDate: r.earliest_bracketing_date,
@@ -270,6 +272,22 @@ function normalizeScheduleEntries(units: Unit[], schedule: ScheduleEntry[]): Sch
   const normalized: ScheduleEntry[] = [];
 
   for (const unit of units) {
+    if (unit.measurementDate) {
+      const existing = existingByTask.get(`${unit.id}:measurement`);
+      normalized.push({
+        id: existing?.id ?? `derived-measurement-${unit.id}`,
+        unitId: unit.id,
+        unitNumber: unit.unitNumber,
+        buildingName: unit.buildingName,
+        clientName: unit.clientName,
+        ownerUserId: existing?.ownerUserId ?? null,
+        ownerName: existing?.ownerName ?? null,
+        taskType: "measurement",
+        date: unit.measurementDate,
+        status: existing?.status ?? "not_started",
+      });
+    }
+
     if (unit.bracketingDate) {
       const existing = existingByTask.get(`${unit.id}:bracketing`);
       normalized.push({
