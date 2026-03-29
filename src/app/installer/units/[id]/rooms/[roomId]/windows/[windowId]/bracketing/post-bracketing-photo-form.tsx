@@ -6,9 +6,11 @@ import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
 import { uploadWindowPostBracketingPhoto } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
+import type { RiskFlag } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
+import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 
 export function PostBracketingPhotoForm({
   data,
@@ -42,6 +44,9 @@ export function PostBracketingPhotoForm({
   const [photoOrientation, setPhotoOrientation] = useState<
     "portrait" | "landscape" | "square"
   >("landscape");
+  const [riskFlag, setRiskFlag] = useState<RiskFlag>(windowItem?.riskFlag ?? "green");
+  const [notes, setNotes] = useState(windowItem?.notes ?? "");
+  const [notesError, setNotesError] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -76,9 +81,14 @@ export function PostBracketingPhotoForm({
   const onSubmit = (ev: React.FormEvent) => {
     ev.preventDefault();
     setError("");
+    setNotesError("");
 
     if (!photoFile) {
       setError("Post-bracketing photo is required.");
+      return;
+    }
+    if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
+      setNotesError("Notes are required for yellow or red risk.");
       return;
     }
 
@@ -87,6 +97,8 @@ export function PostBracketingPhotoForm({
     fd.set("roomId", room.id);
     fd.set("windowId", windowItem.id);
     fd.set("photo", photoFile);
+    fd.set("riskFlag", riskFlag);
+    fd.set("notes", notes);
 
     startTransition(async () => {
       const result = await uploadWindowPostBracketingPhoto(fd);
@@ -180,6 +192,19 @@ export function PostBracketingPhotoForm({
             A post-bracketing photo is already saved for this window. You can replace it anytime.
           </p>
         )}
+
+        <div>
+          <WindowRiskNotesFields
+            riskFlag={riskFlag}
+            notes={notes}
+            notesError={notesError}
+            onRiskFlagChange={setRiskFlag}
+            onNotesChange={(value) => {
+              setNotes(value);
+              if (notesError) setNotesError("");
+            }}
+          />
+        </div>
 
         <div className="pb-24 pt-2">
           <Button type="submit" fullWidth size="lg" disabled={pending}>

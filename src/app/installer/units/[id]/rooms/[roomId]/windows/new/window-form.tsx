@@ -14,11 +14,12 @@ import {
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
-import { RISK_LABELS, type BlindType, type RiskFlag, type UnitActivityLog } from "@/lib/types";
+import { type BlindType, type RiskFlag, type UnitActivityLog } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
+import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -427,56 +428,13 @@ export function WindowForm({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="mb-5 flex flex-col gap-2">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              Risk Flag
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["green", "yellow", "red"] as RiskFlag[]).map((flag) => (
-                <button
-                  key={flag}
-                  type="button"
-                  onClick={() => setRiskFlag(flag)}
-                  className={`min-h-12 rounded-2xl border px-2 py-2 text-xs font-semibold tracking-tight transition-all active:scale-[0.97] ${
-                    riskFlag === flag
-                      ? flag === "green"
-                        ? "border-teal-700 bg-teal-600 text-white"
-                        : flag === "yellow"
-                          ? "border-amber-700 bg-amber-500 text-white"
-                          : "border-red-700 bg-red-600 text-white"
-                      : "border-border bg-white text-zinc-600 hover:bg-surface"
-                  }`}
-                >
-                  {flag === "green" && "Green"}
-                  {flag === "yellow" && "Yellow"}
-                  {flag === "red" && "Red"}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-zinc-500">
-              {riskFlag === "green" && "No issues."}
-              {riskFlag === "yellow" &&
-                `${RISK_LABELS.yellow}: can bracket/install with concern or additional work.`}
-              {riskFlag === "red" &&
-                `${RISK_LABELS.red}: cannot proceed without escalation.`}
-            </p>
-          </div>
-
-          <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 block">
-            Notes
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Any special conditions, frame damage, clearance issues..."
-            rows={3}
-            className={`w-full px-4 py-3 rounded-2xl border text-sm text-foreground bg-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all resize-none ${
-              errors.notes ? "border-red-300 bg-red-50" : "border-border"
-            }`}
+          <WindowRiskNotesFields
+            riskFlag={riskFlag}
+            notes={notes}
+            notesError={errors.notes}
+            onRiskFlagChange={setRiskFlag}
+            onNotesChange={setNotes}
           />
-          {errors.notes && (
-            <p className="mt-2 text-xs text-red-500">{errors.notes}</p>
-          )}
         </motion.div>
 
         <div className="pt-2 pb-24">

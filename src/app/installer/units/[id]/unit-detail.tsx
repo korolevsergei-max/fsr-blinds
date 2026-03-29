@@ -88,6 +88,14 @@ export function UnitDetail({
   const measurementPastDue = isPastDue(unit.measurementDate) && !milestones.allMeasured;
   const bracketingPastDue = isPastDue(unit.bracketingDate) && !milestones.allBracketed;
   const installationPastDue = isPastDue(unit.installationDate) && !milestones.allInstalled;
+  const nextStepByStatus: Record<UnitStatus, string> = {
+    not_started: "Measurement",
+    measured: "Bracketing",
+    bracketed: "Installation",
+    installed: "Approval",
+    client_approved: "Complete",
+  };
+  const nextStepLabel = nextStepByStatus[unit.status as UnitStatus] ?? "Measurement";
 
   return (
     <div className="flex flex-col">
@@ -414,7 +422,9 @@ export function UnitDetail({
         >
           <Link href={`/installer/units/${unit.id}/rooms`}>
             <Button fullWidth size="lg">
-              {rooms.length === 0 ? "Start Bracketing & Measurement" : "Manage Rooms"}
+              {unit.status === "client_approved"
+                ? "Manage Rooms"
+                : `Next step: ${nextStepLabel}`}
             </Button>
           </Link>
           <Link href={`/installer/units/${unit.id}/status`}>

@@ -1274,6 +1274,8 @@ export async function uploadWindowPostBracketingPhoto(
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
     const windowId = String(formData.get("windowId") ?? "");
+    const notes = String(formData.get("notes") ?? "");
+    const riskFlag = String(formData.get("riskFlag") ?? "green") as RiskFlag;
     const photo = formData.get("photo");
 
     if (!unitId || !roomId || !windowId) {
@@ -1281,6 +1283,12 @@ export async function uploadWindowPostBracketingPhoto(
     }
     if (!(photo instanceof File) || photo.size === 0) {
       return { ok: false, error: "Post-bracketing photo is required." };
+    }
+    if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
+      return { ok: false, error: "Invalid risk flag." };
+    }
+    if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
+      return { ok: false, error: "Notes are required for yellow or red risk." };
     }
 
     const supabase = await createClient();
@@ -1300,6 +1308,17 @@ export async function uploadWindowPostBracketingPhoto(
       .single();
     if (windowError || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
+    }
+
+    const { error: windowUpdateError } = await supabase
+      .from("windows")
+      .update({
+        risk_flag: riskFlag,
+        notes: notes.trim(),
+      })
+      .eq("id", windowId);
+    if (windowUpdateError) {
+      return { ok: false, error: windowUpdateError.message };
     }
 
     const ext =
@@ -1350,7 +1369,7 @@ export async function uploadWindowPostBracketingPhoto(
       "installer",
       unit?.assigned_installer_name ?? "Installer",
       "post_bracketing_photo_added",
-      { roomId, windowId, windowLabel: windowRow.label }
+      { roomId, windowId, windowLabel: windowRow.label, riskFlag }
     );
     await refreshUnitAggregates(supabase, unitId);
     await recomputeUnitStatus(supabase, unitId);
@@ -1369,6 +1388,8 @@ export async function uploadWindowInstalledPhoto(
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
     const windowId = String(formData.get("windowId") ?? "");
+    const notes = String(formData.get("notes") ?? "");
+    const riskFlag = String(formData.get("riskFlag") ?? "green") as RiskFlag;
     const photo = formData.get("photo");
 
     if (!unitId || !roomId || !windowId) {
@@ -1376,6 +1397,12 @@ export async function uploadWindowInstalledPhoto(
     }
     if (!(photo instanceof File) || photo.size === 0) {
       return { ok: false, error: "Installed photo is required." };
+    }
+    if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
+      return { ok: false, error: "Invalid risk flag." };
+    }
+    if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
+      return { ok: false, error: "Notes are required for yellow or red risk." };
     }
 
     const supabase = await createClient();
@@ -1395,6 +1422,17 @@ export async function uploadWindowInstalledPhoto(
       .single();
     if (windowError || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
+    }
+
+    const { error: windowUpdateError } = await supabase
+      .from("windows")
+      .update({
+        risk_flag: riskFlag,
+        notes: notes.trim(),
+      })
+      .eq("id", windowId);
+    if (windowUpdateError) {
+      return { ok: false, error: windowUpdateError.message };
     }
 
     const ext =
@@ -1445,7 +1483,7 @@ export async function uploadWindowInstalledPhoto(
       "installer",
       unit?.assigned_installer_name ?? "Installer",
       "installed_photo_added",
-      { roomId, windowId, windowLabel: windowRow.label }
+      { roomId, windowId, windowLabel: windowRow.label, riskFlag }
     );
     await recomputeUnitStatus(supabase, unitId);
     revalidateApp();

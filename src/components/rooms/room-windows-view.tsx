@@ -52,9 +52,6 @@ export function RoomWindowsView({
   addWindowHref,
 }: RoomWindowsViewProps) {
   const windowsList = getWindowsByRoom(data, roomId);
-  const [selectedStageByWindow, setSelectedStageByWindow] = useState<
-    Record<string, WindowStageKey>
-  >({});
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
     Record<string, ImageOrientation>
   >({});
@@ -187,11 +184,8 @@ export function RoomWindowsView({
           }
 
           const galleryCount = windowGalleryMap.get(win.id)?.length ?? 0;
-          const selectedStage =
-            selectedStageByWindow[win.id] ??
-            (stageOptions.find((o) => o.key === "pre")?.key ?? stageOptions[0]?.key ?? "pre");
           const selectedImageUrl =
-            stageOptions.find((o) => o.key === selectedStage)?.url ??
+            stageOptions.find((o) => o.key === "pre")?.url ??
             stageOptions[0]?.url ??
             null;
 
@@ -233,7 +227,7 @@ export function RoomWindowsView({
                   >
                     <img
                       src={selectedImageUrl}
-                      alt={`${win.label} ${selectedStage} photo`}
+                      alt={`${win.label} photo`}
                       onLoad={(e) => {
                         const img = e.currentTarget;
                         const next: ImageOrientation =
@@ -255,28 +249,6 @@ export function RoomWindowsView({
                             : "aspect-[16/9] object-cover"
                       }`}
                     />
-                  </div>
-                )}
-
-                {stageOptions.length > 1 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {stageOptions.map((option) => (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelectedStageByWindow((cur) => ({ ...cur, [win.id]: option.key }));
-                        }}
-                        className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                          selectedStage === option.key
-                            ? "border-accent bg-accent text-white"
-                            : "border-border bg-surface text-zinc-600"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
                   </div>
                 )}
 
@@ -354,13 +326,13 @@ export function RoomWindowsView({
                 )}
 
                 {getEditHref && (
-                  <div className="mt-3">
+                  <div className="mt-4 flex justify-center">
                     <Link
                       href={getEditHref(win.id)}
                       onClick={(event) => event.stopPropagation()}
-                      className="inline-flex items-center rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-foreground"
+                      className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground"
                     >
-                      Edit Window
+                      Edit
                     </Link>
                   </div>
                 )}
