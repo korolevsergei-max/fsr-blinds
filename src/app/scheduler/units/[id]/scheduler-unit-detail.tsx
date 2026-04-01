@@ -259,18 +259,18 @@ export function SchedulerUnitDetail({
               >
                 <Link
                   href={`/scheduler/units/${id}/rooms/${room.id}`}
-                  className="surface-card px-4 py-3 flex items-center justify-between active:scale-[0.98] transition-transform"
+                  className="bg-accent text-white px-4 py-3 rounded-[12px] shadow-sm flex items-center justify-between active:scale-[0.98] hover:opacity-90 transition-all"
                 >
                   <div>
-                    <p className="text-[13px] font-semibold text-foreground">{room.name}</p>
-                    <p className="text-[11px] text-muted font-mono">
+                    <p className="text-[13px] font-semibold">{room.name}</p>
+                    <p className="text-[11px] text-white/80 font-mono">
                       {room.completedWindows}/{room.windowCount} measured
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-16 bg-zinc-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-16 bg-white/20 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-accent rounded-full"
+                        className="h-full bg-white rounded-full"
                         style={{
                           width: room.windowCount > 0
                             ? `${(room.completedWindows / room.windowCount) * 100}%`
@@ -278,7 +278,7 @@ export function SchedulerUnitDetail({
                         }}
                       />
                     </div>
-                    <ArrowRight size={13} className="text-tertiary" />
+                    <ArrowRight size={13} />
                   </div>
                 </Link>
               </motion.div>

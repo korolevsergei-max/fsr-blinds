@@ -476,19 +476,19 @@ export function ManagementUnitDetail({
             transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
             <SectionLabel as="h2">Rooms</SectionLabel>
-            <div className="surface-card divide-y divide-border-subtle overflow-hidden" style={{ padding: 0 }}>
+            <div className="flex flex-col gap-2">
               {rooms.map((room) => (
                 <Link
                   key={room.id}
                   href={`/management/units/${unit.id}/rooms/${room.id}`}
-                  className="flex items-center justify-between px-4 py-3 hover:bg-surface transition-colors"
+                  className="flex items-center justify-between bg-accent text-white px-4 py-3 rounded-[12px] shadow-sm hover:opacity-90 transition-all active:scale-[0.99]"
                 >
-                  <span className="text-[13px] text-foreground">{room.name}</span>
+                  <span className="text-[13px] font-semibold">{room.name}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-tertiary font-mono">
+                    <span className="text-[12px] text-white/80 font-mono">
                       {room.completedWindows}/{room.windowCount}
                     </span>
-                    <ArrowRight size={13} className="text-tertiary" />
+                    <ArrowRight size={13} />
                   </div>
                 </Link>
               ))}

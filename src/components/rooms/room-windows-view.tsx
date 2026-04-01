@@ -222,6 +222,26 @@ export function RoomWindowsView({
                     : ""
                 }`}
               >
+                {getStageNavProps && (
+                  <div
+                    className="mb-3"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <WindowStageNav
+                      {...getStageNavProps(win.id)}
+                      active={
+                        stageMedia.installed
+                          ? "installed"
+                          : stageMedia.bracketed
+                            ? "bracketed"
+                            : "before"
+                      }
+                      compact
+                    />
+                  </div>
+                )}
+
                 {selectedImageUrl && (
                   <div
                     className={`mb-3 overflow-hidden rounded-xl border border-border bg-surface ${
@@ -253,26 +273,6 @@ export function RoomWindowsView({
                             ? "aspect-square object-cover"
                             : "aspect-[16/9] object-cover"
                       }`}
-                    />
-                  </div>
-                )}
-
-                {getStageNavProps && (
-                  <div
-                    className="mb-3"
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <WindowStageNav
-                      {...getStageNavProps(win.id)}
-                      active={
-                        stageMedia.installed
-                          ? "installed"
-                          : stageMedia.bracketed
-                            ? "bracketed"
-                            : "before"
-                      }
-                      compact
                     />
                   </div>
                 )}

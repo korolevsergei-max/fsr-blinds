@@ -382,10 +382,10 @@ export function UnitDetail({
             <div className="flex flex-col gap-2">
               {rooms.map((room) => (
                 <Link key={room.id} href={`/installer/units/${unit.id}/rooms/${room.id}`}>
-                  <div className="flex items-center justify-between surface-card px-4 py-3.5 hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
+                  <div className="flex items-center justify-between bg-accent text-white px-4 py-3.5 rounded-[12px] shadow-sm hover:opacity-90 transition-all duration-200 active:scale-[0.99]">
                     <div>
-                      <p className="text-[14px] font-semibold text-foreground">{room.name}</p>
-                      <p className="text-[11px] text-tertiary mt-0.5">
+                      <p className="text-[14px] font-semibold">{room.name}</p>
+                      <p className="text-[11px] text-white/80 mt-0.5">
                         {room.completedWindows}/{room.windowCount} measured •{" "}
                         {Math.min(
                           bracketedWindowIdsByRoom.get(room.id)?.size ?? 0,
@@ -394,7 +394,7 @@ export function UnitDetail({
                         /{room.windowCount} bracketed
                       </p>
                     </div>
-                    <ArrowRight size={15} className="text-tertiary" />
+                    <ArrowRight size={15} />
                   </div>
                 </Link>
               ))}

@@ -12,9 +12,17 @@ export interface AppUser {
 
 export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (error: any) {
+    // Suppress stale refresh token errors on the server.
+    // The middleware handles deleting the cookie on the client.
+    console.error("Auth error in getCurrentUser:", error.message || error);
+    return null;
+  }
 
   if (!user) return null;
 
