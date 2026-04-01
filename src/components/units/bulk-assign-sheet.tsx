@@ -14,6 +14,7 @@ type BulkAssignSheetProps = {
   installers: AppDataset["installers"];
   onClose: () => void;
   onSuccess: () => void;
+  showCompleteBy?: boolean;
 };
 
 export function BulkAssignSheet({
@@ -21,6 +22,7 @@ export function BulkAssignSheet({
   installers,
   onClose,
   onSuccess,
+  showCompleteBy = false,
 }: BulkAssignSheetProps) {
   const [selectedInstaller, setSelectedInstaller] = useState("");
   const [measurementDate, setMeasurementDate] = useState("");
@@ -49,7 +51,7 @@ export function BulkAssignSheet({
   }, [selectedInstaller, validInstallerIds]);
 
   const handleSave = () => {
-    if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate && !completeByDate) return;
+    if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate && (!showCompleteBy || !completeByDate)) return;
 
     setError("");
     startTransition(async () => {
@@ -60,7 +62,7 @@ export function BulkAssignSheet({
         installationDate,
         undefined,
         measurementDate,
-        completeByDate
+        showCompleteBy ? completeByDate : undefined
       );
       if (!result.ok) {
         setError(result.error);
@@ -173,11 +175,13 @@ export function BulkAssignSheet({
                 value={installationDate}
                 onChange={setInstallationDate}
               />
-              <DateInput
-                label="Complete by"
-                value={completeByDate}
-                onChange={setCompleteByDate}
-              />
+              {showCompleteBy && (
+                <DateInput
+                  label="Complete by"
+                  value={completeByDate}
+                  onChange={setCompleteByDate}
+                />
+              )}
             </div>
           </div>
 
@@ -200,7 +204,7 @@ export function BulkAssignSheet({
                     !measurementDate &&
                     !bracketingDate &&
                     !installationDate &&
-                    !completeByDate) ||
+                    (!showCompleteBy || !completeByDate)) ||
                   pending
                 }
                 onClick={handleSave}

@@ -246,11 +246,8 @@ export async function updateUnitCompleteByDate(
   completeByDate: string | null
 ): Promise<ActionResult> {
   try {
-    const owner = await requireOwnerOrScheduler();
+    const owner = await requireOwner();
     const supabase = await createClient();
-
-    const scopeErr = await assertSchedulerUnitScope(supabase, owner, unitId);
-    if (scopeErr) return scopeErr;
 
     const nextDate = completeByDate || null;
     const { data: current } = await supabase

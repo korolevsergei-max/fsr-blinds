@@ -330,7 +330,7 @@ export async function bulkAssignUnits(
     }
     if (installationDate) patch.installation_date = installationDate;
     if (measurementDate) patch.measurement_date = measurementDate;
-    if (completeByDate) patch.complete_by_date = completeByDate;
+    if (completeByDate && owner.role === "owner") patch.complete_by_date = completeByDate;
     if (priority) {
       patch.risk_flag = priority === "clear" ? null : priority;
     }

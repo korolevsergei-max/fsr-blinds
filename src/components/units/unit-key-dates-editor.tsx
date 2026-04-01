@@ -16,9 +16,11 @@ type UnitKeyDatesEditorProps = {
   data: AppDataset;
   /** Base route segment: `/scheduler/units` or `/management/units` */
   unitsBasePath: "/scheduler/units" | "/management/units";
+  /** Only the owner can set the Complete By date — hide entirely for schedulers */
+  showCompleteBy?: boolean;
 };
 
-export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorProps) {
+export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false }: UnitKeyDatesEditorProps) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const unit = data.units.find((u) => u.id === id);
@@ -40,23 +42,23 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
   const handleSave = () => {
     setSaveError("");
     startTransition(async () => {
-      const [datesResult, completeByResult] = await Promise.all([
-        updateUnitAssignment(
-          unit.id,
-          unit.assignedInstallerId || undefined,
-          measurementDate,
-          bracketingDate,
-          installationDate
-        ),
-        updateUnitCompleteByDate(unit.id, completeByDate || null),
-      ]);
+      const datesResult = await updateUnitAssignment(
+        unit.id,
+        unit.assignedInstallerId || undefined,
+        measurementDate,
+        bracketingDate,
+        installationDate
+      );
       if (!datesResult.ok) {
         setSaveError(datesResult.error);
         return;
       }
-      if (!completeByResult.ok) {
-        setSaveError(completeByResult.error);
-        return;
+      if (showCompleteBy) {
+        const completeByResult = await updateUnitCompleteByDate(unit.id, completeByDate || null);
+        if (!completeByResult.ok) {
+          setSaveError(completeByResult.error);
+          return;
+        }
       }
       setSaved(true);
       router.refresh();
@@ -107,12 +109,14 @@ export function UnitKeyDatesEditor({ data, unitsBasePath }: UnitKeyDatesEditorPr
             onChange={setInstallationDate}
             helper="Scheduled date for installation (also serves as the target completion date)"
           />
-          <DateInput
-            label="Complete by"
-            value={completeByDate}
-            onChange={setCompleteByDate}
-            helper="Static client deadline for prioritization — does not affect unit status"
-          />
+          {showCompleteBy && (
+            <DateInput
+              label="Complete by"
+              value={completeByDate}
+              onChange={setCompleteByDate}
+              helper="Static client deadline for prioritization — does not affect unit status"
+            />
+          )}
         </motion.div>
 
         <motion.div

@@ -3,5 +3,5 @@ import { UnitKeyDatesEditor } from "@/components/units/unit-key-dates-editor";
 
 export default async function ManagementUnitDatesPage() {
   const data = await loadFullDataset();
-  return <UnitKeyDatesEditor data={data} unitsBasePath="/management/units" />;
+  return <UnitKeyDatesEditor data={data} unitsBasePath="/management/units" showCompleteBy />;
 }

@@ -433,6 +433,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
             installers={installers}
             onClose={() => setShowBulkSheet(false)}
             onSuccess={exitSelectMode}
+            showCompleteBy
           />
         )}
       </AnimatePresence>
