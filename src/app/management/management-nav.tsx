@@ -8,6 +8,7 @@ import {
   Buildings,
   UsersFour,
   CalendarBlank,
+  ChartLineUp,
 } from "@phosphor-icons/react";
 
 const baseNavItems = [
@@ -15,6 +16,7 @@ const baseNavItems = [
   { href: "/management/clients", label: "Clients", Icon: AddressBook },
   { href: "/management/units", label: "Units", Icon: Buildings },
   { href: "/management/schedule", label: "Schedule", Icon: CalendarBlank },
+  { href: "/management/reports", label: "Reports", Icon: ChartLineUp },
 ];
 
 const accountsNavItem = {

@@ -16,9 +16,11 @@ import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload"
 export function InstalledPhotoForm({
   data,
   mediaItems,
+  routeBasePath = "/installer/units",
 }: {
   data: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
   const { id, roomId, windowId } = useParams<{
     id: string;
@@ -127,7 +129,7 @@ export function InstalledPhotoForm({
         setError(result.error);
         return;
       }
-      router.push(`/installer/units/${id}/rooms/${roomId}`);
+      router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       router.refresh();
     });
   };
@@ -137,7 +139,7 @@ export function InstalledPhotoForm({
       <PageHeader
         title="Installed Photo"
         subtitle={`${windowItem.label} • ${room.name}`}
-        backHref={`/installer/units/${id}/rooms/${roomId}/windows/new?edit=${windowItem.id}`}
+        backHref={`${routeBasePath}/${id}/rooms/${roomId}/windows/new?edit=${windowItem.id}`}
       />
 
       <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-6 px-5 py-5">
@@ -146,6 +148,7 @@ export function InstalledPhotoForm({
           roomId={roomId}
           windowId={windowItem.id}
           active="installed"
+          routeBasePath={routeBasePath}
         />
 
         <input

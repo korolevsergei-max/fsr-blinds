@@ -1,5 +1,5 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { InstalledPhotoForm } from "./installed-photo-form";
+import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
 export default async function InstalledPhotoPage({
   params,

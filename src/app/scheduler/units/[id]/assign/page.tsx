@@ -1,7 +1,7 @@
-import { loadFullDataset } from "@/lib/server-data";
+import { loadSchedulerDataset } from "@/lib/server-data";
 import { AssignUnitScheduler } from "./assign-unit-scheduler";
 
 export default async function SchedulerAssignPage() {
-  const data = await loadFullDataset();
+  const data = await loadSchedulerDataset();
   return <AssignUnitScheduler data={data} />;
 }

@@ -1,5 +1,5 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { PostBracketingPhotoForm } from "./post-bracketing-photo-form";
+import { PostBracketingPhotoForm } from "@/components/windows/post-bracketing-photo-form";
 
 export default async function PostBracketingPhotoPage({
   params,

@@ -117,18 +117,22 @@ export function AssignUnit({ data }: { data: AppDataset }) {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    inst.name
-                      .split(" ")
-                      .filter(Boolean)
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()
+                    inst.name.startsWith("SC: ")
+                      ? "SC"
+                      : inst.name
+                        .split(" ")
+                        .filter(Boolean)
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-900">{inst.name}</p>
-                  <p className="text-xs text-muted">Installer · {inst.phone}</p>
+                  <p className="text-xs text-muted">
+                    {inst.name.startsWith("SC: ") ? "Scheduler" : "Installer"} · {inst.phone}
+                  </p>
                 </div>
                 {selectedInstaller === inst.id && (
                   <CheckCircle

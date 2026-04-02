@@ -1,5 +1,5 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { WindowStageReadonlyView } from "@/components/windows/window-stage-readonly-view";
+import { PostBracketingPhotoForm } from "@/components/windows/post-bracketing-photo-form";
 
 export default async function SchedulerWindowBracketedPage({
   params,
@@ -12,10 +12,9 @@ export default async function SchedulerWindowBracketedPage({
     loadUnitStageMedia(id),
   ]);
   return (
-    <WindowStageReadonlyView
+    <PostBracketingPhotoForm
       data={data}
       mediaItems={mediaItems}
-      mode="bracketed"
       routeBasePath="/scheduler/units"
     />
   );

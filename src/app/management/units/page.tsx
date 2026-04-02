@@ -3,5 +3,5 @@ import { UnitsList } from "./units-list";
 
 export default async function UnitsPage() {
   const data = await loadFullDataset();
-  return <UnitsList data={data} />;
+  return <UnitsList data={data} schedulers={data.schedulers} />;
 }

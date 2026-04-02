@@ -193,6 +193,16 @@ async function resolveInstallerName(
   supabase: Awaited<ReturnType<typeof createClient>>,
   installerId: string
 ): Promise<string | null> {
+  if (installerId.startsWith("sch-")) {
+    const realId = installerId.replace("sch-", "");
+    const { data: scheduler } = await supabase
+      .from("schedulers")
+      .select("name")
+      .eq("id", realId)
+      .single();
+    return scheduler?.name ? `SC: ${scheduler.name}` : null;
+  }
+
   const { data: installer } = await supabase
     .from("installers")
     .select("name")
@@ -318,11 +328,41 @@ export async function bulkAssignUnits(
     if (installerId) {
       const installerName = await resolveInstallerName(supabase, installerId);
       if (!installerName) {
-        return { ok: false, error: "Selected installer no longer exists. Re-open the sheet and choose a valid installer." };
+        return {
+          ok: false,
+          error: "Selected installer no longer exists. Re-open the sheet and choose a valid installer.",
+        };
       }
       instName = installerName;
-      patch.assigned_installer_id = installerId;
       patch.assigned_installer_name = instName;
+
+      if (installerId.startsWith("sch-")) {
+        const schedulerId = installerId.replace("sch-", "");
+        patch.assigned_installer_id = null; // Schedulers don't go in the installers FK column
+
+        // Ensure the units are assigned to this scheduler for management access
+        const assignments = scopedUnitIds.map((uid) => ({
+          id: `sua-${uid}`,
+          unit_id: uid,
+          scheduler_id: schedulerId,
+          assigned_at: new Date().toISOString(),
+        }));
+
+        const { error: assError } = await supabase
+          .from("scheduler_unit_assignments")
+          .upsert(assignments, { onConflict: "unit_id" });
+
+        if (assError) return { ok: false, error: assError.message };
+      } else {
+        patch.assigned_installer_id = installerId;
+        // When assigned to a regular installer, remove any explicit scheduler assignment 
+        // unless the owner wants both. Given the UNIQUE(unit_id) constraint, 
+        // we'll remove it to stay clean.
+        await supabase
+          .from("scheduler_unit_assignments")
+          .delete()
+          .in("unit_id", scopedUnitIds);
+      }
     }
 
     if (bracketingDate) {
@@ -511,10 +551,37 @@ export async function updateUnitAssignment(
     if (installerId) {
       const installerName = await resolveInstallerName(supabase, installerId);
       if (!installerName) {
-        return { ok: false, error: "Selected installer no longer exists. Choose a valid installer and try again." };
+        return {
+          ok: false,
+          error: "Selected installer no longer exists. Choose a valid installer and try again.",
+        };
       }
-      patch.assigned_installer_id = installerId;
       patch.assigned_installer_name = installerName;
+
+      if (installerId.startsWith("sch-")) {
+        const schedulerId = installerId.replace("sch-", "");
+        patch.assigned_installer_id = null; // FK constraint
+
+        const { error: assError } = await supabase
+          .from("scheduler_unit_assignments")
+          .upsert(
+            {
+              id: `sua-${unitId}`,
+              unit_id: unitId,
+              scheduler_id: schedulerId,
+              assigned_at: new Date().toISOString(),
+            },
+            { onConflict: "unit_id" }
+          );
+
+        if (assError) return { ok: false, error: assError.message };
+      } else {
+        patch.assigned_installer_id = installerId;
+        await supabase
+          .from("scheduler_unit_assignments")
+          .delete()
+          .eq("unit_id", unitId);
+      }
     }
 
     if (bracketingDate) {

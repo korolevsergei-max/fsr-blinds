@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
+  CalendarCheck,
   CheckSquare,
   FunnelSimple,
   MagnifyingGlass,
@@ -21,10 +22,13 @@ import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
+import { BulkAssignSchedulerSheet } from "@/components/units/bulk-assign-scheduler-sheet";
 import { isCreatedOnLocalDay, isStoredDateOnLocalDay, formatStoredDateForDisplay, type AddedDateFilter } from "@/lib/created-date";
+import { getFloor } from "@/lib/app-dataset";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
+import type { Scheduler } from "@/lib/types";
 
-export function UnitsList({ data }: { data: AppDataset }) {
+export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedulers?: Scheduler[] }) {
   const { units, clients, buildings, installers } = data;
 
   const [search, setSearch] = useState("");
@@ -32,6 +36,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
+  const [floorFilter, setFloorFilter] = useState("all");
   const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
   const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
@@ -40,11 +45,23 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);
+  const [showSchedulerSheet, setShowSchedulerSheet] = useState(false);
 
   const availableBuildings = useMemo(
     () => clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter),
     [buildings, clientFilter]
   );
+
+  const availableFloors = useMemo(() => {
+    const possibleUnits = units.filter(u => {
+      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
+      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      return true;
+    });
+    const floors = new Set<string>();
+    possibleUnits.forEach(u => floors.add(getFloor(u.unitNumber)));
+    return Array.from(floors).sort((a,b) => a.localeCompare(b, undefined, {numeric: true}));
+  }, [units, clientFilter, buildingFilter]);
 
   const unitIdsWithIssues = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
 
@@ -66,6 +83,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
       } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
         return false;
       }
+      if (floorFilter !== "all" && getFloor(u.unitNumber) !== floorFilter) return false;
       if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
       if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
       if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
@@ -79,6 +97,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     buildingFilter,
     statusFilter,
     installerFilter,
+    floorFilter,
     dateAddedFilter,
     completeByFilter,
     issueFilter,
@@ -113,6 +132,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
     buildingFilter !== "all",
     statusFilter !== "all",
     installerFilter !== "all",
+    floorFilter !== "all",
     dateAddedFilter !== "all",
     completeByFilter !== "all",
     sortOrder !== "none",
@@ -162,6 +182,11 @@ export function UnitsList({ data }: { data: AppDataset }) {
   const buildingOptions = [
     { value: "all", label: "All buildings" },
     ...availableBuildings.map((b) => ({ value: b.id, label: b.name })),
+  ];
+
+  const floorOptions = [
+    { value: "all", label: "All floors" },
+    ...availableFloors.map((f) => ({ value: f, label: `Floor ${f}` })),
   ];
 
   const statusOptions = [
@@ -243,8 +268,9 @@ export function UnitsList({ data }: { data: AppDataset }) {
               </span>
             )}
           </div>
-          <FilterDropdown label="Client" value={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); }} />
-          <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
+          <FilterDropdown label="Client" value={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); setFloorFilter("all"); }} />
+          <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter("all"); }} />
+          <FilterDropdown label="Floor" value={floorFilter} options={floorOptions} onChange={setFloorFilter} />
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
           <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
           <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
@@ -264,6 +290,7 @@ export function UnitsList({ data }: { data: AppDataset }) {
                 setBuildingFilter("all");
                 setStatusFilter("all");
                 setInstallerFilter("all");
+                setFloorFilter("all");
                 setDateAddedFilter("all");
                 setCompleteByFilter("all");
                 setIssueFilter("all");
@@ -412,20 +439,30 @@ export function UnitsList({ data }: { data: AppDataset }) {
               <span className="text-sm font-semibold text-white">
                 {selectedIds.size} unit{selectedIds.size !== 1 ? "s" : ""} selected
               </span>
-              <Button
-                size="sm"
-                onClick={() => setShowBulkSheet(true)}
-                className="!bg-white !text-zinc-900 hover:!bg-zinc-100"
-              >
-                <Users size={14} />
-                Action
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => setShowSchedulerSheet(true)}
+                  className="!bg-sky-500 !text-white hover:!bg-sky-600"
+                >
+                  <CalendarCheck size={14} />
+                  Assign Scheduler
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setShowBulkSheet(true)}
+                  className="!bg-white !text-zinc-900 hover:!bg-zinc-100"
+                >
+                  <Users size={14} />
+                  Assign Installer
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bulk assign sheet */}
+      {/* Bulk assign installer sheet */}
       <AnimatePresence>
         {showBulkSheet && (
           <BulkAssignSheet
@@ -434,6 +471,18 @@ export function UnitsList({ data }: { data: AppDataset }) {
             onClose={() => setShowBulkSheet(false)}
             onSuccess={exitSelectMode}
             showCompleteBy
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Bulk assign scheduler sheet */}
+      <AnimatePresence>
+        {showSchedulerSheet && (
+          <BulkAssignSchedulerSheet
+            unitIds={[...selectedIds]}
+            schedulers={schedulers}
+            onClose={() => setShowSchedulerSheet(false)}
+            onSuccess={exitSelectMode}
           />
         )}
       </AnimatePresence>

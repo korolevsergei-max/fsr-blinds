@@ -66,3 +66,30 @@ const user = await getCurrentUser();
 const installerId = user ? await getLinkedInstallerId(user.id) : null;
 <BuildingUnits data={data} installerId={installerId ?? "inst-1"} />
 ```
+
+## AuthApiError: Invalid Refresh Token: Already Used
+**Symptoms:** 
+- Console logs `AuthApiError: Invalid Refresh Token: Already Used`
+- Next.js development server experiences random auth crashes or user logs out unexpectedly.
+
+**Root Cause:**
+Supabase middleware attempts to refresh an expired token. By default, it updates the outgoing `NextResponse` cookies. However, downstream Server Components running in the same request chain still read the stale cookies from `NextRequest`, try to validate them, and trigger a *second* token refresh. That second refresh fails because the refresh token was already consumed by the middleware.
+
+**Fix:**
+Ensure that `updateSession` in `src/lib/supabase/middleware.ts` mutates the incoming `request.cookies` in addition to the outgoing `NextResponse.cookies`:
+
+```typescript
+setAll(cookiesToSet) {
+  // Update incoming request cookies so downstream Server Components see the new token
+  cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+  
+  supabaseResponse = NextResponse.next({
+    request: { headers: request.headers },
+  });
+  
+  // Set outgoing response cookies so the browser saves the new token
+  cookiesToSet.forEach(({ name, value, options }) =>
+    supabaseResponse.cookies.set(name, value, options)
+  );
+}
+```

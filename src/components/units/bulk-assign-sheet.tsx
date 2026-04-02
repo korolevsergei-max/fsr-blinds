@@ -132,19 +132,23 @@ export function BulkAssignSheet({
                   }`}
                 >
                   <div className="w-9 h-9 rounded-xl bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[11px] font-semibold text-zinc-700">
-                    {assignee.name
-                      .split(" ")
-                      .filter(Boolean)
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
+                    {assignee.name.startsWith("SC: ")
+                      ? "SC"
+                      : assignee.name
+                        .split(" ")
+                        .filter(Boolean)
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="block text-[14px] font-medium text-foreground truncate">
                       {assignee.name}
                     </span>
-                    <span className="block text-[11px] text-tertiary">Installer</span>
+                    <span className="block text-[11px] text-tertiary">
+                      {assignee.name.startsWith("SC: ") ? "Scheduler" : "Installer"}
+                    </span>
                   </div>
                   {selectedInstaller === assignee.id && (
                     <CheckCircle size={18} weight="fill" className="text-accent flex-shrink-0" />

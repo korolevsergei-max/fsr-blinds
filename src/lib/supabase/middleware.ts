@@ -31,9 +31,18 @@ export async function updateSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        // Only mutate the outgoing response cookies.
-        // NextRequest cookies are not reliably mutable across runtimes.
-        supabaseResponse = NextResponse.next({ request });
+        // Update the incoming request cookies so downstream Server Components
+        // see the new tokens and don't try to refresh an already-used token.
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+
+        // Create a new response with the updated request headers so Next.js propagates it
+        supabaseResponse = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        });
+
+        // Set the outgoing response cookies so the browser saves the new tokens
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         );

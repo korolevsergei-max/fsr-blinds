@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { loadFullDataset, loadUnitActivityLog } from "@/lib/server-data";
-import { WindowForm } from "./window-form";
+import { WindowForm } from "@/components/windows/window-form";
 
 export default async function NewWindowPage({
   params,

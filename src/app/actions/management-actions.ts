@@ -13,7 +13,7 @@ function revalidateApp() {
   revalidatePath("/installer", "layout");
 }
 
-/** For scheduler callers, verifies the unit's building is in their allowed list. */
+/** For scheduler callers, verifies the unit has been explicitly assigned to them. */
 async function assertSchedulerUnitScope(
   supabase: Awaited<ReturnType<typeof createClient>>,
   caller: AppUser,
@@ -24,21 +24,14 @@ async function assertSchedulerUnitScope(
   const schedulerId = await getLinkedSchedulerId(caller.id);
   if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
 
-  const { data: unit } = await supabase
-    .from("units")
-    .select("building_id")
-    .eq("id", unitId)
-    .single();
-  if (!unit) return { ok: false, error: "Unit not found." };
-
   const { count } = await supabase
-    .from("scheduler_building_access")
+    .from("scheduler_unit_assignments")
     .select("*", { count: "exact", head: true })
     .eq("scheduler_id", schedulerId)
-    .eq("building_id", unit.building_id);
+    .eq("unit_id", unitId);
 
   if ((count ?? 0) === 0) {
-    return { ok: false, error: "Access denied: this unit is not in your assigned buildings." };
+    return { ok: false, error: "Access denied: this unit has not been assigned to you." };
   }
 
   return null;
@@ -369,4 +362,66 @@ export async function bulkImportUnits(
 
   revalidateApp();
   return { created, skipped, errors };
+}
+
+/**
+ * Owner assigns a set of units to a scheduler.
+ * Because scheduler_unit_assignments has UNIQUE(unit_id), any existing
+ * assignment for a unit is replaced (the unit moves to the new scheduler).
+ */
+export async function assignUnitsToScheduler(
+  schedulerId: string,
+  unitIds: string[]
+): Promise<ActionResult> {
+  try {
+    await requireOwner();
+    if (!schedulerId || unitIds.length === 0) {
+      return { ok: false, error: "Scheduler and at least one unit are required." };
+    }
+    const supabase = await createClient();
+
+    // Upsert rows — ON CONFLICT on unit_id replaces the scheduler.
+    const rows = unitIds.map((unitId) => ({
+      id: `sua-${crypto.randomUUID().slice(0, 8)}`,
+      scheduler_id: schedulerId,
+      unit_id: unitId,
+    }));
+
+    const { error } = await supabase
+      .from("scheduler_unit_assignments")
+      .upsert(rows, { onConflict: "unit_id" });
+
+    if (error) return { ok: false, error: error.message };
+
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to assign units" };
+  }
+}
+
+/** Loads all scheduler_unit_assignments as a map of schedulerId → unitIds[]. */
+export async function loadSchedulerUnitAssignments(): Promise<Record<string, string[]>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("scheduler_id, unit_id");
+  if (error) return {};
+  const map: Record<string, string[]> = {};
+  for (const row of data ?? []) {
+    if (!map[row.scheduler_id]) map[row.scheduler_id] = [];
+    map[row.scheduler_id].push(row.unit_id);
+  }
+  return map;
+}
+
+/** Returns the schedulerId that owns a given unit, or null if unassigned. */
+export async function getUnitSchedulerAssignment(unitId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("scheduler_id")
+    .eq("unit_id", unitId)
+    .single();
+  return data?.scheduler_id ?? null;
 }

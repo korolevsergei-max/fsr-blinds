@@ -402,20 +402,34 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const units = (unitsRes.data as UnitRow[]).map(mapUnit);
   const schedule = normalizeScheduleEntries(units, (scheduleRes.data as ScheduleRow[]).map(mapSchedule));
 
+  const installers = (installersRes.data as InstallerRow[]).map(mapInstaller);
+  const schedulers = schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[])?.map(mapScheduler) ?? [];
+
+  // Allow Schedulers to act as Installers
+  const combinedInstallers = [
+    ...installers,
+    ...schedulers.map((sch) => ({
+      id: `sch-${sch.id}`, // Prefix with sch- to distinguish in backend
+      name: `SC: ${sch.name}`,
+      email: sch.email,
+      phone: sch.phone,
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
+      authUserId: sch.authUserId,
+    })),
+  ];
+
   return {
     clients: (clientsRes.data as ClientRow[]).map(mapClient),
     buildings: (buildingsRes.data as BuildingRow[]).map(mapBuilding),
     units,
     rooms: (roomsRes.data as RoomRow[]).map(mapRoom),
     windows: (windowsRes.data as WindowRow[]).map(mapWindow),
-    installers: (installersRes.data as InstallerRow[]).map(mapInstaller),
+    installers: combinedInstallers,
     schedule,
     manufacturers: manufacturersRes.error
       ? []
       : (manufacturersRes.data as ManufacturerRow[])?.map(mapManufacturer) ?? [],
-    schedulers: schedulersRes.error
-      ? []
-      : (schedulersRes.data as SchedulerRow[])?.map(mapScheduler) ?? [],
+    schedulers,
   };
 });
 
@@ -450,8 +464,10 @@ export async function loadAllSchedulerBuildingAccess(): Promise<Record<string, s
 }
 
 /**
- * Loads a dataset scoped to the buildings the current scheduler is allowed to see.
- * Returns an empty dataset if the scheduler has no building assignments.
+ * Loads a dataset scoped to the units the current scheduler has been assigned.
+ * Units are gated by scheduler_unit_assignments (explicitly assigned by the owner).
+ * Installers are scoped to the scheduler's own team (installer.scheduler_id).
+ * Returns an empty dataset if the scheduler has no unit assignments.
  */
 export async function loadSchedulerDataset(): Promise<AppDataset> {
   const user = await getCurrentUser();
@@ -464,31 +480,37 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
 
   const supabase = await createClient();
 
-  const { data: accessRows } = await supabase
-    .from("scheduler_building_access")
-    .select("building_id")
+  // Load unit IDs explicitly assigned to this scheduler.
+  const { data: assignmentRows } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("unit_id")
     .eq("scheduler_id", schedulerId);
 
-  const allowedBuildingIds = (accessRows ?? []).map(
-    (r: { building_id: string }) => r.building_id
+  const assignedUnitIds = (assignmentRows ?? []).map(
+    (r: { unit_id: string }) => r.unit_id
   );
 
-  if (allowedBuildingIds.length === 0) return emptyDataset();
+  if (assignedUnitIds.length === 0) return emptyDataset();
 
-  const [buildingRows, unitRows, installerRows] = await Promise.all([
-    supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name"),
-    supabase.from("units").select("*").in("building_id", allowedBuildingIds).order("unit_number"),
-    supabase.from("installers").select("*").order("name"),
-  ]);
+  // Load the actual unit rows.
+  const { data: unitData, error: unitError } = await supabase
+    .from("units")
+    .select("*")
+    .in("id", assignedUnitIds)
+    .order("unit_number");
 
-  const buildings = ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding);
-  const units = ((unitRows.data as UnitRow[]) ?? []).map(mapUnit);
-  const installers = ((installerRows.data as InstallerRow[]) ?? []).map(mapInstaller);
+  if (unitError) return emptyDataset();
+  const units = ((unitData as UnitRow[]) ?? []).map(mapUnit);
 
-  const allowedClientIds = [...new Set(buildings.map((b) => b.clientId))];
+  // Derive unique building and client id sets from the loaded units.
+  const allowedBuildingIds = [...new Set(units.map((u) => u.buildingId))];
+  const allowedClientIds = [...new Set(units.map((u) => u.clientId))];
   const allowedUnitIds = units.map((u) => u.id);
 
-  const [clientRows, roomRows, scheduleRows] = await Promise.all([
+  const [buildingRows, clientRows, roomRows, scheduleRows, installerRows] = await Promise.all([
+    allowedBuildingIds.length > 0
+      ? supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name")
+      : Promise.resolve({ data: [] }),
     allowedClientIds.length > 0
       ? supabase.from("clients").select("*").in("id", allowedClientIds).order("name")
       : Promise.resolve({ data: [] }),
@@ -498,10 +520,20 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     allowedUnitIds.length > 0
       ? supabase.from("schedule_entries").select("*").in("unit_id", allowedUnitIds).order("task_date")
       : Promise.resolve({ data: [] }),
+    // Scope installers to this scheduler's team.
+    supabase.from("installers").select("*").eq("scheduler_id", schedulerId).order("name"),
   ]);
 
+  const buildings = ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding);
   const clients = ((clientRows.data as ClientRow[]) ?? []).map(mapClient);
   const rooms = ((roomRows.data as RoomRow[]) ?? []).map(mapRoom);
+
+  // Fall back to all installers when the scheduler has no team yet.
+  let installers = ((installerRows.data as InstallerRow[]) ?? []).map(mapInstaller);
+  if (installers.length === 0) {
+    const { data: allInstallers } = await supabase.from("installers").select("*").order("name");
+    installers = ((allInstallers as InstallerRow[]) ?? []).map(mapInstaller);
+  }
 
   const allowedRoomIds = rooms.map((r) => r.id);
   const windowRows =

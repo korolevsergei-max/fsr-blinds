@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/auth";
-import { requireOwner, requireOwnerOrScheduler } from "@/lib/auth";
+import { requireOwner, requireOwnerOrScheduler, getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 
 export type ActionResult =
   | { ok: true; tempPassword?: string }
@@ -41,6 +41,7 @@ function isAlreadyRegisteredAuthError(message: string): boolean {
   return normalized.includes("already been registered") || normalized.includes("already registered");
 }
 
+// Still used by createManufacturerAccount email-invite fallback.
 function isRateLimitError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes("email rate limit") || normalized.includes("rate limit exceeded") || normalized.includes("over_email_send_rate_limit");
@@ -163,61 +164,48 @@ export async function inviteUser(
 export async function createInstallerAccount(
   name: string,
   email: string,
-  phone: string
+  phone: string,
+  password: string
 ): Promise<ActionResult> {
   try {
     const denied = await assertOwnerOrSchedulerForInstallerActions();
     if (denied) return denied;
 
+    if (!password || password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    // Detect if the caller is a scheduler and resolve their team ID.
+    const callerUser = await getCurrentUser();
+    const callerSchedulerId =
+      callerUser?.role === "scheduler"
+        ? await getLinkedSchedulerId(callerUser.id)
+        : null;
+
     const admin = createAdminClient();
-    const redirectTo = `${getAuthRedirectBaseUrl()}/auth/set-password`;
 
-    // NOTE: Delete stale rows only AFTER auth invite succeeds to avoid leaving
-    // orphaned auth users when the invite email hits a rate limit.
-    let { data: authUser, error: authErr } =
-      await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: { display_name: name, role: "installer" },
-      });
-
-    if (authErr && isAlreadyRegisteredAuthError(authErr.message)) {
+    // If the email is already registered, delete the old auth user first so we
+    // can create a fresh one. Guard against accidentally deleting the signed-in owner.
+    const existingId = await findAuthUserIdByEmail(email);
+    if (existingId) {
       const selfGuard = await ensureNotDeletingSelf(email);
       if (!selfGuard.ok) return { ok: false, error: selfGuard.error };
-
-      const existingId = await findAuthUserIdByEmail(email);
-      if (existingId) {
-        await admin.auth.admin.deleteUser(existingId);
-        ({ data: authUser, error: authErr } =
-          await admin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { display_name: name, role: "installer" },
-          }));
-      }
+      await admin.auth.admin.deleteUser(existingId);
     }
 
-    // Fallback: if email rate limit hit, create the user directly with a temp password.
-    let tempPassword: string | undefined;
-    if (authErr && isRateLimitError(authErr.message)) {
-      tempPassword = generateTempPassword();
-      const { data: createdUser, error: createErr } =
-        await admin.auth.admin.createUser({
-          email,
-          password: tempPassword,
-          email_confirm: true,
-          user_metadata: { display_name: name, role: "installer" },
-        });
-      if (createErr) return { ok: false, error: createErr.message };
-      authUser = createdUser;
-      authErr = null;
-    }
+    const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: name, role: "installer" },
+    });
 
     if (authErr) return { ok: false, error: authErr.message };
-
     if (!authUser?.user?.id) {
-      return { ok: false, error: "Invite succeeded but no user id was returned." };
+      return { ok: false, error: "Account created but no user id was returned." };
     }
 
-    // Auth invite succeeded — now safe to clean up any stale installer rows for this email.
+    // Clean up any stale installer rows for this email.
     await deleteInstallersByEmail(admin, email);
 
     const supabase = await createClient();
@@ -230,6 +218,8 @@ export async function createInstallerAccount(
       phone,
       avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
       auth_user_id: authUser.user.id,
+      // Tag to scheduler's team if created by a scheduler.
+      ...(callerSchedulerId ? { scheduler_id: callerSchedulerId } : {}),
     };
 
     let { error: insErr } = await supabase.from("installers").insert(installerInsertWithAuth);
@@ -240,6 +230,7 @@ export async function createInstallerAccount(
         email,
         phone,
         avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+        ...(callerSchedulerId ? { scheduler_id: callerSchedulerId } : {}),
       };
       const retry = await supabase.from("installers").insert(installerInsertLegacy);
       insErr = retry.error;
@@ -249,7 +240,7 @@ export async function createInstallerAccount(
 
     revalidatePath("/management", "layout");
     revalidatePath("/scheduler", "layout");
-    return { ok: true, tempPassword };
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create installer" };
   }
@@ -491,55 +482,37 @@ async function deleteSchedulersByEmail(admin: SupabaseClient, email: string) {
 export async function createSchedulerAccount(
   name: string,
   email: string,
-  phone: string
+  phone: string,
+  password: string
 ): Promise<ActionResult> {
   try {
     const denied = await assertOwnerForAccountActions();
     if (denied) return denied;
 
+    if (!password || password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
     const admin = createAdminClient();
-    const redirectTo = `${getAuthRedirectBaseUrl()}/auth/set-password`;
 
-    let { data: authUser, error: authErr } =
-      await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: { display_name: name, role: "scheduler" },
-      });
-
-    if (authErr && isAlreadyRegisteredAuthError(authErr.message)) {
+    // If the email is already registered, delete old auth user first.
+    const existingId = await findAuthUserIdByEmail(email);
+    if (existingId) {
       const selfGuard = await ensureNotDeletingSelf(email);
       if (!selfGuard.ok) return { ok: false, error: selfGuard.error };
-
-      const existingId = await findAuthUserIdByEmail(email);
-      if (existingId) {
-        await admin.auth.admin.deleteUser(existingId);
-        ({ data: authUser, error: authErr } =
-          await admin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { display_name: name, role: "scheduler" },
-          }));
-      }
+      await admin.auth.admin.deleteUser(existingId);
     }
 
-    let tempPassword: string | undefined;
-    if (authErr && isRateLimitError(authErr.message)) {
-      tempPassword = generateTempPassword();
-      const { data: createdUser, error: createErr } =
-        await admin.auth.admin.createUser({
-          email,
-          password: tempPassword,
-          email_confirm: true,
-          user_metadata: { display_name: name, role: "scheduler" },
-        });
-      if (createErr) return { ok: false, error: createErr.message };
-      authUser = createdUser;
-      authErr = null;
-    }
+    const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: name, role: "scheduler" },
+    });
 
     if (authErr) return { ok: false, error: authErr.message };
-
     if (!authUser?.user?.id) {
-      return { ok: false, error: "Invite succeeded but no user id was returned." };
+      return { ok: false, error: "Account created but no user id was returned." };
     }
 
     await deleteSchedulersByEmail(admin, email);
@@ -558,7 +531,7 @@ export async function createSchedulerAccount(
     if (schErr) return { ok: false, error: schErr.message };
 
     revalidatePath("/management", "layout");
-    return { ok: true, tempPassword };
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create scheduler" };
   }
@@ -628,5 +601,93 @@ export async function deleteOrphanAuthAccount(
       ok: false,
       error: e instanceof Error ? e.message : "Failed to remove auth user",
     };
+  }
+}
+
+/**
+ * Create a co-owner account. Creates a Supabase auth user (direct password,
+ * no email invite) and inserts a user_profiles row with role = 'owner'.
+ */
+export async function createOwnerAccount(
+  displayName: string,
+  email: string,
+  password: string
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    if (!password || password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    const admin = createAdminClient();
+
+    // If already registered, remove the old auth user first (guard against self-delete).
+    const existingId = await findAuthUserIdByEmail(email);
+    if (existingId) {
+      const selfGuard = await ensureNotDeletingSelf(email);
+      if (!selfGuard.ok) return { ok: false, error: selfGuard.error };
+      await admin.auth.admin.deleteUser(existingId);
+    }
+
+    const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: displayName, role: "owner" },
+    });
+
+    if (authErr) return { ok: false, error: authErr.message };
+    if (!authUser?.user?.id) {
+      return { ok: false, error: "Account created but no user id was returned." };
+    }
+
+    // Upsert user_profiles so the new owner can log in immediately.
+    const supabase = await createClient();
+    const { error: profileErr } = await supabase.from("user_profiles").upsert({
+      id: authUser.user.id,
+      role: "owner",
+      display_name: displayName,
+      email,
+    });
+
+    if (profileErr) return { ok: false, error: profileErr.message };
+
+    revalidatePath("/management/accounts", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create owner account" };
+  }
+}
+
+/**
+ * Delete a co-owner account. Refuses to delete the currently signed-in owner.
+ */
+export async function deleteOwnerAccount(
+  authUserId: string,
+  email: string
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    const selfGuard = await ensureNotDeletingSelf(email);
+    if (!selfGuard.ok) return selfGuard;
+
+    const admin = createAdminClient();
+
+    // Deleting the auth user will cascade-delete the user_profiles row via trigger/FK.
+    const { error } = await admin.auth.admin.deleteUser(authUserId);
+    if (error) return { ok: false, error: error.message };
+
+    // Belt-and-suspenders: explicitly remove any lingering user_profiles row.
+    const supabase = await createClient();
+    await supabase.from("user_profiles").delete().eq("id", authUserId);
+
+    revalidatePath("/management/accounts", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete owner account" };
   }
 }

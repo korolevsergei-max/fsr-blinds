@@ -1,5 +1,5 @@
 import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
-import { WindowStageReadonlyView } from "@/components/windows/window-stage-readonly-view";
+import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
 export default async function SchedulerWindowInstalledPage({
   params,
@@ -12,10 +12,9 @@ export default async function SchedulerWindowInstalledPage({
     loadUnitStageMedia(id),
   ]);
   return (
-    <WindowStageReadonlyView
+    <InstalledPhotoForm
       data={data}
       mediaItems={mediaItems}
-      mode="installed"
       routeBasePath="/scheduler/units"
     />
   );

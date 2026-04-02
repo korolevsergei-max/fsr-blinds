@@ -55,9 +55,11 @@ function buildWindowActivityDescription(log: UnitActivityLog): string {
 export function WindowForm({
   data,
   activityLog,
+  routeBasePath = "/installer/units",
 }: {
   data: AppDataset;
   activityLog: UnitActivityLog[];
+  routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const router = useRouter();
@@ -223,7 +225,7 @@ export function WindowForm({
         setFormError(result.error);
         return;
       }
-      router.push(`/installer/units/${id}/rooms/${roomId}`);
+      router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       router.refresh();
     });
   };
@@ -237,7 +239,7 @@ export function WindowForm({
       <PageHeader
         title={existingWindow ? "Edit Window" : "Add Window"}
         subtitle={`${room.name} • ${unit.unitNumber}`}
-        backHref={`/installer/units/${id}/rooms/${roomId}`}
+        backHref={`${routeBasePath}/${id}/rooms/${roomId}`}
       />
 
       <form
@@ -250,6 +252,7 @@ export function WindowForm({
             roomId={roomId}
             windowId={existingWindow.id}
             active="before"
+            routeBasePath={routeBasePath}
           />
         )}
 
