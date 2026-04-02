@@ -1,19 +1,27 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "@/lib/supabase/env";
+import {
+  isInvalidRefreshTokenError,
+  isSupabaseAuthCookieName,
+} from "@/lib/supabase/auth-errors";
 
-function isInvalidRefreshTokenError(error: unknown): boolean {
-  if (!error || typeof error !== "object" || !("message" in error)) return false;
-  const message = String(error.message).toLowerCase();
-  return message.includes("invalid refresh token") || message.includes("refresh token not found");
+function supabaseAuthCookieNames(request: NextRequest): string[] {
+  return request.cookies.getAll().map((c) => c.name).filter(isSupabaseAuthCookieName);
 }
 
-function isSupabaseAuthCookie(name: string): boolean {
-  return name.startsWith("sb-") && name.includes("-auth-token");
+/** Copy Set-Cookie deletions onto another response (e.g. redirects). */
+function applyAuthCookieDeletions(response: NextResponse, names: string[]): NextResponse {
+  for (const name of names) {
+    response.cookies.set(name, "", { path: "/", maxAge: 0 });
+  }
+  return response;
 }
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  /** When non-null, browser must receive these cookie clears on the final response. */
+  let deletedAuthCookieNames: string[] | null = null;
 
   let url: string;
   let key: string;
@@ -41,6 +49,9 @@ export async function updateSession(request: NextRequest) {
             headers: request.headers,
           },
         });
+        if (deletedAuthCookieNames && deletedAuthCookieNames.length > 0) {
+          applyAuthCookieDeletions(supabaseResponse, deletedAuthCookieNames);
+        }
 
         // Set the outgoing response cookies so the browser saves the new tokens
         cookiesToSet.forEach(({ name, value, options }) =>
@@ -52,19 +63,36 @@ export async function updateSession(request: NextRequest) {
 
   let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null = null;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch (error) {
-    // Stale/invalid refresh token cookies can throw AuthApiError in middleware.
-    // Clear Supabase auth cookies and continue as signed out.
-    if (isInvalidRefreshTokenError(error)) {
-      request.cookies.getAll().forEach(({ name }) => {
-        if (!isSupabaseAuthCookie(name)) return;
-        supabaseResponse.cookies.set(name, "", {
-          path: "/",
-          maxAge: 0,
-        });
+    const { data, error } = await supabase.auth.getUser();
+    if (error && isInvalidRefreshTokenError(error)) {
+      const names = supabaseAuthCookieNames(request);
+      deletedAuthCookieNames = names;
+      for (const name of names) {
+        request.cookies.delete(name);
+      }
+      supabaseResponse = NextResponse.next({
+        request: { headers: request.headers },
       });
+      for (const name of names) {
+        supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
+      }
+      user = null;
+    } else {
+      user = data.user;
+    }
+  } catch (error) {
+    if (isInvalidRefreshTokenError(error)) {
+      const names = supabaseAuthCookieNames(request);
+      deletedAuthCookieNames = names;
+      for (const name of names) {
+        request.cookies.delete(name);
+      }
+      supabaseResponse = NextResponse.next({
+        request: { headers: request.headers },
+      });
+      for (const name of names) {
+        supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
+      }
     }
     user = null;
   }
@@ -84,13 +112,25 @@ export async function updateSession(request: NextRequest) {
         .single();
 
       if (profile?.role === "owner" || profile?.role === "manufacturer")
-        return NextResponse.redirect(new URL("/management", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/management", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       if (profile?.role === "installer")
-        return NextResponse.redirect(new URL("/installer", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/installer", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       if (profile?.role === "scheduler")
-        return NextResponse.redirect(new URL("/scheduler", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/scheduler", request.url)),
+          deletedAuthCookieNames ?? []
+        );
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    return applyAuthCookieDeletions(
+      NextResponse.redirect(new URL("/login", request.url)),
+      deletedAuthCookieNames ?? []
+    );
   }
 
   if (
@@ -99,7 +139,10 @@ export async function updateSession(request: NextRequest) {
       pathname.startsWith("/installer") ||
       pathname.startsWith("/scheduler"))
   ) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    return applyAuthCookieDeletions(
+      NextResponse.redirect(new URL("/login", request.url)),
+      deletedAuthCookieNames ?? []
+    );
   }
 
   if (user && pathname.startsWith("/management")) {
@@ -111,12 +154,21 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "owner" && profile?.role !== "manufacturer") {
       if (profile?.role === "installer") {
-        return NextResponse.redirect(new URL("/installer", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/installer", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
       if (profile?.role === "scheduler") {
-        return NextResponse.redirect(new URL("/scheduler", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/scheduler", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
-      return NextResponse.redirect(new URL("/login", request.url));
+      return applyAuthCookieDeletions(
+        NextResponse.redirect(new URL("/login", request.url)),
+        deletedAuthCookieNames ?? []
+      );
     }
   }
 
@@ -129,12 +181,21 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "installer") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {
-        return NextResponse.redirect(new URL("/management", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/management", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
       if (profile?.role === "scheduler") {
-        return NextResponse.redirect(new URL("/scheduler", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/scheduler", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
-      return NextResponse.redirect(new URL("/login", request.url));
+      return applyAuthCookieDeletions(
+        NextResponse.redirect(new URL("/login", request.url)),
+        deletedAuthCookieNames ?? []
+      );
     }
   }
 
@@ -147,12 +208,21 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "scheduler") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {
-        return NextResponse.redirect(new URL("/management", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/management", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
       if (profile?.role === "installer") {
-        return NextResponse.redirect(new URL("/installer", request.url));
+        return applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/installer", request.url)),
+          deletedAuthCookieNames ?? []
+        );
       }
-      return NextResponse.redirect(new URL("/login", request.url));
+      return applyAuthCookieDeletions(
+        NextResponse.redirect(new URL("/login", request.url)),
+        deletedAuthCookieNames ?? []
+      );
     }
   }
 

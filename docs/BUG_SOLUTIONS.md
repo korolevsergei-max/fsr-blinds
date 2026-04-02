@@ -93,3 +93,15 @@ setAll(cookiesToSet) {
   );
 }
 ```
+
+---
+
+## AuthApiError: Invalid Refresh Token: Refresh Token Not Found
+
+**Symptoms:** Console shows `AuthApiError: Invalid Refresh Token: Refresh Token Not Found` (often in dev / Turbopack client chunks).
+
+**Root cause:** `supabase.auth.getUser()` usually **returns** `{ error }` for a bad refresh token; it does not throw. Middleware that only used `try/catch` never cleared cookies, and redirects to `/login` built a **new** `NextResponse` without the `Set-Cookie` deletions, so the browser kept dead tokens and kept retrying.
+
+**Fix (implemented):** In `src/lib/supabase/middleware.ts`, treat `getUser()`’s `error` with `isInvalidRefreshTokenError()` from `src/lib/supabase/auth-errors.ts`: delete matching `sb-*-auth-token*` cookies on the **request** (so RSC in the same request see no session), set `maxAge: 0` on the outgoing response, and **re-apply those deletions on every redirect** so the browser actually drops the cookies.
+
+**Note:** `@supabase/auth-js` may still `console.error` once during client `_recoverAndRefresh` before the next navigation applies cleared cookies; clearing cookies on the response removes the loop.
