@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwner, requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
+import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -117,9 +118,6 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to delete client" };
   }
 }
-
-/** Type this phrase in the Clients page danger zone to confirm a full data reset. */
-export const CONFIRM_PURGE_ALL_CLIENTS = "DELETE ALL CLIENTS";
 
 /**
  * Owner-only: removes every client row (CASCADE deletes buildings, units, rooms, windows,
