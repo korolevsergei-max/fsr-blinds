@@ -9,8 +9,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
-import { purgeAllClientData } from "@/app/actions/management-actions";
-import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
+import {
+  CONFIRM_PURGE_ALL_CLIENTS,
+  purgeAllClientData,
+} from "@/app/actions/management-actions";
 
 export function ClientsList({ data }: { data: AppDataset }) {
   const { clients, buildings, units } = data;
