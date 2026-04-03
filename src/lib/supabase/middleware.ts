@@ -2,12 +2,24 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 import {
+  AUTH_COOKIE_PURGE_FLAG,
   isInvalidRefreshTokenError,
-  isSupabaseAuthCookieName,
+  isSupabaseBrowserCookieName,
 } from "@/lib/supabase/auth-errors";
 
 function supabaseAuthCookieNames(request: NextRequest): string[] {
-  return request.cookies.getAll().map((c) => c.name).filter(isSupabaseAuthCookieName);
+  return request.cookies.getAll().map((c) => c.name).filter(isSupabaseBrowserCookieName);
+}
+
+function finish(response: NextResponse, authInvalidated: boolean): NextResponse {
+  if (authInvalidated) {
+    response.cookies.set(AUTH_COOKIE_PURGE_FLAG, "1", {
+      path: "/",
+      maxAge: 60,
+      sameSite: "lax",
+    });
+  }
+  return response;
 }
 
 /** Copy Set-Cookie deletions onto another response (e.g. redirects). */
@@ -22,6 +34,7 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   /** When non-null, browser must receive these cookie clears on the final response. */
   let deletedAuthCookieNames: string[] | null = null;
+  let authInvalidated = false;
 
   let url: string;
   let key: string;
@@ -52,6 +65,13 @@ export async function updateSession(request: NextRequest) {
         if (deletedAuthCookieNames && deletedAuthCookieNames.length > 0) {
           applyAuthCookieDeletions(supabaseResponse, deletedAuthCookieNames);
         }
+        if (authInvalidated) {
+          supabaseResponse.cookies.set(AUTH_COOKIE_PURGE_FLAG, "1", {
+            path: "/",
+            maxAge: 60,
+            sameSite: "lax",
+          });
+        }
 
         // Set the outgoing response cookies so the browser saves the new tokens
         cookiesToSet.forEach(({ name, value, options }) =>
@@ -65,6 +85,7 @@ export async function updateSession(request: NextRequest) {
   try {
     const { data, error } = await supabase.auth.getUser();
     if (error && isInvalidRefreshTokenError(error)) {
+      authInvalidated = true;
       const names = supabaseAuthCookieNames(request);
       deletedAuthCookieNames = names;
       for (const name of names) {
@@ -82,6 +103,7 @@ export async function updateSession(request: NextRequest) {
     }
   } catch (error) {
     if (isInvalidRefreshTokenError(error)) {
+      authInvalidated = true;
       const names = supabaseAuthCookieNames(request);
       deletedAuthCookieNames = names;
       for (const name of names) {
@@ -100,7 +122,7 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   if (pathname === "/login" || pathname.startsWith("/auth/")) {
-    return supabaseResponse;
+    return finish(supabaseResponse, authInvalidated);
   }
 
   if (pathname === "/") {
@@ -112,24 +134,36 @@ export async function updateSession(request: NextRequest) {
         .single();
 
       if (profile?.role === "owner" || profile?.role === "manufacturer")
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/management", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       if (profile?.role === "installer")
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/installer", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/installer", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       if (profile?.role === "scheduler")
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/scheduler", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/scheduler", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
     }
-    return applyAuthCookieDeletions(
-      NextResponse.redirect(new URL("/login", request.url)),
-      deletedAuthCookieNames ?? []
+    return finish(
+      applyAuthCookieDeletions(
+        NextResponse.redirect(new URL("/login", request.url)),
+        deletedAuthCookieNames ?? []
+      ),
+      authInvalidated
     );
   }
 
@@ -139,9 +173,12 @@ export async function updateSession(request: NextRequest) {
       pathname.startsWith("/installer") ||
       pathname.startsWith("/scheduler"))
   ) {
-    return applyAuthCookieDeletions(
-      NextResponse.redirect(new URL("/login", request.url)),
-      deletedAuthCookieNames ?? []
+    return finish(
+      applyAuthCookieDeletions(
+        NextResponse.redirect(new URL("/login", request.url)),
+        deletedAuthCookieNames ?? []
+      ),
+      authInvalidated
     );
   }
 
@@ -154,20 +191,29 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "owner" && profile?.role !== "manufacturer") {
       if (profile?.role === "installer") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/installer", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/installer", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
       if (profile?.role === "scheduler") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/scheduler", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/scheduler", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
-      return applyAuthCookieDeletions(
-        NextResponse.redirect(new URL("/login", request.url)),
-        deletedAuthCookieNames ?? []
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/login", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
       );
     }
   }
@@ -181,20 +227,29 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "installer") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/management", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
       if (profile?.role === "scheduler") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/scheduler", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/scheduler", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
-      return applyAuthCookieDeletions(
-        NextResponse.redirect(new URL("/login", request.url)),
-        deletedAuthCookieNames ?? []
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/login", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
       );
     }
   }
@@ -208,23 +263,32 @@ export async function updateSession(request: NextRequest) {
 
     if (profile?.role !== "scheduler") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/management", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
       if (profile?.role === "installer") {
-        return applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/installer", request.url)),
-          deletedAuthCookieNames ?? []
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/installer", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
         );
       }
-      return applyAuthCookieDeletions(
-        NextResponse.redirect(new URL("/login", request.url)),
-        deletedAuthCookieNames ?? []
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/login", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
       );
     }
   }
 
-  return supabaseResponse;
+  return finish(supabaseResponse, authInvalidated);
 }
