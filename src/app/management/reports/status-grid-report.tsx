@@ -22,9 +22,11 @@ type ReportUnit = Unit & {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
+/** Corner letter from actual unit progress (matches recomputeUnitStatus ladder). */
 function getTodayBadge(status: string): "M" | "B" | "I" | "" {
-  if (status === "installed") return "I";
+  if (status === "client_approved" || status === "installed") return "I";
   if (status === "bracketed") return "B";
+  if (status === "measured") return "M";
   return "";
 }
 

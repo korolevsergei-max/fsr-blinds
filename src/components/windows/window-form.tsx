@@ -120,6 +120,7 @@ export function WindowForm({
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const saveErrorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return () => {
@@ -155,8 +156,19 @@ export function WindowForm({
     const hasPhoto = photoFile || existingWindow?.photoUrl;
     if (!hasPhoto) e.photo = "Pre-bracketing photo is required";
     setErrors(e);
-    return Object.keys(e).length === 0;
+    const msgs = Object.values(e).filter(Boolean);
+    if (msgs.length > 0) {
+      setFormError(msgs.join(" · "));
+      return false;
+    }
+    setFormError("");
+    return true;
   };
+
+  useEffect(() => {
+    if (!formError || !saveErrorRef.current) return;
+    saveErrorRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [formError]);
 
   const onFileChange = (f: File | null) => {
     setPhotoFile(f);
@@ -471,6 +483,16 @@ export function WindowForm({
                 ? "Update Window"
                 : "Save Window"}
           </Button>
+
+          {formError && (
+            <div
+              ref={saveErrorRef}
+              className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-2xl px-4 py-3"
+              role="alert"
+            >
+              {formError}
+            </div>
+          )}
 
           {existingWindow && (
             <div className="mt-4 rounded-2xl border border-border bg-white p-4">

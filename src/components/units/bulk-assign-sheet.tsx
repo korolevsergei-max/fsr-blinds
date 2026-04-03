@@ -15,6 +15,8 @@ type BulkAssignSheetProps = {
   onClose: () => void;
   onSuccess: () => void;
   showCompleteBy?: boolean;
+  /** Dates-only sheet (no installer picker) — used from “Set dates” bulk action. */
+  variant?: "assign" | "datesOnly";
 };
 
 export function BulkAssignSheet({
@@ -23,7 +25,9 @@ export function BulkAssignSheet({
   onClose,
   onSuccess,
   showCompleteBy = false,
+  variant = "assign",
 }: BulkAssignSheetProps) {
+  const datesOnly = variant === "datesOnly";
   const [selectedInstaller, setSelectedInstaller] = useState("");
   const [measurementDate, setMeasurementDate] = useState("");
   const [bracketingDate, setBracketingDate] = useState("");
@@ -88,7 +92,9 @@ export function BulkAssignSheet({
       >
         <div className="px-4 pt-4 pb-2 flex items-center justify-between border-b border-border">
           <div>
-            <h2 className="text-[15px] font-semibold text-foreground">Bulk assign</h2>
+            <h2 className="text-[15px] font-semibold text-foreground">
+              {datesOnly ? "Set Dates" : "Bulk assign"}
+            </h2>
             <p className="text-[12px] text-tertiary">
               {unitIds.length} unit{unitIds.length !== 1 ? "s" : ""} selected
             </p>
@@ -109,59 +115,61 @@ export function BulkAssignSheet({
             </div>
           )}
 
-          <div>
-            <SectionLabel className="flex items-center gap-1.5">
-              <Users size={13} className="inline" />
-              Assign installer
-            </SectionLabel>
-            <div className="flex flex-col gap-2">
-              {assignees.length === 0 && (
-                <p className="py-4 text-center text-[13px] text-muted">
-                  No installers are available yet. Add one before assigning units.
-                </p>
-              )}
-              {assignees.map((assignee) => (
-                <button
-                  key={`installer-${assignee.id}`}
-                  type="button"
-                  onClick={() => setSelectedInstaller(assignee.id)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-left transition-all active:scale-[0.98] ${
-                    selectedInstaller === assignee.id
-                      ? "border-accent bg-accent-light"
-                      : "border-border bg-card hover:bg-surface"
-                  }`}
-                >
-                  <div className="w-9 h-9 rounded-xl bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[11px] font-semibold text-zinc-700">
-                    {assignee.name.startsWith("SC: ")
-                      ? "SC"
-                      : assignee.name
-                        .split(" ")
-                        .filter(Boolean)
-                        .map((part) => part[0])
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="block text-[14px] font-medium text-foreground truncate">
-                      {assignee.name}
-                    </span>
-                    <span className="block text-[11px] text-tertiary">
-                      {assignee.name.startsWith("SC: ") ? "Scheduler" : "Installer"}
-                    </span>
-                  </div>
-                  {selectedInstaller === assignee.id && (
-                    <CheckCircle size={18} weight="fill" className="text-accent flex-shrink-0" />
-                  )}
-                </button>
-              ))}
+          {!datesOnly && (
+            <div>
+              <SectionLabel className="flex items-center gap-1.5">
+                <Users size={13} className="inline" />
+                Assign installer
+              </SectionLabel>
+              <div className="flex flex-col gap-2">
+                {assignees.length === 0 && (
+                  <p className="py-4 text-center text-[13px] text-muted">
+                    No installers are available yet. Add one before assigning units.
+                  </p>
+                )}
+                {assignees.map((assignee) => (
+                  <button
+                    key={`installer-${assignee.id}`}
+                    type="button"
+                    onClick={() => setSelectedInstaller(assignee.id)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md)] border text-left transition-all active:scale-[0.98] ${
+                      selectedInstaller === assignee.id
+                        ? "border-accent bg-accent-light"
+                        : "border-border bg-card hover:bg-surface"
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[11px] font-semibold text-zinc-700">
+                      {assignee.name.startsWith("SC: ")
+                        ? "SC"
+                        : assignee.name
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-[14px] font-medium text-foreground truncate">
+                        {assignee.name}
+                      </span>
+                      <span className="block text-[11px] text-tertiary">
+                        {assignee.name.startsWith("SC: ") ? "Scheduler" : "Installer"}
+                      </span>
+                    </div>
+                    {selectedInstaller === assignee.id && (
+                      <CheckCircle size={18} weight="fill" className="text-accent flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <SectionLabel className="flex items-center gap-1.5">
               <CalendarBlank size={13} className="inline" />
-              Dates (optional)
+              {datesOnly ? "Schedule & deadlines" : "Dates (optional)"}
             </SectionLabel>
             <div className="flex flex-col gap-3">
               <DateInput
@@ -197,7 +205,7 @@ export function BulkAssignSheet({
                 className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-semibold"
               >
                 <CheckCircle size={20} weight="fill" />
-                Assigned
+                {datesOnly ? "Dates saved" : "Assigned"}
               </motion.div>
             ) : (
               <Button
@@ -215,9 +223,11 @@ export function BulkAssignSheet({
               >
                 {pending
                   ? "Saving…"
-                  : !hasValidSelectedInstaller
-                    ? `Update ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`
-                    : `Assign ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`}
+                  : datesOnly
+                    ? `Save dates for ${unitIds.length} unit${unitIds.length !== 1 ? "s" : ""}`
+                    : !hasValidSelectedInstaller
+                      ? `Update ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`
+                      : `Assign ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`}
               </Button>
             )}
           </div>

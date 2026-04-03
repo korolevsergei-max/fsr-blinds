@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
+  CalendarBlank,
   CalendarCheck,
   CheckSquare,
   FunnelSimple,
@@ -46,6 +47,25 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);
   const [showSchedulerSheet, setShowSchedulerSheet] = useState(false);
+  const [showDatesSheet, setShowDatesSheet] = useState(false);
+
+  function openBulkAssignInstaller() {
+    setShowSchedulerSheet(false);
+    setShowDatesSheet(false);
+    setShowBulkSheet(true);
+  }
+
+  function openBulkAssignScheduler() {
+    setShowBulkSheet(false);
+    setShowDatesSheet(false);
+    setShowSchedulerSheet(true);
+  }
+
+  function openBulkSetDates() {
+    setShowBulkSheet(false);
+    setShowSchedulerSheet(false);
+    setShowDatesSheet(true);
+  }
 
   const availableBuildings = useMemo(
     () => clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter),
@@ -435,26 +455,37 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
             transition={{ type: "spring", damping: 26, stiffness: 300 }}
           className="fixed bottom-20 left-4 right-4 z-20"
         >
-          <div className="bg-foreground rounded-[var(--radius-xl)] px-4 py-3 flex items-center justify-between shadow-2xl">
-              <span className="text-sm font-semibold text-white">
+          <div className="bg-foreground rounded-[var(--radius-xl)] px-3 py-3 sm:px-4 shadow-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm font-semibold text-white text-center sm:text-left shrink-0">
                 {selectedIds.size} unit{selectedIds.size !== 1 ? "s" : ""} selected
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5 sm:pb-0 sm:flex-wrap sm:justify-end sm:overflow-visible">
                 <Button
                   size="sm"
-                  onClick={() => setShowSchedulerSheet(true)}
-                  className="!bg-sky-500 !text-white hover:!bg-sky-600"
+                  type="button"
+                  onClick={openBulkAssignInstaller}
+                  className="!bg-white !text-zinc-900 hover:!bg-zinc-100 shrink-0"
                 >
-                  <CalendarCheck size={14} />
+                  <Users size={14} className="shrink-0" />
+                  Assign Installer
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={openBulkAssignScheduler}
+                  className="!bg-sky-500 !text-white hover:!bg-sky-600 shrink-0"
+                >
+                  <CalendarCheck size={14} className="shrink-0" />
                   Assign Scheduler
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setShowBulkSheet(true)}
-                  className="!bg-white !text-zinc-900 hover:!bg-zinc-100"
+                  type="button"
+                  onClick={openBulkSetDates}
+                  className="!bg-zinc-800 !text-white border border-white/15 hover:!bg-zinc-700 shrink-0"
                 >
-                  <Users size={14} />
-                  Assign Installer
+                  <CalendarBlank size={14} className="shrink-0" />
+                  Set Dates
                 </Button>
               </div>
             </div>
@@ -462,7 +493,7 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
         )}
       </AnimatePresence>
 
-      {/* Bulk assign installer sheet */}
+      {/* Bulk assign installer */}
       <AnimatePresence>
         {showBulkSheet && (
           <BulkAssignSheet
@@ -475,7 +506,21 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
         )}
       </AnimatePresence>
 
-      {/* Bulk assign scheduler sheet */}
+      {/* Bulk set dates only */}
+      <AnimatePresence>
+        {showDatesSheet && (
+          <BulkAssignSheet
+            unitIds={[...selectedIds]}
+            installers={installers}
+            onClose={() => setShowDatesSheet(false)}
+            onSuccess={exitSelectMode}
+            showCompleteBy
+            variant="datesOnly"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Bulk assign scheduler */}
       <AnimatePresence>
         {showSchedulerSheet && (
           <BulkAssignSchedulerSheet
