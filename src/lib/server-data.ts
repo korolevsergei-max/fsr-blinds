@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
+import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import type { AppDataset } from "@/lib/app-dataset";
 import type {
   Building,
@@ -464,10 +465,9 @@ export async function loadAllSchedulerBuildingAccess(): Promise<Record<string, s
 }
 
 /**
- * Loads a dataset scoped to the units the current scheduler has been assigned.
- * Units are gated by scheduler_unit_assignments (explicitly assigned by the owner).
- * Installers are scoped to the scheduler's own team (installer.scheduler_id).
- * Returns an empty dataset if the scheduler has no unit assignments.
+ * Loads a dataset scoped to the current scheduler: units from
+ * `scheduler_unit_assignments` plus units assigned to installers on this scheduler's team
+ * (`installers.scheduler_id`). The latter keeps units visible after handoff to a team installer.
  */
 export async function loadSchedulerDataset(): Promise<AppDataset> {
   const user = await getCurrentUser();
@@ -480,23 +480,14 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
 
   const supabase = await createClient();
 
-  // Load unit IDs explicitly assigned to this scheduler.
-  const { data: assignmentRows } = await supabase
-    .from("scheduler_unit_assignments")
-    .select("unit_id")
-    .eq("scheduler_id", schedulerId);
+  const scopedUnitIds = await getSchedulerScopedUnitIds(supabase, schedulerId);
 
-  const assignedUnitIds = (assignmentRows ?? []).map(
-    (r: { unit_id: string }) => r.unit_id
-  );
+  if (scopedUnitIds.length === 0) return emptyDataset();
 
-  if (assignedUnitIds.length === 0) return emptyDataset();
-
-  // Load the actual unit rows.
   const { data: unitData, error: unitError } = await supabase
     .from("units")
     .select("*")
-    .in("id", assignedUnitIds)
+    .in("id", scopedUnitIds)
     .order("unit_number");
 
   if (unitError) return emptyDataset();

@@ -30,6 +30,16 @@ ON CONFLICT (id) DO UPDATE SET role = 'owner';
 
 ---
 
+## Scheduler: Unit Disappears After Assigning to Team Installer
+
+**Symptoms:** A unit was visible under the scheduler, then vanishes from `/scheduler/units` after assigning it to an installer (e.g. SKI2) who belongs to that scheduler’s team.
+
+**Root Cause:** `bulkAssignUnits` / `updateUnitAssignment` remove `scheduler_unit_assignments` rows when assigning a real installer. `loadSchedulerDataset` only listed assignment rows, so the unit dropped out of the portal.
+
+**Fix:** `src/lib/scheduler-scope.ts` defines scope as assignments **or** units whose `assigned_installer_id` points at an `installers` row with `scheduler_id` = this scheduler. Use that for `loadSchedulerDataset`, server actions’ `assertSchedulerUnitScope`, and scheduler bulk assign filtering.
+
+---
+
 
 ## Supabase Auth: Email Rate Limit on Invite (`inviteUserByEmail`)
 

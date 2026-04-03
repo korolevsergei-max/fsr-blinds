@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner, requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
+import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -13,7 +14,7 @@ function revalidateApp() {
   revalidatePath("/installer", "layout");
 }
 
-/** For scheduler callers, verifies the unit has been explicitly assigned to them. */
+/** For scheduler callers: unit must match `loadSchedulerDataset` scope (assignments or team installer). */
 async function assertSchedulerUnitScope(
   supabase: Awaited<ReturnType<typeof createClient>>,
   caller: AppUser,
@@ -24,13 +25,8 @@ async function assertSchedulerUnitScope(
   const schedulerId = await getLinkedSchedulerId(caller.id);
   if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
 
-  const { count } = await supabase
-    .from("scheduler_unit_assignments")
-    .select("*", { count: "exact", head: true })
-    .eq("scheduler_id", schedulerId)
-    .eq("unit_id", unitId);
-
-  if ((count ?? 0) === 0) {
+  const allowed = await isSchedulerScopedUnit(supabase, schedulerId, unitId);
+  if (!allowed) {
     return { ok: false, error: "Access denied: this unit has not been assigned to you." };
   }
 
