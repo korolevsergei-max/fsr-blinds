@@ -448,6 +448,20 @@ function emptyDataset(): AppDataset {
   };
 }
 
+/** unit_id → scheduler_id for rows in `scheduler_unit_assignments` (at most one per unit). */
+export async function loadUnitSchedulerAssignmentMap(): Promise<Record<string, string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("unit_id, scheduler_id");
+  if (error) return {};
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    map[(row as { unit_id: string }).unit_id] = (row as { scheduler_id: string }).scheduler_id;
+  }
+  return map;
+}
+
 /** Loads a map of schedulerId → allowed buildingIds (for the owner Accounts UI). */
 export async function loadAllSchedulerBuildingAccess(): Promise<Record<string, string[]>> {
   const supabase = await createClient();

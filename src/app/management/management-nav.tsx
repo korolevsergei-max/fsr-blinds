@@ -46,6 +46,7 @@ export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
             <Link
               key={href}
               href={href}
+              prefetch={href === "/management/accounts" ? false : undefined}
               className={[
                 "flex flex-col items-center gap-1 px-3 py-1.5",
                 "rounded-[var(--radius-md)] transition-colors duration-150",

@@ -537,6 +537,10 @@ export async function createSchedulerAccount(
   }
 }
 
+function isMissingRelationError(message: string): boolean {
+  return /does not exist|schema cache|Could not find the table/i.test(message);
+}
+
 export async function deleteSchedulerAccount(
   schedulerId: string,
   authUserId: string | null,
@@ -548,27 +552,49 @@ export async function deleteSchedulerAccount(
 
     const admin = createAdminClient();
 
-    if (authUserId) {
+    const linkedAuthId = authUserId?.trim();
+    if (linkedAuthId) {
       try {
-        await admin.auth.admin.deleteUser(authUserId);
+        const { error: userDelErr } = await admin.auth.admin.deleteUser(linkedAuthId);
+        if (userDelErr && !/not found|User not found/i.test(userDelErr.message)) {
+          // Continue: still remove the schedulers row so orphans can be cleared.
+        }
       } catch {
-        // ignore and continue with row delete
+        // continue with row delete
       }
     }
 
-    const { error: rowDelErr, count } = await admin
+    // Drop dependents first so delete works even if older DBs lack ON DELETE CASCADE.
+    const childTables = ["scheduler_unit_assignments", "scheduler_building_access"] as const;
+    for (const table of childTables) {
+      const { error: childErr } = await admin.from(table).delete().eq("scheduler_id", schedulerId);
+      if (childErr && !isMissingRelationError(childErr.message)) {
+        return { ok: false, error: childErr.message };
+      }
+    }
+
+    const { data: deletedById, error: delIdErr } = await admin
       .from("schedulers")
-      .delete({ count: "exact" })
-      .eq("id", schedulerId);
+      .delete()
+      .eq("id", schedulerId)
+      .select("id");
 
-    if (rowDelErr) return { ok: false, error: rowDelErr.message };
+    if (delIdErr) return { ok: false, error: delIdErr.message };
 
-    if ((count ?? 0) === 0 && email?.trim()) {
-      const { error: emailDelErr } = await admin
+    if (!deletedById?.length && email?.trim()) {
+      const normalized = email.trim();
+      const { data: deletedByEmail, error: delEmailErr } = await admin
         .from("schedulers")
         .delete()
-        .ilike("email", email.trim());
-      if (emailDelErr) return { ok: false, error: emailDelErr.message };
+        .ilike("email", normalized)
+        .select("id");
+      if (delEmailErr) return { ok: false, error: delEmailErr.message };
+      if (!deletedByEmail?.length) {
+        return {
+          ok: false,
+          error: "No scheduler row was removed. Refresh the page and try again.",
+        };
+      }
     }
 
     revalidatePath("/management/accounts", "layout");

@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   UserCircle,
@@ -43,7 +43,7 @@ import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
 
 const ACTION_LABELS: Record<string, string> = {
-  unit_created: "Unit added to the system",
+  unit_created: "Unit added to the database",
   installer_assigned: "Installer assigned",
   bulk_assigned: "Bulk assigned",
   status_changed: "Status updated",
@@ -112,6 +112,12 @@ function resolveStatusLabel(value: unknown): string {
 
 function buildLogDescription(log: UnitActivityLog): string {
   const d = log.details ?? {};
+  if (log.action === "unit_created") {
+    const num =
+      d && typeof d.unitNumber === "string" ? d.unitNumber : null;
+    const when = formatDateTime(log.createdAt);
+    return num ? `Unit ${num} · ${when}` : `Recorded · ${when}`;
+  }
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
     const parts: string[] = [];
     if (d.installer) parts.push(`→ ${d.installer}`);
@@ -198,6 +204,24 @@ export function ManagementUnitDetail({
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+
+  const displayActivityLog = useMemo((): UnitActivityLog[] => {
+    if (!unit?.createdAt) return activityLog;
+    const hasCreation = activityLog.some((l) => l.action === "unit_created");
+    if (hasCreation) return activityLog;
+    return [
+      ...activityLog,
+      {
+        id: `derived-unit-created-${unit.id}`,
+        unitId: unit.id,
+        actorRole: "system",
+        actorName: "System",
+        action: "unit_created",
+        details: null,
+        createdAt: unit.createdAt as string,
+      },
+    ];
+  }, [activityLog, unit?.id, unit?.createdAt]);
 
   const [isUpdatingDate, startDateTransition] = useTransition();
 
@@ -505,13 +529,13 @@ export function ManagementUnitDetail({
           <div className="flex items-center gap-2 mb-3">
             <ClockCounterClockwise size={14} className="text-tertiary" />
             <SectionLabel as="h2" noMargin>Activity history</SectionLabel>
-            {activityLog.length > 0 && (
+            {displayActivityLog.length > 0 && (
               <span className="ml-auto text-[10px] font-semibold text-tertiary bg-surface border border-border rounded-full px-2 py-0.5">
-                {activityLog.length}
+                {displayActivityLog.length}
               </span>
             )}
           </div>
-          <ActivityTimeline logs={activityLog} />
+          <ActivityTimeline logs={displayActivityLog} />
         </motion.div>
       </div>
     </div>

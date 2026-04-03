@@ -1,6 +1,15 @@
 /** "all" or local calendar day as `YYYY-MM-DD` (from `<input type="date">`). */
 export type AddedDateFilter = "all" | string;
 
+/** Local calendar day (`YYYY-MM-DD`) for an ISO `created_at` timestamp. */
+export function createdAtToLocalYmd(createdAt: string | null | undefined): string | null {
+  if (!createdAt) return null;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 const YMD_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**

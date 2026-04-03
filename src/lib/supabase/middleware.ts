@@ -131,7 +131,7 @@ export async function updateSession(request: NextRequest) {
         .from("user_profiles")
         .select("role")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
       if (profile?.role === "owner" || profile?.role === "manufacturer")
         return finish(
@@ -187,27 +187,35 @@ export async function updateSession(request: NextRequest) {
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (profile?.role !== "owner" && profile?.role !== "manufacturer") {
-      if (profile?.role === "installer") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/installer", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (profile?.role === "scheduler") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/scheduler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
+    const role = profile?.role;
+
+    /**
+     * Route installers/schedulers to their portals. Allow owner, manufacturer, or **missing**
+     * profile through — `getCurrentUser` in layouts can repair / infer profile. Previously,
+     * `profile == null` made `profile?.role` undefined, which matched "not owner" and sent
+     * users to `/login` (e.g. flaky RLS/read or row not visible yet on cold navigation).
+     */
+    if (role === "installer") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/installer", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+    if (role === "scheduler") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/scheduler", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+    if (role && role !== "owner" && role !== "manufacturer") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(new URL("/login", request.url)),
@@ -223,7 +231,7 @@ export async function updateSession(request: NextRequest) {
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profile?.role !== "installer") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {
@@ -259,7 +267,7 @@ export async function updateSession(request: NextRequest) {
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (profile?.role !== "scheduler") {
       if (profile?.role === "owner" || profile?.role === "manufacturer") {

@@ -10,9 +10,16 @@ type CreatedDateFilterProps = {
   value: AddedDateFilter;
   onChange: (value: AddedDateFilter) => void;
   label?: string;
+  /** When set, show these `YYYY-MM-DD` values as choices (actual dates units were added) instead of a free calendar. */
+  distinctDates?: string[];
 };
 
-export function CreatedDateFilter({ value, onChange, label = "Date Added" }: CreatedDateFilterProps) {
+export function CreatedDateFilter({
+  value,
+  onChange,
+  label = "Date Added",
+  distinctDates,
+}: CreatedDateFilterProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -71,16 +78,42 @@ export function CreatedDateFilter({ value, onChange, label = "Date Added" }: Cre
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">
                 {label}
               </p>
-              <input
-                type="date"
-                value={value === "all" ? "" : value}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  if (next) onChange(next);
-                  else onChange("all");
-                }}
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-              />
+              {distinctDates && distinctDates.length > 0 ? (
+                <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+                  {distinctDates.map((ymd) => (
+                    <button
+                      key={ymd}
+                      type="button"
+                      onClick={() => {
+                        onChange(ymd);
+                        setOpen(false);
+                      }}
+                      className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                        value === ymd
+                          ? "bg-accent text-white"
+                          : "bg-surface text-foreground hover:bg-zinc-100"
+                      }`}
+                    >
+                      {formatAddedDateLabel(ymd)}
+                    </button>
+                  ))}
+                </div>
+              ) : distinctDates && distinctDates.length === 0 ? (
+                <p className="text-xs text-muted py-2">
+                  No units in the current list — adjust client/building filters to see dates.
+                </p>
+              ) : (
+                <input
+                  type="date"
+                  value={value === "all" ? "" : value}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next) onChange(next);
+                    else onChange("all");
+                  }}
+                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              )}
               <button
                 type="button"
                 onClick={() => {

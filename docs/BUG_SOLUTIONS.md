@@ -41,6 +41,16 @@ ON CONFLICT (id) DO UPDATE SET role = 'owner';
 ---
 
 
+## Owner: Navigating to Accounts Sends You to Login
+
+**Symptoms:** As an owner, opening **Accounts** (`/management/accounts`) immediately returns you to the login screen even though other management pages work.
+
+**Root Cause:** Middleware loaded `user_profiles` with `.single()`. When no row was returned (transient read, RLS timing, or PostgREST “no rows”), `profile` was `null`, so `profile?.role` was `undefined`. The condition `profile?.role !== "owner" && profile?.role !== "manufacturer"` was **true**, and after skipping installer/scheduler branches the code fell through to **`redirect("/login")`** — treating “missing profile row” the same as “forbidden role”.
+
+**Fix:** Use `.maybeSingle()` for profile reads in middleware, and only redirect to `/login` when `role` is a **known non-management** value (e.g. `client`). Allow **null/missing** profile through so `getCurrentUser` in the management layout can repair or infer the profile.
+
+---
+
 ## Supabase Auth: Email Rate Limit on Invite (`inviteUserByEmail`)
 
 **Error Message:** `Too many emails were sent recently. Please wait a few minutes, then try again.`

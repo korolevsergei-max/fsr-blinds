@@ -24,12 +24,26 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
 import { BulkAssignSchedulerSheet } from "@/components/units/bulk-assign-scheduler-sheet";
-import { isCreatedOnLocalDay, isStoredDateOnLocalDay, formatStoredDateForDisplay, type AddedDateFilter } from "@/lib/created-date";
+import {
+  isCreatedOnLocalDay,
+  isStoredDateOnLocalDay,
+  formatStoredDateForDisplay,
+  createdAtToLocalYmd,
+  type AddedDateFilter,
+} from "@/lib/created-date";
 import { getFloor } from "@/lib/app-dataset";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { Scheduler } from "@/lib/types";
 
-export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedulers?: Scheduler[] }) {
+export function UnitsList({
+  data,
+  schedulers = [],
+  unitSchedulerByUnit = {},
+}: {
+  data: AppDataset;
+  schedulers?: Scheduler[];
+  unitSchedulerByUnit?: Record<string, string>;
+}) {
   const { units, clients, buildings, installers } = data;
 
   const [search, setSearch] = useState("");
@@ -37,6 +51,7 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [installerFilter, setInstallerFilter] = useState("all");
+  const [schedulerFilter, setSchedulerFilter] = useState("all");
   const [floorFilter, setFloorFilter] = useState("all");
   const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
   const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
@@ -85,6 +100,23 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
 
   const unitIdsWithIssues = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
 
+  const unitsForDateOptions = useMemo(() => {
+    return units.filter((u) => {
+      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
+      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      return true;
+    });
+  }, [units, clientFilter, buildingFilter]);
+
+  const distinctAddedDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      const ymd = createdAtToLocalYmd(u.createdAt);
+      if (ymd) set.add(ymd);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
   const filtered = useMemo(() => {
     return units.filter((u) => {
       if (search) {
@@ -98,9 +130,15 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
       if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
       if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
       if (statusFilter !== "all" && u.status !== statusFilter) return false;
-      if (installerFilter === "__unassigned__") {
+      if (installerFilter === "__unassigned_installer__") {
         if (u.assignedInstallerId) return false;
       } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
+        return false;
+      }
+      const assignedSchedulerId = unitSchedulerByUnit[u.id];
+      if (schedulerFilter === "__unassigned_scheduler__") {
+        if (assignedSchedulerId) return false;
+      } else if (schedulerFilter !== "all" && assignedSchedulerId !== schedulerFilter) {
         return false;
       }
       if (floorFilter !== "all" && getFloor(u.unitNumber) !== floorFilter) return false;
@@ -117,6 +155,8 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
     buildingFilter,
     statusFilter,
     installerFilter,
+    schedulerFilter,
+    unitSchedulerByUnit,
     floorFilter,
     dateAddedFilter,
     completeByFilter,
@@ -152,6 +192,7 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
     buildingFilter !== "all",
     statusFilter !== "all",
     installerFilter !== "all",
+    schedulerFilter !== "all",
     floorFilter !== "all",
     dateAddedFilter !== "all",
     completeByFilter !== "all",
@@ -216,8 +257,14 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
 
   const installerOptions = [
     { value: "all", label: "All installers" },
-    { value: "__unassigned__", label: "Unassigned" },
+    { value: "__unassigned_installer__", label: "Unassigned installer" },
     ...installers.map((i) => ({ value: i.id, label: i.name })),
+  ];
+
+  const schedulerOptions = [
+    { value: "all", label: "All schedulers" },
+    { value: "__unassigned_scheduler__", label: "Unassigned scheduler" },
+    ...schedulers.map((s) => ({ value: s.id, label: s.name })),
   ];
 
   const sortOptions = [
@@ -293,7 +340,12 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
           <FilterDropdown label="Floor" value={floorFilter} options={floorOptions} onChange={setFloorFilter} />
           <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
           <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-          <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
+          <FilterDropdown label="Scheduler" value={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
+          <CreatedDateFilter
+            value={dateAddedFilter}
+            onChange={setDateAddedFilter}
+            distinctDates={distinctAddedDates}
+          />
           <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
           <FilterDropdown
             label="Issues"
@@ -310,6 +362,7 @@ export function UnitsList({ data, schedulers = [] }: { data: AppDataset; schedul
                 setBuildingFilter("all");
                 setStatusFilter("all");
                 setInstallerFilter("all");
+                setSchedulerFilter("all");
                 setFloorFilter("all");
                 setDateAddedFilter("all");
                 setCompleteByFilter("all");

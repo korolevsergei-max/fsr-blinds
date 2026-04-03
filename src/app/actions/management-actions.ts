@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwner, requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
@@ -117,6 +118,49 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
   }
 }
 
+/** Type this phrase in the Clients page danger zone to confirm a full data reset. */
+export const CONFIRM_PURGE_ALL_CLIENTS = "DELETE ALL CLIENTS";
+
+/**
+ * Owner-only: removes every client row (CASCADE deletes buildings, units, rooms, windows,
+ * schedule rows, media_uploads rows, activity log, scheduler access tied to those buildings/units).
+ * Also clears in-app notifications. Does not remove installers, schedulers, manufacturers, or auth users.
+ * Supabase Storage files are not deleted — remove those in the dashboard if needed.
+ */
+export async function purgeAllClientData(typedConfirmation: string): Promise<ActionResult> {
+  if (typedConfirmation.trim() !== CONFIRM_PURGE_ALL_CLIENTS) {
+    return {
+      ok: false,
+      error: `Type exactly: ${CONFIRM_PURGE_ALL_CLIENTS}`,
+    };
+  }
+  try {
+    await requireOwner();
+    const admin = createAdminClient();
+
+    const { error: readsErr } = await admin
+      .from("notification_reads")
+      .delete()
+      .neq("notification_id", "");
+    if (readsErr) return { ok: false, error: readsErr.message };
+
+    const { error: notifErr } = await admin.from("notifications").delete().neq("id", "");
+    if (notifErr) return { ok: false, error: notifErr.message };
+
+    const { error: clientsErr } = await admin.from("clients").delete().neq("id", "");
+    if (clientsErr) return { ok: false, error: clientsErr.message };
+
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Purge failed";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can reset client data." };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
 export async function createBuilding(
   clientId: string,
   name: string,
@@ -181,6 +225,10 @@ export async function createUnit(
       notes_count: 0,
     });
     if (error) return { ok: false, error: error.message };
+
+    await logUnitActivity(supabase, id, owner.role, owner.displayName, "unit_created", {
+      unitNumber: unitNumber.trim(),
+    });
 
     const bracketEntry = {
       id: `sch-${crypto.randomUUID().slice(0, 8)}`,
@@ -337,6 +385,10 @@ export async function bulkImportUnits(
       errors.push(`${row.unitNumber}: ${error.message}`);
       continue;
     }
+
+    await logUnitActivity(supabase, unitId, owner.role, owner.displayName, "unit_created", {
+      unitNumber: row.unitNumber.trim(),
+    });
 
     await supabase.from("schedule_entries").insert({
       id: `sch-${crypto.randomUUID().slice(0, 8)}`,

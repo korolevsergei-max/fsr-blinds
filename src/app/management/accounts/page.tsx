@@ -5,6 +5,8 @@ import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-da
 import { createClient } from "@/lib/supabase/server";
 import { AccountsManager } from "./accounts-manager";
 
+export const dynamic = "force-dynamic";
+
 export interface OwnerProfile {
   authUserId: string;
   displayName: string;

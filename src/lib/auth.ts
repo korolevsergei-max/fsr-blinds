@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
 export type UserRole = "owner" | "installer" | "manufacturer" | "client" | "scheduler";
 
@@ -15,12 +16,18 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   
   let user = null;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  } catch (error: any) {
-    // Suppress stale refresh token errors on the server.
-    // The middleware handles deleting the cookie on the client.
-    console.error("Auth error in getCurrentUser:", error.message || error);
+    const { data, error } = await supabase.auth.getUser();
+    if (error && isInvalidRefreshTokenError(error)) {
+      return null;
+    }
+    user = data.user ?? null;
+    if (!user && error) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData.session?.user ?? null;
+    }
+  } catch (error: unknown) {
+    if (isInvalidRefreshTokenError(error)) return null;
+    console.error("Auth error in getCurrentUser:", error);
     return null;
   }
 
