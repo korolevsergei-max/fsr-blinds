@@ -18,7 +18,11 @@ import { recomputeUnitStatus } from "@/lib/unit-progress";
 const BUCKET = "fsr-media";
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB hard safety cap
 
-/** For scheduler callers, verifies the unit's building is in their allowed list. */
+/**
+ * For scheduler callers, verifies the unit is explicitly assigned to them.
+ * Matches `loadSchedulerDataset` and `management-actions.assertSchedulerUnitScope`
+ * (scheduler portal lists units from `scheduler_unit_assignments`, not `scheduler_building_access`).
+ */
 async function assertSchedulerUnitScope(
   supabase: Awaited<ReturnType<typeof createClient>>,
   caller: AppUser,
@@ -29,21 +33,14 @@ async function assertSchedulerUnitScope(
   const schedulerId = await getLinkedSchedulerId(caller.id);
   if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
 
-  const { data: unit } = await supabase
-    .from("units")
-    .select("building_id")
-    .eq("id", unitId)
-    .single();
-  if (!unit) return { ok: false, error: "Unit not found." };
-
   const { count } = await supabase
-    .from("scheduler_building_access")
+    .from("scheduler_unit_assignments")
     .select("*", { count: "exact", head: true })
     .eq("scheduler_id", schedulerId)
-    .eq("building_id", unit.building_id);
+    .eq("unit_id", unitId);
 
   if ((count ?? 0) === 0) {
-    return { ok: false, error: "Access denied: this unit is not in your assigned buildings." };
+    return { ok: false, error: "Access denied: this unit has not been assigned to you." };
   }
 
   return null;
@@ -293,32 +290,24 @@ export async function bulkAssignUnits(
     const owner = await requireOwnerOrScheduler();
     const supabase = await createClient();
 
-    // For schedulers: filter unitIds to only those in allowed buildings.
+    // For schedulers: only units explicitly assigned to them (same as scheduler unit list / key dates).
     let scopedUnitIds = unitIds;
     if (owner.role === "scheduler") {
       const schedulerId = await getLinkedSchedulerId(owner.id);
       if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
 
-      const { data: accessRows } = await supabase
-        .from("scheduler_building_access")
-        .select("building_id")
+      const { data: assignmentRows } = await supabase
+        .from("scheduler_unit_assignments")
+        .select("unit_id")
         .eq("scheduler_id", schedulerId);
-      const allowedBuildingIds = new Set(
-        (accessRows ?? []).map((r: { building_id: string }) => r.building_id)
+      const allowedUnitIds = new Set(
+        (assignmentRows ?? []).map((r: { unit_id: string }) => r.unit_id)
       );
 
-      const { data: unitRows } = await supabase
-        .from("units")
-        .select("id, building_id")
-        .in("id", unitIds);
-      scopedUnitIds = (unitRows ?? [])
-        .filter((u: { id: string; building_id: string }) =>
-          allowedBuildingIds.has(u.building_id)
-        )
-        .map((u: { id: string; building_id: string }) => u.id);
+      scopedUnitIds = unitIds.filter((id) => allowedUnitIds.has(id));
 
       if (scopedUnitIds.length === 0) {
-        return { ok: false, error: "None of the selected units are in your assigned buildings." };
+        return { ok: false, error: "None of the selected units are assigned to you." };
       }
     }
 

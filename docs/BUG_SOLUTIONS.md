@@ -20,6 +20,16 @@ ON CONFLICT (id) DO UPDATE SET role = 'owner';
 
 ---
 
+## Scheduler: Cannot Save Key Dates / Bulk Dates (Wrong Scope Table)
+
+**Symptoms:** Scheduler sees a unit on `/scheduler/units` but saving dates on Key dates or bulk-assign dates fails with access denied or “no units” errors in production.
+
+**Root Cause:** `loadSchedulerDataset` and `management-actions` scope schedulers by `scheduler_unit_assignments` (units the owner assigned). `fsr-data` used `scheduler_building_access` for `updateUnitAssignment` and `bulkAssignUnits`, so schedulers with unit assignments but no row in `scheduler_building_access` for that building were blocked.
+
+**Fix:** Use `scheduler_unit_assignments` in `assertSchedulerUnitScope` and scheduler bulk filtering in `src/app/actions/fsr-data.ts`, matching `management-actions.ts`.
+
+---
+
 
 ## Supabase Auth: Email Rate Limit on Invite (`inviteUserByEmail`)
 
