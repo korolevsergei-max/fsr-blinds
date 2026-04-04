@@ -103,8 +103,8 @@ export function InstallersList({
     <div className="flex flex-col gap-3">
       {linkedInstallers.map((installer, index) => {
         const assignedUnits = units.filter((unit) => unit.assignedInstallerId === installer.id);
-        const activeUnits = assignedUnits.filter((unit) => unit.status !== "client_approved");
-        const completedUnits = assignedUnits.filter((unit) => unit.status === "client_approved");
+        const activeUnits = assignedUnits.filter((unit) => unit.status !== "installed");
+        const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
 
         return (
           <motion.div
@@ -133,8 +133,8 @@ export function InstallersList({
           </InlineAlert>
           {orphanInstallers.map((installer, index) => {
             const assignedUnits = units.filter((unit) => unit.assignedInstallerId === installer.id);
-            const activeUnits = assignedUnits.filter((unit) => unit.status !== "client_approved");
-            const completedUnits = assignedUnits.filter((unit) => unit.status === "client_approved");
+            const activeUnits = assignedUnits.filter((unit) => unit.status !== "installed");
+            const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
 
             return (
               <motion.div

@@ -27,10 +27,10 @@ export function InstallersList({ data }: { data: AppDataset }) {
             (u) => u.assignedInstallerId === inst.id
           );
           const activeUnits = assignedUnits.filter(
-            (u) => u.status !== "client_approved"
+            (u) => u.status !== "installed"
           );
           const completedUnits = assignedUnits.filter(
-            (u) => u.status === "client_approved"
+            (u) => u.status === "installed"
           );
 
           return (

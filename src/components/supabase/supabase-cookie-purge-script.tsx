@@ -6,6 +6,6 @@ import { AUTH_COOKIE_PURGE_FLAG } from "@/lib/supabase/auth-errors";
  */
 export function SupabaseCookiePurgeScript() {
   const key = AUTH_COOKIE_PURGE_FLAG;
-  const js = `(function(){var k=${JSON.stringify(key)};if(document.cookie.indexOf(k+"=")<0)return;var names=document.cookie.split(";").map(function(s){return s.trim().split("=")[0]}).filter(Boolean);for(var i=0;i<names.length;i++){var n=names[i];if(n.slice(0,3)==="sb-"){document.cookie=n+"=;path=/;max-age=0;expires=Thu, 01 Jan 1970 00:00:00 GMT";}}document.cookie=k+"=;path=/;max-age=0;expires=Thu, 01 Jan 1970 00:00:00 GMT";})();`;
+  const js = `(function(){var k=${JSON.stringify(key)};if(document.cookie.indexOf(k+"=")<0)return;var exp="Thu, 01 Jan 1970 00:00:00 GMT";var names=document.cookie.split(";").map(function(s){return s.trim().split("=")[0]}).filter(Boolean);for(var i=0;i<names.length;i++){var n=names[i];if(n.slice(0,3)==="sb-"){document.cookie=n+"=;path=/;max-age=0;expires="+exp;document.cookie=n+"=;path=/;max-age=0;expires="+exp+";Secure;SameSite=Lax";}}document.cookie=k+"=;path=/;max-age=0;expires="+exp;document.cookie=k+"=;path=/;max-age=0;expires="+exp+";Secure;SameSite=Lax";})();`;
   return <script dangerouslySetInnerHTML={{ __html: js }} />;
 }

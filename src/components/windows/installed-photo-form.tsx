@@ -6,7 +6,8 @@ import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
 import { uploadWindowInstalledPhoto } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
-import type { RiskFlag } from "@/lib/types";
+import type { RiskFlag, UnitStatus } from "@/lib/types";
+import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
@@ -58,6 +59,10 @@ export function InstalledPhotoForm({
     return <div className="p-6 text-center text-muted">Window not found</div>;
   }
 
+  const installPhotosBlocked =
+    !existingInstalled &&
+    !canUploadInstallationPhotos(unit.status as UnitStatus);
+
   useEffect(() => {
     if (!photoPreview) return;
     const probe = new window.Image();
@@ -93,6 +98,13 @@ export function InstalledPhotoForm({
     ev.preventDefault();
     setError("");
     setNotesError("");
+
+    if (installPhotosBlocked) {
+      setError(
+        "Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded."
+      );
+      return;
+    }
 
     if (!photoFile) {
       setError("Installed photo is required.");
@@ -164,6 +176,13 @@ export function InstalledPhotoForm({
           Upload one installed/completion photo for this window.
         </div>
 
+        {installPhotosBlocked && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Both measurements and bracketing photos must be completed for every window in this unit
+            before installation photos can be uploaded.
+          </div>
+        )}
+
         {error && (
           <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
             {error}
@@ -178,8 +197,9 @@ export function InstalledPhotoForm({
           {photoPreview ? (
             <button
               type="button"
+              disabled={installPhotosBlocked}
               onClick={() => fileRef.current?.click()}
-              className="relative w-full overflow-hidden rounded-2xl border border-border text-left"
+              className="relative w-full overflow-hidden rounded-2xl border border-border text-left disabled:pointer-events-none disabled:opacity-50"
             >
               <img
                 src={photoPreview}
@@ -202,8 +222,9 @@ export function InstalledPhotoForm({
           ) : (
             <button
               type="button"
+              disabled={installPhotosBlocked}
               onClick={() => fileRef.current?.click()}
-              className="flex h-44 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-white transition-colors active:scale-[0.99]"
+              className="flex h-44 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-white transition-colors active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
             >
               <Camera size={28} className="text-zinc-400" />
               <span className="text-sm font-medium text-zinc-500">Tap to take or choose a photo</span>
@@ -231,7 +252,12 @@ export function InstalledPhotoForm({
         </div>
 
         <div className="pb-24 pt-2">
-          <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>
+          <Button
+            type="submit"
+            fullWidth
+            size="lg"
+            disabled={pending || optimizingPhoto || installPhotosBlocked}
+          >
             <UploadSimple size={18} weight="bold" />
             {optimizingPhoto
               ? "Optimizing photo…"

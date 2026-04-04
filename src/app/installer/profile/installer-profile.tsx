@@ -29,8 +29,8 @@ export function InstallerProfile({
     );
   }
   const myUnits = getUnitsByInstaller(data, installer.id);
-  const active = myUnits.filter((u) => u.status !== "client_approved").length;
-  const completed = myUnits.filter((u) => u.status === "client_approved").length;
+  const active = myUnits.filter((u) => u.status !== "installed").length;
+  const completed = myUnits.filter((u) => u.status === "installed").length;
 
   return (
     <div className="flex flex-col">

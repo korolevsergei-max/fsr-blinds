@@ -15,6 +15,7 @@ import {
   type UnitStatus,
 } from "@/lib/types";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
+import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
 
 const BUCKET = "fsr-media";
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB hard safety cap
@@ -709,51 +710,13 @@ export async function updateUnitAssignment(
   }
 }
 
-/** @deprecated Use recomputeUnitStatus (auto-derived) or approveUnit (owner) instead. */
+/** @deprecated Status is auto-derived via recomputeUnitStatus from window data. */
 export async function updateUnitStatus(
   _unitId: string,
   _status: UnitStatus,
   _note: string
 ): Promise<ActionResult> {
   return { ok: false, error: "Manual status updates are no longer supported. Status is auto-derived from window data." };
-}
-
-export async function approveUnit(unitId: string): Promise<ActionResult> {
-  try {
-    const owner = await requireOwner();
-    const supabase = await createClient();
-
-    const { data: current } = await supabase
-      .from("units")
-      .select("status, assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-
-    if (!current) return { ok: false, error: "Unit not found." };
-    if (current.status !== "installed") {
-      return {
-        ok: false,
-        error: "Unit must be fully installed before it can be approved.",
-      };
-    }
-
-    const { error } = await supabase
-      .from("units")
-      .update({ status: "client_approved" })
-      .eq("id", unitId);
-    if (error) return { ok: false, error: error.message };
-
-    await logUnitActivity(supabase, unitId, owner.role, owner.displayName, "status_changed", {
-      from: "installed",
-      to: "client_approved",
-    });
-
-    revalidateApp();
-    return { ok: true };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return { ok: false, error: msg };
-  }
 }
 
 export async function uploadUnitStagePhotos(
@@ -1510,6 +1473,22 @@ export async function uploadWindowInstalledPhoto(
       .single();
     if (windowError || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
+    }
+
+    const { data: unitRow, error: unitStatusError } = await supabase
+      .from("units")
+      .select("status")
+      .eq("id", unitId)
+      .single();
+    if (unitStatusError || !unitRow) {
+      return { ok: false, error: "Unit not found." };
+    }
+    if (!canUploadInstallationPhotos(unitRow.status as UnitStatus)) {
+      return {
+        ok: false,
+        error:
+          "Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded.",
+      };
     }
 
     const { error: windowUpdateError } = await supabase

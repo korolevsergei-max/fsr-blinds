@@ -32,13 +32,13 @@ function filterUnits(units: Unit[], filter: Filter): Unit[] {
     case "overdue":
       return units.filter(
         (u) =>
-          u.status !== "client_approved" &&
+          u.status !== "installed" &&
           u.bracketingDate &&
           u.bracketingDate < today &&
           u.status === "not_started"
       );
     case "completed":
-      return units.filter((u) => u.status === "client_approved");
+      return units.filter((u) => u.status === "installed");
     default:
       return units;
   }

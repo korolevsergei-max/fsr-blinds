@@ -1,5 +1,5 @@
 import { parseStoredDate } from "./created-date";
-import type { Unit } from "./types";
+import type { Unit, UnitStatus } from "./types";
 
 export type UnitFlag =
   | "past_bracketing_due"
@@ -10,7 +10,7 @@ export type UnitFlag =
   | "missing_installation_date"
   | "at_risk";
 
-export const DONE_STATUSES = new Set(["installed", "client_approved"]);
+export const DONE_STATUSES = new Set<UnitStatus>(["installed"]);
 
 export function isUnitDone(unit: Unit): boolean {
   return DONE_STATUSES.has(unit.status);
@@ -39,15 +39,15 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   }
 
   if (!unit.installationDate) {
-    if (unit.status === "measured" || unit.status === "bracketed") {
+    if (
+      unit.status === "measured" ||
+      unit.status === "bracketed" ||
+      unit.status === "measured_and_bracketed"
+    ) {
       flags.push("missing_installation_date");
     }
   } else {
-    if (
-      unit.installationDate < todayStr &&
-      unit.status !== "installed" &&
-      unit.status !== "client_approved"
-    ) {
+    if (unit.installationDate < todayStr && unit.status !== "installed") {
       flags.push("past_install_due");
     }
 
@@ -61,8 +61,7 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
     if (
       daysUntilInstall >= 0 &&
       daysUntilInstall <= 3 &&
-      unit.status !== "installed" &&
-      unit.status !== "client_approved"
+      unit.status !== "installed"
     ) {
       flags.push("at_risk");
     }

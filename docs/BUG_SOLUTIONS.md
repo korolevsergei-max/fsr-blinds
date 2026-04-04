@@ -133,3 +133,13 @@ setAll(cookiesToSet) {
 **Root cause:** `supabase.auth.getUser()` usually **returns** `{ error }` for a bad refresh token; it does not throw. Middleware that only used `try/catch` never cleared cookies, and redirects to `/login` built a **new** `NextResponse` without the `Set-Cookie` deletions, so the browser kept dead tokens and kept retrying.
 
 **Fix (implemented):** In `src/lib/supabase/middleware.ts`, treat `getUser()`’s `error` with `isInvalidRefreshTokenError()` from `src/lib/supabase/auth-errors.ts`: delete every `sb-*` cookie on the **request** (so RSC in the same request see no session), set `maxAge: 0` on the outgoing response, **re-apply those deletions on every redirect**, and set short-lived `fsr_auth_purge` so `SupabaseCookiePurgeScript` in `layout.tsx` wipes any leftover `sb-*` cookies **before** the Supabase browser bundle initializes (stops `AuthApiError` / `console.error` from `_recoverAndRefresh`).
+
+---
+
+## Accounts → Installers: Delete Fails for “SC:” / Orphaned Rows
+
+**Symptoms:** Under **Installers**, rows labeled **SC: …** (schedulers shown in the installer pick list) show as orphaned; **Delete** always errors.
+
+**Root cause:** `loadFullDataset` merges schedulers into the installer list with `id: \`sch-${sch.id}\``. Scheduler PKs are already `sch-…`, so the UI id is `sch-sch-…`, which is **not** an `installers.id`. `deleteInstallerAccount` only deleted from `installers`, so no row matched.
+
+**Fix:** At the start of `deleteInstallerAccount` in `src/app/actions/auth-actions.ts`, if `installerId.startsWith("sch-")`, strip the synthetic prefix (`installerId.slice(4)`) and delegate to `deleteSchedulerAccount` so the `schedulers` row and related data are removed.

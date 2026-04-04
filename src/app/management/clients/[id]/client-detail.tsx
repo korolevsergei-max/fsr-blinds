@@ -183,7 +183,7 @@ export function ClientDetail({ data }: { data: AppDataset }) {
       <div className="px-4 py-4 flex flex-col gap-3">
         {clientBuildings.map((building, i) => {
           const bUnits = getUnitsByBuilding(data, building.id);
-          const activeUnits = bUnits.filter((u) => u.status !== "client_approved");
+          const activeUnits = bUnits.filter((u) => u.status !== "installed");
           const assignedInstallers = new Set(
             bUnits.filter((u) => u.assignedInstallerName).map((u) => u.assignedInstallerName)
           );

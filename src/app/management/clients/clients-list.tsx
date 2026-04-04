@@ -64,7 +64,7 @@ export function ClientsList({ data }: { data: AppDataset }) {
           );
           const clientUnits = units.filter((u) => u.clientId === client.id);
           const activeUnits = clientUnits.filter(
-            (u) => u.status !== "client_approved"
+            (u) => u.status !== "installed"
           );
 
           return (

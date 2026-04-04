@@ -11,8 +11,6 @@ import {
   Ruler,
   Camera,
   PencilSimple,
-  CheckCircle,
-  Circle,
   ClockCounterClockwise,
   Wrench,
   Buildings,
@@ -25,11 +23,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
-import {
-  UNIT_STATUSES,
-  UNIT_STATUS_LABELS,
-  UNIT_STATUS_ORDER,
-} from "@/lib/types";
+import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,10 +31,10 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { DateInput } from "@/components/ui/date-input";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
-import { formatStoredDateForDisplay } from "@/lib/created-date";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the database",
@@ -100,6 +94,7 @@ const LEGACY_STATUS_LABELS: Record<string, string> = {
   bracketed_measured: "Measured",
   install_date_scheduled: "Bracketed",
   installed_pending_approval: "Installed",
+  client_approved: "Installed",
 };
 
 function resolveStatusLabel(value: unknown): string {
@@ -116,7 +111,9 @@ function buildLogDescription(log: UnitActivityLog): string {
     const num =
       d && typeof d.unitNumber === "string" ? d.unitNumber : null;
     const when = formatDateTime(log.createdAt);
-    return num ? `Unit ${num} · ${when}` : `Recorded · ${when}`;
+    return num
+      ? `Unit ${num} · Added to database ${when}`
+      : `Added to database ${when}`;
   }
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
     const parts: string[] = [];
@@ -209,18 +206,19 @@ export function ManagementUnitDetail({
     if (!unit?.createdAt) return activityLog;
     const hasCreation = activityLog.some((l) => l.action === "unit_created");
     if (hasCreation) return activityLog;
-    return [
-      ...activityLog,
-      {
-        id: `derived-unit-created-${unit.id}`,
-        unitId: unit.id,
-        actorRole: "system",
-        actorName: "System",
-        action: "unit_created",
-        details: null,
-        createdAt: unit.createdAt as string,
-      },
-    ];
+    const synthetic: UnitActivityLog = {
+      id: `derived-unit-created-${unit.id}`,
+      unitId: unit.id,
+      actorRole: "system",
+      actorName: "System",
+      action: "unit_created",
+      details: { unitNumber: unit.unitNumber },
+      createdAt: unit.createdAt as string,
+    };
+    return [synthetic, ...activityLog].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
   }, [activityLog, unit?.id, unit?.createdAt]);
 
   const [isUpdatingDate, startDateTransition] = useTransition();
@@ -268,17 +266,8 @@ export function ManagementUnitDetail({
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
 
-  const currentStep = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
-
-  // Evidence-based completion dates
-  const measurementCompleted = milestones.allMeasured ? milestones.measuredCompletedAt : null;
-  const bracketingCompleted = milestones.allBracketed ? milestones.bracketedCompletedAt : null;
-  const installationCompleted = milestones.allInstalled ? milestones.installedCompletedAt : null;
-
-  const formatDate = (value: string | null | undefined) =>
-    formatStoredDateForDisplay(value);
 
   return (
     <div className="flex flex-col">
@@ -300,14 +289,6 @@ export function ManagementUnitDetail({
                 Assign
               </Button>
             </Link>
-            {(unit.status as UnitStatus) === "installed" && (
-              <Link href={`/management/units/${unit.id}/status`}>
-                <Button size="sm">
-                  <ArrowRight size={14} />
-                  Approve
-                </Button>
-              </Link>
-            )}
           </div>
         }
       />
@@ -382,81 +363,20 @@ export function ManagementUnitDetail({
           </div>
         </motion.div>
 
-        {/* Status Timeline */}
+        {/* Progress milestones */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="surface-card p-4"
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <SectionLabel as="h2" noMargin>Progress</SectionLabel>
-            <UnitStageMediaViewer items={mediaItems} />
-          </div>
-          <div className="flex flex-col">
-            {UNIT_STATUSES.map((status, i) => {
-              const step = UNIT_STATUS_ORDER[status];
-              const isComplete = step < currentStep;
-              const isCurrent = step === currentStep;
-
-              // Map each progress status to its scheduled/completed dates
-              const scheduledDate =
-                status === "measured" ? formatDate(unit.measurementDate)
-                : status === "bracketed" ? formatDate(unit.bracketingDate)
-                : status === "installed" ? formatDate(unit.installationDate)
-                : null;
-              const completedDate =
-                status === "measured" ? formatDate(measurementCompleted)
-                : status === "bracketed" ? formatDate(bracketingCompleted)
-                : status === "installed" ? formatDate(installationCompleted)
-                : null;
-
-              return (
-                <div key={status} className="flex items-start gap-3">
-                  <div className="flex flex-col items-center">
-                    {isComplete ? (
-                      <CheckCircle size={18} weight="fill" className="text-emerald-500" />
-                    ) : isCurrent ? (
-                      <div className="w-[18px] h-[18px] rounded-full bg-accent flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-white" />
-                      </div>
-                    ) : (
-                      <Circle size={18} className="text-zinc-300" />
-                    )}
-                    {i < UNIT_STATUSES.length - 1 && (
-                      <div className={`w-px h-5 ${isComplete ? "bg-emerald-300" : "bg-zinc-200"}`} />
-                    )}
-                  </div>
-                  <div className={`pb-4 flex-1 ${isCurrent ? "text-foreground" : isComplete ? "text-secondary" : "text-tertiary"}`}>
-                    <span className={`text-[12px] ${isCurrent ? "font-semibold" : isComplete ? "font-medium" : ""}`}>
-                      {UNIT_STATUS_LABELS[status]}
-                      {status === "client_approved" && (unit.status as UnitStatus) === "installed" && (
-                        <Link
-                          href={`/management/units/${unit.id}/status`}
-                          className="ml-2 text-[10px] font-bold text-accent underline underline-offset-2"
-                        >
-                          Approve →
-                        </Link>
-                      )}
-                    </span>
-                    {(scheduledDate || completedDate) && (
-                      <div className="flex gap-4 mt-0.5">
-                        {scheduledDate && (
-                          <p className="text-[10px] text-tertiary">
-                            Sched: {scheduledDate}
-                          </p>
-                        )}
-                        {completedDate && (
-                          <p className="text-[10px] text-accent font-medium">
-                            Done: {completedDate}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <UnitProgressMilestonesPanel
+            unit={unit}
+            milestones={milestones}
+            layout="detail"
+            title="Progress"
+            mediaViewerSlot={<UnitStageMediaViewer items={mediaItems} />}
+          />
         </motion.div>
 
         {/* Stats */}

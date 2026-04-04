@@ -9,7 +9,9 @@ export function isInvalidRefreshTokenError(error: unknown): boolean {
     const message = o.message.toLowerCase();
     if (
       message.includes("invalid refresh token") ||
-      message.includes("refresh token not found")
+      message.includes("refresh token not found") ||
+      message.includes("refresh_token_not_found") ||
+      message.includes("already used")
     ) {
       return true;
     }

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { SupabaseCookiePurgeScript } from "@/components/supabase/supabase-cookie-purge-script";
+import { SupabaseAuthRecovery } from "@/components/supabase/supabase-auth-recovery";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RootLayout({
         className="min-h-[100dvh] bg-background text-foreground font-sans"
       >
         <SupabaseCookiePurgeScript />
+        <SupabaseAuthRecovery />
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>

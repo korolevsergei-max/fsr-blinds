@@ -2,8 +2,8 @@ export const UNIT_STATUSES = [
   "not_started",
   "measured",
   "bracketed",
+  "measured_and_bracketed",
   "installed",
-  "client_approved",
 ] as const;
 
 export type UnitStatus = (typeof UNIT_STATUSES)[number];
@@ -12,16 +12,17 @@ export const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
   not_started: "Not Yet Started",
   measured: "Measured",
   bracketed: "Bracketed",
+  measured_and_bracketed: "Measured & Bracketed",
   installed: "Installed",
-  client_approved: "Approved",
 };
 
+/** Progress depth for simple comparisons (measured and bracketed are parallel at 1). */
 export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
   not_started: 0,
   measured: 1,
-  bracketed: 2,
+  bracketed: 1,
+  measured_and_bracketed: 2,
   installed: 3,
-  client_approved: 4,
 };
 
 export const UNIT_PHOTO_STAGES = [

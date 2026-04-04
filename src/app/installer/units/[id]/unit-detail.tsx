@@ -3,22 +3,11 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  CheckCircle,
-  Circle,
-  Info,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { ArrowRight, Info, WarningCircle } from "@phosphor-icons/react";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
-import {
-  UNIT_STATUSES,
-  UNIT_STATUS_LABELS,
-  UNIT_STATUS_ORDER,
-  type UnitActivityLog,
-} from "@/lib/types";
+import { UNIT_STATUS_LABELS, type UnitActivityLog } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -26,6 +15,7 @@ import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
@@ -69,7 +59,6 @@ export function UnitDetail({
     );
   }
 
-  const currentStep = UNIT_STATUS_ORDER[unit.status as UnitStatus] ?? 0;
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
   const today = new Date();
@@ -293,71 +282,21 @@ export function UnitDetail({
           <UnitEscalationsPanel escalations={escalations} />
         </motion.div>
 
-        {/* Installation Timeline */}
+        {/* Progress milestones */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="surface-card p-5"
         >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em]">
-              Installation Timeline
-            </h3>
-            <UnitStageMediaViewer items={mediaItems} />
-          </div>
-          <div className="flex flex-col gap-0">
-            {UNIT_STATUSES.map((status, i) => {
-              const step = UNIT_STATUS_ORDER[status];
-              const isComplete = step < currentStep;
-              const isCurrent = step === currentStep;
-
-              return (
-                <div key={status} className="flex items-start gap-3">
-                  <div className="flex flex-col items-center">
-                    {isComplete ? (
-                      <CheckCircle
-                        size={22}
-                        weight="fill"
-                        className="text-accent"
-                      />
-                    ) : isCurrent ? (
-                      <div className="w-[22px] h-[22px] rounded-full bg-accent flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 rounded-full bg-white" />
-                      </div>
-                    ) : (
-                      <Circle size={22} className="text-zinc-300" />
-                    )}
-                    {i < UNIT_STATUSES.length - 1 && (
-                      <div
-                        className={`w-px h-7 ${
-                          isComplete ? "bg-accent/40" : "bg-zinc-200"
-                        }`}
-                      />
-                    )}
-                  </div>
-                  <div className="pb-6">
-                    <span
-                      className={`text-sm ${
-                        isCurrent
-                          ? "font-bold text-foreground"
-                          : isComplete
-                            ? "font-medium text-zinc-500"
-                            : "text-zinc-300"
-                      }`}
-                    >
-                      {UNIT_STATUS_LABELS[status]}
-                    </span>
-                    {status === "not_started" && isCurrent && unit.measurementDate && (
-                      <p className="text-[11px] text-muted mt-0.5">
-                        Measurement scheduled: {formatDate(unit.measurementDate)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <UnitProgressMilestonesPanel
+            unit={unit}
+            milestones={milestones}
+            layout="detail"
+            density="comfortable"
+            title="Installation progress"
+            mediaViewerSlot={<UnitStageMediaViewer items={mediaItems} />}
+          />
         </motion.div>
 
         {/* Rooms */}

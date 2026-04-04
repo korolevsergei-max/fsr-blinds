@@ -1,18 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUnitMilestoneCoverageWithClient } from "@/lib/unit-milestones";
+import type { UnitStatus } from "@/lib/types";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * Derives and persists the progress status of a unit from underlying window/media data.
+ * Derives and persists unit `status` from window measurements and stage photos.
  *
- * Derivation ladder:
- *  not_started  → measured     (every window is measured)
- *  measured     → bracketed    (every window has a post-bracketing photo)
- *  bracketed    → installed    (every window has an installed photo)
- *  installed    → client_approved  (owner-only — never auto-derived here)
- *
- * A unit that is already "client_approved" is never touched by this function.
+ * Measured and bracketed can complete in any order. Both must be satisfied before
+ * the unit can become `installed` (all installation photos).
  */
 export async function recomputeUnitStatus(
   supabase: SupabaseClient,
@@ -24,25 +20,29 @@ export async function recomputeUnitStatus(
     .eq("id", unitId)
     .single();
 
-  if (current?.status === "client_approved") return;
-
   const coverage = await getUnitMilestoneCoverageWithClient(supabase, unitId);
   const newStatus = deriveStatusFromCoverage(coverage);
 
   if (newStatus !== current?.status) {
     await supabase.from("units").update({ status: newStatus }).eq("id", unitId);
-    await logStatusChange(supabase, unitId, current?.status ?? "not_started", newStatus);
+    await logStatusChange(
+      supabase,
+      unitId,
+      (current?.status as string) ?? "not_started",
+      newStatus
+    );
   }
 }
 
-function deriveStatusFromCoverage(
+export function deriveStatusFromCoverage(
   coverage: Awaited<ReturnType<typeof getUnitMilestoneCoverageWithClient>>
-): string {
+): UnitStatus {
   if (coverage.totalWindows === 0) return "not_started";
-  if (!coverage.allMeasured) return "not_started";
-  if (!coverage.allBracketed) return "measured";
-  if (!coverage.allInstalled) return "bracketed";
-  return "installed";
+  if (coverage.allInstalled) return "installed";
+  if (coverage.allMeasured && coverage.allBracketed) return "measured_and_bracketed";
+  if (coverage.allMeasured) return "measured";
+  if (coverage.allBracketed) return "bracketed";
+  return "not_started";
 }
 
 async function logStatusChange(

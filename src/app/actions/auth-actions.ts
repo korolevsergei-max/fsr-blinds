@@ -352,6 +352,18 @@ export async function deleteInstallerAccount(
     const denied = await assertOwnerForAccountActions();
     if (denied) return denied;
 
+    /**
+     * Schedulers are merged into the installers picklist as `SC: …` with id `sch-${row.id}`.
+     * Since `schedulers.id` is already `sch-…`, the composite id is `sch-sch-…` — not an
+     * `installers` PK. Deleting those rows must target `schedulers` (same as Accounts → Schedulers).
+     */
+    if (installerId.startsWith("sch-")) {
+      const schedulerTableId = installerId.slice(4);
+      if (schedulerTableId.length > 0) {
+        return deleteSchedulerAccount(schedulerTableId, authUserId, email);
+      }
+    }
+
     const admin = createAdminClient();
 
     // Delete auth user first so any user_profile rows cascade automatically.

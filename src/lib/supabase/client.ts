@@ -1,5 +1,8 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseEnv } from "@/lib/supabase/env";
+
+let browserSingleton: SupabaseClient | null = null;
 
 function getAllCookiesFromDocument(): Array<{ name: string; value: string }> {
   if (typeof document === "undefined") return [];
@@ -47,8 +50,10 @@ function setCookieOnDocument(
 }
 
 export function createClient() {
+  if (browserSingleton) return browserSingleton;
+
   const { url, key } = getSupabaseEnv();
-  return createBrowserClient(url, key, {
+  browserSingleton = createBrowserClient(url, key, {
     cookies: {
       getAll() {
         return getAllCookiesFromDocument();
@@ -65,4 +70,5 @@ export function createClient() {
       },
     },
   });
+  return browserSingleton;
 }

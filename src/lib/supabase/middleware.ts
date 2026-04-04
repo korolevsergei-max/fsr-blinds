@@ -115,8 +115,10 @@ export async function updateSession(request: NextRequest) {
       for (const name of names) {
         supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
       }
+      user = null;
+    } else {
+      user = null;
     }
-    user = null;
   }
 
   const pathname = request.nextUrl.pathname;

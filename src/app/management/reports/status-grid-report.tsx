@@ -10,21 +10,28 @@ import {
   X,
   Buildings,
   User,
+  MapPin,
 } from "@phosphor-icons/react";
 import { getFloor } from "@/lib/app-dataset";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type ReportUnit = Unit & {
-  todayBadge: "M" | "B" | "I" | "";
-  projectedColor: "measured" | "bracketed" | "installed" | "none";
+  todayBadge: "M" | "B" | "MB" | "I" | "";
+  projectedColor:
+    | "measured"
+    | "bracketed"
+    | "measured_and_bracketed"
+    | "installed"
+    | "none";
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Corner letter from actual unit progress (matches recomputeUnitStatus ladder). */
-function getTodayBadge(status: string): "M" | "B" | "I" | "" {
-  if (status === "client_approved" || status === "installed") return "I";
+/** Corner badge from persisted unit status (parallel measured/bracketed model). */
+function getTodayBadge(status: string): "M" | "B" | "MB" | "I" | "" {
+  if (status === "installed") return "I";
+  if (status === "measured_and_bracketed") return "MB";
   if (status === "bracketed") return "B";
   if (status === "measured") return "M";
   return "";
@@ -33,11 +40,15 @@ function getTodayBadge(status: string): "M" | "B" | "I" | "" {
 function getProjectedColor(
   unit: Unit,
   asOfDate: string
-): "measured" | "bracketed" | "installed" | "none" {
+): ReportUnit["projectedColor"] {
   const d = asOfDate;
-  if (unit.installationDate && unit.installationDate <= d) return "installed";
-  if (unit.bracketingDate && unit.bracketingDate <= d) return "bracketed";
-  if (unit.measurementDate && unit.measurementDate <= d) return "measured";
+  const m = Boolean(unit.measurementDate && unit.measurementDate <= d);
+  const b = Boolean(unit.bracketingDate && unit.bracketingDate <= d);
+  const i = Boolean(unit.installationDate && unit.installationDate <= d);
+  if (i) return "installed";
+  if (m && b) return "measured_and_bracketed";
+  if (b) return "bracketed";
+  if (m) return "measured";
   return "none";
 }
 
@@ -70,6 +81,14 @@ const COLOR_MAP = {
     printBg: "#FFE5D9",
     printBorder: "#F4845F",
   },
+  measured_and_bracketed: {
+    bg: "bg-[#EEF2FF]",
+    border: "border-[#6366F1]",
+    label: "Measured & Bracketed",
+    dot: "#6366F1",
+    printBg: "#EEF2FF",
+    printBorder: "#6366F1",
+  },
   installed: {
     bg: "bg-[#D4F5E2]",
     border: "border-[#27AE60]",
@@ -88,10 +107,11 @@ const COLOR_MAP = {
   },
 } as const;
 
-/** Letter badge background colors — M=yellow, B=salmon, I=green */
-const BADGE_COLOR: Record<"M" | "B" | "I", string> = {
+/** Letter badge background colors — M=yellow, B=salmon, MB=indigo, I=green */
+const BADGE_COLOR: Record<"M" | "B" | "MB" | "I", string> = {
   M: "#F5C518",
   B: "#F4845F",
+  MB: "#6366F1",
   I: "#27AE60",
 };
 
@@ -108,6 +128,8 @@ interface Props {
 interface ReportPreviewProps {
   clientName: string;
   buildingName: string;
+  /** Street / mailing address for the selected building (owner report). */
+  buildingAddress: string;
   asOfDate: string;
   floorMap: Map<string, ReportUnit[]>;
   floors: string[];
@@ -121,6 +143,7 @@ const FLOORS_PER_ROW = 10;
 function ReportPreviewModal({
   clientName,
   buildingName,
+  buildingAddress,
   asOfDate,
   floorMap,
   floors,
@@ -184,11 +207,23 @@ function ReportPreviewModal({
                     {buildingName}
                   </h1>
                   <p className="text-[14px] text-zinc-500 mt-0.5">{clientName}</p>
+                  {buildingAddress.trim() ? (
+                    <p className="text-[13px] text-zinc-600 mt-2 max-w-xl leading-snug">
+                      {buildingAddress.trim()}
+                    </p>
+                  ) : null}
                 </div>
 
                 {/* Badge legend in header */}
                 <div className="flex flex-col gap-1.5 items-end">
-                  {(["measured", "bracketed", "installed"] as const).map(
+                  {(
+                    [
+                      "measured",
+                      "bracketed",
+                      "measured_and_bracketed",
+                      "installed",
+                    ] as const
+                  ).map(
                     (key) => (
                       <div key={key} className="flex items-center gap-2">
                         <span className="text-[11px] text-zinc-500 font-medium capitalize">
@@ -220,7 +255,7 @@ function ReportPreviewModal({
               </div>
 
               {/* Metadata row */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <MetaCell
                   icon={<User size={13} className="text-zinc-400" />}
                   label="Client"
@@ -243,24 +278,36 @@ function ReportPreviewModal({
                   accent
                 />
               </div>
+              {buildingAddress.trim() ? (
+                <div className="mt-3">
+                  <MetaCell
+                    icon={<MapPin size={13} className="text-zinc-400" />}
+                    label="Address"
+                    value={buildingAddress.trim()}
+                    valueClassName="whitespace-normal break-words"
+                  />
+                </div>
+              ) : null}
             </div>
 
             {/* Badge key */}
-            <div className="px-10 pt-4 pb-2 flex items-center gap-6 border-b border-zinc-100">
+            <div className="px-10 pt-4 pb-2 flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-zinc-100">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
                 Today&apos;s Status Badge:
               </p>
-              {(["M", "B", "I"] as const).map((letter) => (
+              {(["M", "B", "MB", "I"] as const).map((letter) => (
                 <div key={letter} className="flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-full bg-zinc-100 border border-zinc-200 text-[9px] font-bold text-zinc-700 flex items-center justify-center">
+                  <span className="min-w-5 h-5 px-1 rounded-full bg-zinc-100 border border-zinc-200 text-[8px] font-bold text-zinc-700 flex items-center justify-center leading-none">
                     {letter}
                   </span>
                   <span className="text-[11px] text-zinc-500">
                     {letter === "M"
                       ? "Measured"
                       : letter === "B"
-                      ? "Bracketed"
-                      : "Installed"}
+                        ? "Bracketed"
+                        : letter === "MB"
+                          ? "Measured & Bracketed"
+                          : "Installed"}
                   </span>
                 </div>
               ))}
@@ -330,7 +377,7 @@ function ReportPreviewModal({
                                 {u.unitNumber}
                                 {u.todayBadge && (
                                   <span
-                                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shadow-sm"
+                                    className="absolute -top-1.5 -right-1.5 min-h-4 min-w-4 px-0.5 rounded-full text-[7px] font-bold text-white flex items-center justify-center shadow-sm leading-none"
                                     style={{ backgroundColor: BADGE_COLOR[u.todayBadge] }}
                                   >
                                     {u.todayBadge}
@@ -411,11 +458,14 @@ function MetaCell({
   label,
   value,
   accent,
+  valueClassName,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   accent?: boolean;
+  /** Override default `truncate` for long values (e.g. street address). */
+  valueClassName?: string;
 }) {
   return (
     <div
@@ -432,9 +482,9 @@ function MetaCell({
         </span>
       </div>
       <p
-        className={`text-[13px] font-semibold truncate ${
-          accent ? "text-emerald-800" : "text-zinc-800"
-        }`}
+        className={`text-[13px] font-semibold ${
+          valueClassName ?? "truncate"
+        } ${accent ? "text-emerald-800" : "text-zinc-800"}`}
       >
         {value}
       </p>
@@ -618,22 +668,27 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
             {/* Legend + Actions */}
             <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
-                {(["measured", "bracketed", "installed"] as const).map(
-                  (key) => (
-                    <div key={key} className="flex items-center gap-1.5">
-                      <span
-                        className="w-3 h-3 rounded-sm border"
-                        style={{
-                          backgroundColor: COLOR_MAP[key].dot + "44",
-                          borderColor: COLOR_MAP[key].dot,
-                        }}
-                      />
-                      <span className="text-[11px] text-muted font-medium capitalize">
-                        {COLOR_MAP[key].label}
-                      </span>
-                    </div>
-                  )
-                )}
+                {(
+                  [
+                    "measured",
+                    "bracketed",
+                    "measured_and_bracketed",
+                    "installed",
+                  ] as const
+                ).map((key) => (
+                  <div key={key} className="flex items-center gap-1.5">
+                    <span
+                      className="w-3 h-3 rounded-sm border"
+                      style={{
+                        backgroundColor: COLOR_MAP[key].dot + "44",
+                        borderColor: COLOR_MAP[key].dot,
+                      }}
+                    />
+                    <span className="text-[11px] text-muted font-medium capitalize">
+                      {COLOR_MAP[key].label}
+                    </span>
+                  </div>
+                ))}
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-sm border border-border bg-surface" />
                   <span className="text-[11px] text-muted font-medium">
@@ -656,19 +711,21 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
             </div>
 
             {/* Badge legend */}
-            <div className="px-4 pb-3 flex items-center gap-4">
+            <div className="px-4 pb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-[11px] text-muted">Today&apos;s badge:</p>
-              {(["M", "B", "I"] as const).map((letter) => (
+              {(["M", "B", "MB", "I"] as const).map((letter) => (
                 <div key={letter} className="flex items-center gap-1">
-                  <span className="w-5 h-5 rounded-full bg-foreground/10 border border-border text-[10px] font-bold text-foreground flex items-center justify-center">
+                  <span className="min-w-5 h-5 px-0.5 rounded-full bg-foreground/10 border border-border text-[8px] font-bold text-foreground flex items-center justify-center leading-none">
                     {letter}
                   </span>
                   <span className="text-[11px] text-muted">
                     {letter === "M"
                       ? "Measured"
                       : letter === "B"
-                      ? "Bracketed"
-                      : "Installed"}
+                        ? "Bracketed"
+                        : letter === "MB"
+                          ? "M & B"
+                          : "Installed"}
                   </span>
                 </div>
               ))}
@@ -718,7 +775,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
                         {u.unitNumber}
                         {u.todayBadge && (
                           <span
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[8px] font-bold text-white flex items-center justify-center shadow-sm"
+                            className="absolute -top-1.5 -right-1.5 min-h-4 min-w-4 px-0.5 rounded-full text-[7px] font-bold text-white flex items-center justify-center shadow-sm leading-none"
                             style={{ backgroundColor: BADGE_COLOR[u.todayBadge] }}
                           >
                             {u.todayBadge}
@@ -751,6 +808,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
         <ReportPreviewModal
           clientName={selectedClient.name}
           buildingName={selectedBuilding.name}
+          buildingAddress={selectedBuilding.address ?? ""}
           asOfDate={asOfDate}
           floorMap={floorMap}
           floors={floors}
