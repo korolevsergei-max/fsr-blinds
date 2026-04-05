@@ -1,24 +1,17 @@
-import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
+import { loadSchedulerDataset, loadUnitStageMedia } from "@/lib/server-data";
 import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
-import { UnitStatusEditor } from "@/components/units/unit-status-editor";
+import { StatusUpdate } from "./status-update";
 
-export default async function SchedulerStatusPage({
+export default async function StatusUpdatePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
   const [data, mediaItems, milestones] = await Promise.all([
-    loadFullDataset(),
+    loadSchedulerDataset(),
     loadUnitStageMedia(id),
     getUnitMilestoneCoverage(id),
   ]);
-  return (
-    <UnitStatusEditor
-      data={data}
-      mediaItems={mediaItems}
-      milestones={milestones}
-      unitsBasePath="/scheduler/units"
-    />
-  );
+  return <StatusUpdate data={data} mediaItems={mediaItems} milestones={milestones} />;
 }
