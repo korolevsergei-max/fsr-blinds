@@ -23,6 +23,7 @@ import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Button } from "@/components/ui/button";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
@@ -291,6 +292,7 @@ export function SchedulerUnitDetail({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.22, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="pb-6"
         >
           <SectionLabel className="mb-2">Activity</SectionLabel>
           {activityLog.length === 0 ? (
@@ -339,6 +341,30 @@ export function SchedulerUnitDetail({
               })}
             </div>
           )}
+        </motion.div>
+
+        {/* Actions for Scheduler as Installer */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-3 pt-2 pb-4"
+        >
+          <Link href={`/scheduler/units/${unit.id}/rooms`}>
+            <Button fullWidth size="lg">
+              Manage rooms
+            </Button>
+          </Link>
+          <Link href={`/scheduler/units/${unit.id}/status`}>
+            <Button variant="secondary" fullWidth size="lg">
+              View Progress
+            </Button>
+          </Link>
+          <Link href={`/scheduler/units/${unit.id}/summary`}>
+            <Button variant="secondary" fullWidth size="lg">
+              View Summary
+            </Button>
+          </Link>
         </motion.div>
 
       </div>

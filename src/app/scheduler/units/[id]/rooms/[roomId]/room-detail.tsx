@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 
-export function SchedulerRoomDetail({
+export function RoomDetail({
   data,
   mediaItems,
 }: {
@@ -51,10 +51,10 @@ export function SchedulerRoomDetail({
           getEditHref={(winId) =>
             `/scheduler/units/${id}/rooms/${roomId}/windows/new?edit=${winId}`
           }
-          getStageNavProps={(winId) => ({
+          getStageNavProps={(windowId) => ({
             unitId: id,
             roomId,
-            windowId: winId,
+            windowId,
             routeBasePath: "/scheduler/units",
           })}
           addWindowHref={`/scheduler/units/${id}/rooms/${roomId}/windows/new`}
