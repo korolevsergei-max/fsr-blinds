@@ -202,6 +202,46 @@ async function resolveInstallerName(
   return null;
 }
 
+/**
+ * When assigning units to a real installer, keep (or set) `scheduler_unit_assignments` for that
+ * installer's coordinating scheduler so the lead keeps portal scope and can perform field work
+ * even when another tech is the named assignee. If the installer has no `scheduler_id`, clear
+ * coordinator rows for those units (same as the previous delete-only behavior).
+ */
+async function syncCoordinatorAssignmentForInstaller(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitIds: string[],
+  installerId: string
+): Promise<ActionResult | null> {
+  const { data: inst, error } = await supabase
+    .from("installers")
+    .select("scheduler_id")
+    .eq("id", installerId)
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  const coordId = inst?.scheduler_id ?? null;
+  if (coordId) {
+    const rows = unitIds.map((uid) => ({
+      id: `sua-${uid}`,
+      unit_id: uid,
+      scheduler_id: coordId,
+      assigned_at: new Date().toISOString(),
+    }));
+    const { error: upErr } = await supabase
+      .from("scheduler_unit_assignments")
+      .upsert(rows, { onConflict: "unit_id" });
+    if (upErr) return { ok: false, error: upErr.message };
+  } else {
+    const { error: delErr } = await supabase
+      .from("scheduler_unit_assignments")
+      .delete()
+      .in("unit_id", unitIds);
+    if (delErr) return { ok: false, error: delErr.message };
+  }
+  return null;
+}
+
 async function logUnitActivity(
   supabase: Awaited<ReturnType<typeof createClient>>,
   unitId: string,
@@ -330,13 +370,12 @@ export async function bulkAssignUnits(
         if (assError) return { ok: false, error: assError.message };
       } else {
         patch.assigned_installer_id = installerId;
-        // When assigned to a regular installer, remove any explicit scheduler assignment 
-        // unless the owner wants both. Given the UNIQUE(unit_id) constraint, 
-        // we'll remove it to stay clean.
-        await supabase
-          .from("scheduler_unit_assignments")
-          .delete()
-          .in("unit_id", scopedUnitIds);
+        const coordErr = await syncCoordinatorAssignmentForInstaller(
+          supabase,
+          scopedUnitIds,
+          installerId
+        );
+        if (coordErr) return coordErr;
       }
     }
 
@@ -552,10 +591,8 @@ export async function updateUnitAssignment(
         if (assError) return { ok: false, error: assError.message };
       } else {
         patch.assigned_installer_id = installerId;
-        await supabase
-          .from("scheduler_unit_assignments")
-          .delete()
-          .eq("unit_id", unitId);
+        const coordErr = await syncCoordinatorAssignmentForInstaller(supabase, [unitId], installerId);
+        if (coordErr) return coordErr;
       }
     }
 

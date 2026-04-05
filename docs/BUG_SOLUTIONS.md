@@ -38,6 +38,8 @@ ON CONFLICT (id) DO UPDATE SET role = 'owner';
 
 **Fix:** `src/lib/scheduler-scope.ts` defines scope as assignments **or** units whose `assigned_installer_id` points at an `installers` row with `scheduler_id` = this scheduler. Use that for `loadSchedulerDataset`, server actions’ `assertSchedulerUnitScope`, and scheduler bulk assign filtering.
 
+**Hardening (coordinator field work):** `bulkAssignUnits` / `updateUnitAssignment` now **upsert** `scheduler_unit_assignments` for the installer's `scheduler_id` when handing a unit to a real installer (instead of only deleting rows). That keeps an explicit coordinator link if the team FK is wrong or lagging, so the lead scheduler can still open the unit and do measurement/bracketing/installation work when covering for an assigned tech.
+
 ---
 
 

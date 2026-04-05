@@ -540,6 +540,30 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     installers = ((allInstallers as InstallerRow[]) ?? []).map(mapInstaller);
   }
 
+  // Same synthetic pick-list row as `loadFullDataset`: schedulers can assign units to themselves.
+  const selfPickId = `sch-${schedulerId}`;
+  if (!installers.some((i) => i.id === selfPickId)) {
+    const { data: selfRow } = await supabase
+      .from("schedulers")
+      .select("*")
+      .eq("id", schedulerId)
+      .single();
+    if (selfRow) {
+      const sch = mapScheduler(selfRow as SchedulerRow);
+      installers = [
+        {
+          id: selfPickId,
+          name: `SC: ${sch.name}`,
+          email: sch.email,
+          phone: sch.phone,
+          avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
+          authUserId: sch.authUserId,
+        },
+        ...installers,
+      ];
+    }
+  }
+
   const allowedRoomIds = rooms.map((r) => r.id);
   const windowRows =
     allowedRoomIds.length > 0

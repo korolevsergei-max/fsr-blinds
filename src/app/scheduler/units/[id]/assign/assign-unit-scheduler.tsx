@@ -112,6 +112,8 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
                 <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[12px] font-semibold text-zinc-700">
                   {inst.avatarUrl ? (
                     <img src={inst.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : inst.name.startsWith("SC: ") ? (
+                    "SC"
                   ) : (
                     inst.name
                       .split(" ")
@@ -124,7 +126,9 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-900">{inst.name}</p>
-                  <p className="text-xs text-muted">Installer · {inst.phone}</p>
+                  <p className="text-xs text-muted">
+                    {inst.name.startsWith("SC: ") ? "You (scheduler)" : "Installer"} · {inst.phone}
+                  </p>
                 </div>
                 {selectedInstaller === inst.id && (
                   <CheckCircle size={20} weight="fill" className="text-accent flex-shrink-0" />

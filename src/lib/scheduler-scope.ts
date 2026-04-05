@@ -7,7 +7,9 @@ export type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
  * - rows in `scheduler_unit_assignments`, and
  * - units whose `assigned_installer_id` is an installer with `scheduler_id` = this scheduler.
  *
- * Assigning a unit to a team installer clears the assignment row; those units stay in scope via the installer link.
+ * Assigning a unit to a team installer upserts the coordinator's assignment row (from the
+ * installer's `scheduler_id`) so the lead keeps explicit scope; team-linked units also match
+ * via `assigned_installer_id` when the installer row is wired correctly.
  */
 export async function getSchedulerScopedUnitIds(
   supabase: SupabaseServerClient,
