@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Info, WarningCircle } from "@phosphor-icons/react";
+import { ArrowRight, Info, WarningCircle, UserGear, CalendarCheck, Wrench, Buildings, Robot, ClockCounterClockwise } from "@phosphor-icons/react";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -20,6 +20,57 @@ import { CompleteByHighlightCard } from "@/components/units/complete-by-highligh
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
+import { SectionLabel } from "@/components/ui/section-label";
+
+const ACTOR_ICONS: Record<string, React.ReactNode> = {
+  owner: <UserGear size={14} className="text-indigo-500" />,
+  scheduler: <CalendarCheck size={14} className="text-sky-500" />,
+  installer: <Wrench size={14} className="text-teal-500" />,
+  manufacturer: <Buildings size={14} className="text-orange-500" />,
+  system: <Robot size={14} className="text-zinc-400" />,
+};
+
+const ACTOR_COLORS: Record<string, string> = {
+  owner: "bg-indigo-50 border-indigo-100",
+  scheduler: "bg-sky-50 border-sky-100",
+  installer: "bg-teal-50 border-teal-100",
+  manufacturer: "bg-orange-50 border-orange-100",
+  system: "bg-zinc-50 border-zinc-100",
+};
+
+function formatRelative(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffD = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (diffD === 0) return "today";
+  if (diffD === 1) return "yesterday";
+  if (diffD < 7) return `${diffD}d ago`;
+  return date.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function resolveStatusLabel(value: unknown): string {
+  if (!value) return "";
+  const s = String(value);
+  return UNIT_STATUS_LABELS[s as UnitStatus] ?? s;
+}
+
+function buildLogDescription(log: UnitActivityLog): string {
+  const d = log.details ?? {};
+  if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
+    const parts: string[] = [];
+    if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.measurementDate) parts.push(`Measurement: ${d.measurementDate}`);
+    if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
+    if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
+    return parts.join(" · ");
+  }
+  if (log.action === "status_changed") {
+    const from = resolveStatusLabel(d.from);
+    const to = resolveStatusLabel(d.to);
+    const note = d.note ? ` — "${d.note}"` : "";
+    return from && to ? `${from} → ${to}${note}` : to || from;
+  }
+  return "";
+}
 
 export function UnitDetail({
   data,
@@ -374,6 +425,62 @@ export function UnitDetail({
               View Summary
             </Button>
           </Link>
+        </motion.div>
+
+        {/* Activity log */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.36, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="pb-6"
+        >
+          <SectionLabel className="mb-2">Activity</SectionLabel>
+          {activityLog.length === 0 ? (
+            <div className="py-8 text-center text-muted text-sm flex flex-col items-center gap-2">
+              <ClockCounterClockwise size={28} className="text-zinc-300" />
+              No activity yet
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {activityLog.map((log, i) => {
+                const isLast = i === activityLog.length - 1;
+                const description = buildLogDescription(log);
+                const actorColor = ACTOR_COLORS[log.actorRole] ?? ACTOR_COLORS.system;
+                const actorIcon = ACTOR_ICONS[log.actorRole] ?? ACTOR_ICONS.system;
+                return (
+                  <div key={log.id} className="relative flex gap-3 pb-4">
+                    {!isLast && (
+                      <div className="absolute left-[18px] top-7 bottom-0 w-px bg-border" />
+                    )}
+                    <div
+                      className={`relative z-10 flex-shrink-0 w-9 h-9 rounded-full border flex items-center justify-center ${actorColor}`}
+                    >
+                      {actorIcon}
+                    </div>
+                    <div className="flex-1 pt-1.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-[12px] font-semibold text-foreground capitalize">
+                          {log.actorName}
+                          <span className="ml-1 text-[10px] font-medium text-tertiary capitalize">
+                            ({log.actorRole})
+                          </span>
+                        </p>
+                        <span className="text-[10px] text-muted flex-shrink-0">
+                          {formatRelative(log.createdAt)}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-secondary mt-0.5">
+                        {UNIT_STATUS_LABELS[log.action as keyof typeof UNIT_STATUS_LABELS] ?? log.action.replace(/_/g, " ")}
+                      </p>
+                      {description && (
+                        <p className="text-[11px] text-muted mt-0.5 font-mono">{description}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>
