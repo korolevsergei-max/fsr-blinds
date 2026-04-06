@@ -4,6 +4,7 @@ import { getInstallerManufacturerAuthDrift } from "@/lib/account-sync";
 import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-data";
 import { createClient } from "@/lib/supabase/server";
 import { AccountsManager } from "./accounts-manager";
+import type { QCPerson } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,25 @@ export interface OwnerProfile {
   authUserId: string;
   displayName: string;
   email: string;
+}
+
+async function loadQCPersons(): Promise<QCPerson[]> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("qc_persons")
+      .select("id, name, email, phone, auth_user_id")
+      .order("name");
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone ?? "",
+      authUserId: row.auth_user_id ?? null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function loadOwnerProfiles(): Promise<OwnerProfile[]> {
@@ -37,11 +57,12 @@ export default async function AccountsPage() {
     redirect("/management");
   }
 
-  const [data, authDrift, schedulerAccess, ownerProfiles] = await Promise.all([
+  const [data, authDrift, schedulerAccess, ownerProfiles, qcPersons] = await Promise.all([
     loadFullDataset(),
     getInstallerManufacturerAuthDrift(),
     loadAllSchedulerBuildingAccess(),
     loadOwnerProfiles(),
+    loadQCPersons(),
   ]);
 
   return (
@@ -50,6 +71,7 @@ export default async function AccountsPage() {
       authDrift={authDrift}
       schedulerAccess={schedulerAccess}
       ownerProfiles={ownerProfiles}
+      qcPersons={qcPersons}
       currentUserAuthId={user.id}
     />
   );

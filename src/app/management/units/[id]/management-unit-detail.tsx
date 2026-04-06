@@ -353,6 +353,17 @@ export function ManagementUnitDetail({
                 </p>
               </div>
             </div>
+            {unit.assignedSchedulerName && (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <UserCircle size={17} className="text-tertiary" />
+                <div>
+                  <p className="text-[11px] text-tertiary">Assigned scheduler</p>
+                  <p className="text-[13px] font-medium text-foreground">
+                    {unit.assignedSchedulerName}
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3 px-4 py-3">
               <CalendarBlank size={17} className="text-tertiary" />
               <div>

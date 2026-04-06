@@ -471,6 +471,15 @@ export async function assignUnitsToScheduler(
       return { ok: false, error: "Scheduler and at least one unit are required." };
     }
     const supabase = await createClient();
+    const { displayName, role } = await requireOwner();
+
+    // Fetch scheduler name for logging
+    const { data: scheduler } = await supabase
+      .from("schedulers")
+      .select("name")
+      .eq("id", schedulerId)
+      .single();
+    const schedulerName = (scheduler as { name: string })?.name || "Unknown";
 
     // Upsert rows — ON CONFLICT on unit_id replaces the scheduler.
     const rows = unitIds.map((unitId) => ({
@@ -484,6 +493,13 @@ export async function assignUnitsToScheduler(
       .upsert(rows, { onConflict: "unit_id" });
 
     if (error) return { ok: false, error: error.message };
+
+    // Log activity for each unit
+    for (const unitId of unitIds) {
+      await logUnitActivity(supabase, unitId, role, displayName, "bulk_assigned", {
+        scheduler: schedulerName,
+      });
+    }
 
     revalidateApp();
     return { ok: true };

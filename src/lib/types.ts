@@ -112,6 +112,8 @@ export interface Unit {
   status: UnitStatus;
   assignedInstallerId: string | null;
   assignedInstallerName: string | null;
+  assignedSchedulerId?: string | null;
+  assignedSchedulerName?: string | null;
   measurementDate: string | null;
   bracketingDate: string | null;
   installationDate: string | null;
