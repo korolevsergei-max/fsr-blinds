@@ -10,6 +10,7 @@ import {
   UserCircle,
   CalendarBlank,
   UploadSimple,
+  Trash,
 } from "@phosphor-icons/react";
 import { getUnitsByBuilding } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -19,9 +20,12 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { createUnit } from "@/app/actions/management-actions";
+import { createUnit, deleteBuilding } from "@/app/actions/management-actions";
+import { UserRole } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 
-export function BuildingDetail({ data }: { data: AppDataset }) {
+export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?: UserRole }) {
+  const router = useRouter();
   const { id: buildingId } = useParams<{ id: string }>();
   const building = data.buildings.find((b) => b.id === buildingId);
   const client = building
@@ -70,6 +74,23 @@ export function BuildingDetail({ data }: { data: AppDataset }) {
     });
   };
 
+  const handleDeleteBuilding = () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this building and all its units? This cannot be undone."
+      )
+    )
+      return;
+    startTransition(async () => {
+      const result = await deleteBuilding(building.id);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
+      router.push(`/management/clients/${client.id}`);
+    });
+  };
+
   return (
     <div className="flex flex-col">
       <PageHeader
@@ -84,6 +105,12 @@ export function BuildingDetail({ data }: { data: AppDataset }) {
                 Import
               </Button>
             </Link>
+            {userRole === "owner" && (
+              <Button size="sm" variant="danger" disabled={pending} onClick={handleDeleteBuilding}>
+                <Trash size={14} weight="bold" />
+                {pending ? "Deleting…" : "Delete"}
+              </Button>
+            )}
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               <Plus size={14} weight="bold" />
               Unit

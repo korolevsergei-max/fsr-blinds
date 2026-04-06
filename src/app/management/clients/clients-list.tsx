@@ -75,12 +75,14 @@ export function ClientsList({ data }: { data: AppDataset }) {
               transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <Link href={`/management/clients/${client.id}`}>
-                <div className="surface-card p-4 hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
+                <div className="surface-card group p-4 hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
                   <div className="flex items-start justify-between mb-3">
                     <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
                       {client.name}
                     </h3>
-                    <ArrowRight size={15} className="text-tertiary mt-0.5" />
+                    <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center -mr-1 shadow-sm group-hover:shadow-md transition-shadow">
+                      <ArrowRight size={16} weight="bold" className="text-white" />
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-1.5 mb-3">

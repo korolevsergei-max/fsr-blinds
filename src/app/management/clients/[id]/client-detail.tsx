@@ -22,8 +22,14 @@ import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { Input } from "@/components/ui/input";
 import { createBuilding, updateClient, deleteClient } from "@/app/actions/management-actions";
+import { UserRole } from "@/lib/auth";
 
-export function ClientDetail({ data }: { data: AppDataset }) {
+interface ClientDetailProps {
+  data: AppDataset;
+  userRole?: UserRole;
+}
+
+export function ClientDetail({ data, userRole }: ClientDetailProps) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const client = data.clients.find((c) => c.id === id);
@@ -138,10 +144,12 @@ export function ClientDetail({ data }: { data: AppDataset }) {
             <Input label="Contact Phone" type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="(555) 123-4567" />
             
             <div className="flex items-center justify-between mt-2 pt-3 border-t border-border-subtle">
-              <Button size="sm" variant="danger" disabled={isUpdating || isDeleting} onClick={handleDeleteClient}>
-                <Trash size={14} weight="bold" />
-                {isDeleting ? "Deleting…" : "Delete"}
-              </Button>
+              {userRole === "owner" && (
+                <Button size="sm" variant="danger" disabled={isUpdating || isDeleting} onClick={handleDeleteClient}>
+                  <Trash size={14} weight="bold" />
+                  {isDeleting ? "Deleting…" : "Delete"}
+                </Button>
+              )}
               <div className="flex gap-2">
                 <Button size="sm" variant="secondary" onClick={() => setShowEditForm(false)}>
                   Cancel
@@ -200,7 +208,7 @@ export function ClientDetail({ data }: { data: AppDataset }) {
               }}
             >
               <Link href={`/management/buildings/${building.id}`}>
-                <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
+                <div className="bg-white rounded-2xl border border-border group p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center">
@@ -216,7 +224,9 @@ export function ClientDetail({ data }: { data: AppDataset }) {
                         </div>
                       </div>
                     </div>
-                    <ArrowRight size={16} className="text-zinc-400 mt-1" />
+                      <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center -mr-1 shadow-sm group-hover:shadow-md transition-shadow">
+                        <ArrowRight size={16} weight="bold" className="text-white" />
+                      </div>
                   </div>
 
                   <div className="flex items-center gap-4 text-xs text-muted border-t border-border pt-3 mt-3">

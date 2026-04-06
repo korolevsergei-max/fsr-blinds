@@ -1017,11 +1017,17 @@ export async function createWindowWithPhoto(
     if (!Number.isFinite(wn) || wn <= 0 || !Number.isFinite(hn) || hn <= 0) {
       return { ok: false, error: "Valid width and height are required" };
     }
-    if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Photo is required" };
+    const isGreen = riskFlag === "green";
+    const hasPhoto = file instanceof File && file.size > 0;
+
+    if (!isGreen && !hasPhoto) {
+      return { ok: false, error: "Photo is required for yellow or red risk." };
     }
-    const fileValidation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
-    if (fileValidation) return fileValidation;
+
+    if (hasPhoto) {
+      const fileValidation = validateIncomingImageFile(file as File, { fieldLabel: "Photo" });
+      if (fileValidation) return fileValidation;
+    }
 
     if (blindType !== "screen" && blindType !== "blackout") {
       return { ok: false, error: "Invalid blind type" };
@@ -1052,24 +1058,31 @@ export async function createWindowWithPhoto(
     const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
-    const ext =
-      (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") ||
-      "jpg";
-    const path = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const { error: upErr } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, buf, {
-        contentType: file.type || "image/jpeg",
-        upsert: false,
-      });
-    if (upErr) {
-      return { ok: false, error: normalizeStorageError(upErr.message) };
-    }
+    let publicUrl: string | null = null;
+    let storagePath: string | null = null;
 
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    if (hasPhoto && file instanceof File) {
+      const ext =
+        (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") ||
+        "jpg";
+      const path = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, buf, {
+          contentType: file.type || "image/jpeg",
+          upsert: false,
+        });
+      if (upErr) {
+        return { ok: false, error: normalizeStorageError(upErr.message) };
+      }
+
+      const {
+        data: { publicUrl: url },
+      } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      publicUrl = url;
+      storagePath = path;
+    }
 
     const windowId = `win-${crypto.randomUUID()}`;
     const dn = depth.trim() ? parseFloat(depth) : null;
@@ -1096,6 +1109,8 @@ export async function createWindowWithPhoto(
       risk_flag: riskFlag,
       photo_url: publicUrl,
       measured: true,
+      bracketed: false,
+      installed: false,
     };
     let insertPayload = windowInsertPayload;
     let { error: insErr } = await supabase.from("windows").insert(insertPayload);
@@ -1109,26 +1124,30 @@ export async function createWindowWithPhoto(
       insErr = retry.error;
     }
     if (insErr) {
-      await supabase.storage.from(BUCKET).remove([path]);
+      if (storagePath) {
+        await supabase.storage.from(BUCKET).remove([storagePath]);
+      }
       return { ok: false, error: insErr.message };
     }
 
-    const { error: medErr } = await supabase.from("media_uploads").insert({
-      id: `med-${crypto.randomUUID()}`,
-      storage_path: path,
-      public_url: publicUrl,
-      upload_kind: "window_measure",
-      phase: uploadPhase,
-      stage: uploadStage,
-      unit_id: unitId,
-      room_id: roomId,
-      window_id: windowId,
-      label,
-    });
-    if (medErr) {
-      await supabase.from("windows").delete().eq("id", windowId);
-      await supabase.storage.from(BUCKET).remove([path]);
-      return { ok: false, error: medErr.message };
+    if (publicUrl && storagePath) {
+      const { error: medErr } = await supabase.from("media_uploads").insert({
+        id: `med-${crypto.randomUUID()}`,
+        storage_path: storagePath,
+        public_url: publicUrl,
+        upload_kind: "window_measure",
+        phase: uploadPhase,
+        stage: uploadStage,
+        unit_id: unitId,
+        room_id: roomId,
+        window_id: windowId,
+        label,
+      });
+      if (medErr) {
+        await supabase.from("windows").delete().eq("id", windowId);
+        await supabase.storage.from(BUCKET).remove([storagePath]);
+        return { ok: false, error: medErr.message };
+      }
     }
 
     const { data: unit } = await supabase
@@ -1361,13 +1380,19 @@ export async function uploadWindowPostBracketingPhoto(
     if (!unitId || !roomId || !windowId) {
       return { ok: false, error: "Missing unit, room, or window." };
     }
-    if (!(photo instanceof File) || photo.size === 0) {
-      return { ok: false, error: "Post-bracketing photo is required." };
+    const isGreen = riskFlag === "green";
+    const hasPhoto = photo instanceof File && photo.size > 0;
+
+    if (!isGreen && !hasPhoto) {
+      return { ok: false, error: "Post-bracketing photo is required for yellow or red risk." };
     }
-    const photoValidation = validateIncomingImageFile(photo, {
-      fieldLabel: "Post-bracketing photo",
-    });
-    if (photoValidation) return photoValidation;
+
+    if (hasPhoto) {
+      const photoValidation = validateIncomingImageFile(photo as File, {
+        fieldLabel: "Post-bracketing photo",
+      });
+      if (photoValidation) return photoValidation;
+    }
     if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
       return { ok: false, error: "Invalid risk flag." };
     }
@@ -1399,45 +1424,48 @@ export async function uploadWindowPostBracketingPhoto(
       .update({
         risk_flag: riskFlag,
         notes: notes.trim(),
+        bracketed: true,
       })
       .eq("id", windowId);
     if (windowUpdateError) {
       return { ok: false, error: windowUpdateError.message };
     }
 
-    const ext =
-      (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `${unitId}/${roomId}/post-bracketing/${crypto.randomUUID()}.${ext}`;
-    const buf = new Uint8Array(await photo.arrayBuffer());
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, buf, {
-        contentType: photo.type || "image/jpeg",
-        upsert: false,
+    if (hasPhoto && photo instanceof File) {
+      const ext =
+        (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${unitId}/${roomId}/post-bracketing/${crypto.randomUUID()}.${ext}`;
+      const buf = new Uint8Array(await photo.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, buf, {
+          contentType: photo.type || "image/jpeg",
+          upsert: false,
+        });
+      if (uploadError) {
+        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+      const { error: mediaError } = await supabase.from("media_uploads").insert({
+        id: `med-${crypto.randomUUID()}`,
+        storage_path: path,
+        public_url: publicUrl,
+        upload_kind: "window_measure",
+        phase: "bracketing",
+        stage: "bracketed_measured",
+        unit_id: unitId,
+        room_id: roomId,
+        window_id: windowId,
+        label: `${windowRow.label} — Post-bracketing`,
       });
-    if (uploadError) {
-      return { ok: false, error: normalizeStorageError(uploadError.message) };
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(BUCKET).getPublicUrl(path);
-
-    const { error: mediaError } = await supabase.from("media_uploads").insert({
-      id: `med-${crypto.randomUUID()}`,
-      storage_path: path,
-      public_url: publicUrl,
-      upload_kind: "window_measure",
-      phase: "bracketing",
-      stage: "bracketed_measured",
-      unit_id: unitId,
-      room_id: roomId,
-      window_id: windowId,
-      label: `${windowRow.label} — Post-bracketing`,
-    });
-    if (mediaError) {
-      await supabase.storage.from(BUCKET).remove([path]);
-      return { ok: false, error: mediaError.message };
+      if (mediaError) {
+        await supabase.storage.from(BUCKET).remove([path]);
+        return { ok: false, error: mediaError.message };
+      }
     }
 
     const { data: unit } = await supabase
@@ -1479,13 +1507,19 @@ export async function uploadWindowInstalledPhoto(
     if (!unitId || !roomId || !windowId) {
       return { ok: false, error: "Missing unit, room, or window." };
     }
-    if (!(photo instanceof File) || photo.size === 0) {
-      return { ok: false, error: "Installed photo is required." };
+    const isGreen = riskFlag === "green";
+    const hasPhoto = photo instanceof File && photo.size > 0;
+
+    if (!isGreen && !hasPhoto) {
+      return { ok: false, error: "Installed photo is required for yellow or red risk." };
     }
-    const photoValidation = validateIncomingImageFile(photo, {
-      fieldLabel: "Installed photo",
-    });
-    if (photoValidation) return photoValidation;
+
+    if (hasPhoto) {
+      const photoValidation = validateIncomingImageFile(photo as File, {
+        fieldLabel: "Installed photo",
+      });
+      if (photoValidation) return photoValidation;
+    }
     if (riskFlag !== "green" && riskFlag !== "yellow" && riskFlag !== "red") {
       return { ok: false, error: "Invalid risk flag." };
     }
@@ -1533,45 +1567,48 @@ export async function uploadWindowInstalledPhoto(
       .update({
         risk_flag: riskFlag,
         notes: notes.trim(),
+        installed: true,
       })
       .eq("id", windowId);
     if (windowUpdateError) {
       return { ok: false, error: windowUpdateError.message };
     }
 
-    const ext =
-      (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `${unitId}/${roomId}/installed/${crypto.randomUUID()}.${ext}`;
-    const buf = new Uint8Array(await photo.arrayBuffer());
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, buf, {
-        contentType: photo.type || "image/jpeg",
-        upsert: false,
+    if (hasPhoto && photo instanceof File) {
+      const ext =
+        (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${unitId}/${roomId}/installed/${crypto.randomUUID()}.${ext}`;
+      const buf = new Uint8Array(await photo.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, buf, {
+          contentType: photo.type || "image/jpeg",
+          upsert: false,
+        });
+      if (uploadError) {
+        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      }
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+      const { error: mediaError } = await supabase.from("media_uploads").insert({
+        id: `med-${crypto.randomUUID()}`,
+        storage_path: path,
+        public_url: publicUrl,
+        upload_kind: "window_measure",
+        phase: "installation",
+        stage: "installed_pending_approval",
+        unit_id: unitId,
+        room_id: roomId,
+        window_id: windowId,
+        label: `${windowRow.label} — Installed`,
       });
-    if (uploadError) {
-      return { ok: false, error: normalizeStorageError(uploadError.message) };
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(BUCKET).getPublicUrl(path);
-
-    const { error: mediaError } = await supabase.from("media_uploads").insert({
-      id: `med-${crypto.randomUUID()}`,
-      storage_path: path,
-      public_url: publicUrl,
-      upload_kind: "window_measure",
-      phase: "installation",
-      stage: "installed_pending_approval",
-      unit_id: unitId,
-      room_id: roomId,
-      window_id: windowId,
-      label: `${windowRow.label} — Installed`,
-    });
-    if (mediaError) {
-      await supabase.storage.from(BUCKET).remove([path]);
-      return { ok: false, error: mediaError.message };
+      if (mediaError) {
+        await supabase.storage.from(BUCKET).remove([path]);
+        return { ok: false, error: mediaError.message };
+      }
     }
 
     const { data: unit } = await supabase

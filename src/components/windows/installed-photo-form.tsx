@@ -106,8 +106,11 @@ export function InstalledPhotoForm({
       return;
     }
 
-    if (!photoFile) {
-      setError("Installed photo is required.");
+    const isGreen = riskFlag === "green";
+    const hasPhoto = photoFile || existingInstalled?.publicUrl;
+
+    if (!isGreen && !photoFile && !existingInstalled) {
+      setError("Installed photo is required for yellow or red risk.");
       return;
     }
     if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
@@ -116,23 +119,27 @@ export function InstalledPhotoForm({
     }
 
     startTransition(async () => {
-      const validationError = validateUploadImage(photoFile);
-      if (validationError) {
-        setError(validationError);
-        return;
-      }
-      setOptimizingPhoto(true);
-      let compressedPhoto: File;
-      try {
-        compressedPhoto = await compressImageForUpload(photoFile);
-      } finally {
-        setOptimizingPhoto(false);
+      let compressedPhoto: File | null = null;
+      if (photoFile) {
+        try {
+          const validationError = validateUploadImage(photoFile);
+          if (validationError) {
+            setError(validationError);
+            return;
+          }
+          setOptimizingPhoto(true);
+          compressedPhoto = await compressImageForUpload(photoFile);
+        } finally {
+          setOptimizingPhoto(false);
+        }
       }
       const fd = new FormData();
       fd.set("unitId", unit.id);
       fd.set("roomId", room.id);
       fd.set("windowId", windowItem.id);
-      fd.set("photo", compressedPhoto, compressedPhoto.name);
+      if (compressedPhoto) {
+        fd.set("photo", compressedPhoto, compressedPhoto.name);
+      }
       fd.set("riskFlag", riskFlag);
       fd.set("notes", notes);
 
@@ -192,7 +199,7 @@ export function InstalledPhotoForm({
         <div>
           <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
             Installed Photo
-            <span className="ml-1 text-red-500">*</span>
+            {riskFlag !== "green" && <span className="ml-1 text-red-500">*</span>}
           </h2>
           {photoPreview ? (
             <button

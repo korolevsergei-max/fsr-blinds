@@ -106,6 +106,7 @@ export async function updateClient(
 
 export async function deleteClient(clientId: string): Promise<ActionResult> {
   try {
+    await requireOwner();
     const supabase = await createClient();
     const { error } = await supabase
       .from("clients")
@@ -115,7 +116,51 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
     revalidateApp();
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete client" };
+    const msg = e instanceof Error ? e.message : "Failed to delete client";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can delete a client." };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
+export async function deleteBuilding(buildingId: string): Promise<ActionResult> {
+  try {
+    await requireOwner();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("buildings")
+      .delete()
+      .eq("id", buildingId);
+    if (error) return { ok: false, error: error.message };
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete building";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can delete a building." };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
+export async function deleteUnit(unitId: string): Promise<ActionResult> {
+  try {
+    await requireOwner();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("units")
+      .delete()
+      .eq("id", unitId);
+    if (error) return { ok: false, error: error.message };
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete unit";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can delete a unit." };
+    }
+    return { ok: false, error: msg };
   }
 }
 

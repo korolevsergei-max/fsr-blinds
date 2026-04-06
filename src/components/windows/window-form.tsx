@@ -153,8 +153,9 @@ export function WindowForm({
     if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
       e.notes = "Notes are required for yellow or red risk";
     }
+    const isGreen = riskFlag === "green";
     const hasPhoto = photoFile || existingWindow?.photoUrl;
-    if (!hasPhoto) e.photo = "Pre-bracketing photo is required";
+    if (!isGreen && !hasPhoto) e.photo = "Pre-bracketing photo is required for yellow or red risk";
     setErrors(e);
     const msgs = Object.values(e).filter(Boolean);
     if (msgs.length > 0) {
@@ -404,7 +405,7 @@ export function WindowForm({
         >
           <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
             Pre-bracketing Photo
-            <span className="text-red-500 ml-1">*</span>
+            {riskFlag !== "green" && <span className="text-red-500 ml-1">*</span>}
           </h2>
           {photoPreview ? (
             <button

@@ -17,14 +17,17 @@ import {
   Robot,
   UserGear,
   ArrowRight,
+  Trash,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
+import { deleteUnit } from "@/app/actions/management-actions";
+import { UserRole } from "@/lib/auth";
+import { useRouter } from "next/navigation";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
-import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -192,12 +195,15 @@ export function ManagementUnitDetail({
   activityLog,
   mediaItems,
   milestones,
+  userRole,
 }: {
   data: AppDataset;
   activityLog: UnitActivityLog[];
   mediaItems: UnitStageMediaItem[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
+  userRole?: UserRole;
 }) {
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const unit = data.units.find((u) => u.id === id);
   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
@@ -262,6 +268,18 @@ export function ManagementUnitDetail({
     });
   };
 
+  const handleDeleteUnit = async () => {
+    if (!unit || !confirm("Are you sure you want to delete this unit?")) return;
+    startDateTransition(async () => {
+      const result = await deleteUnit(unit.id);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+      router.push(`/management/buildings/${unit.buildingId}`);
+    });
+  };
+
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
@@ -277,6 +295,12 @@ export function ManagementUnitDetail({
         backHref="/management/units"
         actions={
           <div className="flex items-center gap-2">
+            {userRole === "owner" && (
+              <Button size="sm" variant="danger" disabled={isUpdatingDate} onClick={handleDeleteUnit}>
+                <Trash size={14} />
+                {isUpdatingDate ? "Deleting…" : "Delete"}
+              </Button>
+            )}
             <Link href={`/management/units/${unit.id}/dates`}>
               <Button size="sm" variant="secondary">
                 <CalendarBlank size={14} />
@@ -309,8 +333,6 @@ export function ManagementUnitDetail({
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3"
         >
-          <div></div>
-
           <div className="surface-card divide-y divide-border-subtle overflow-hidden" style={{ padding: 0 }}>
             <div className="flex items-center gap-3 px-4 py-3">
               <UserCircle size={17} className="text-tertiary" />

@@ -137,6 +137,8 @@ export interface Window {
   notes: string;
   photoUrl: string | null;
   measured: boolean;
+  bracketed: boolean;
+  installed: boolean;
 }
 
 export interface Installer {

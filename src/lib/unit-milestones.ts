@@ -120,18 +120,16 @@ export async function getUnitMilestoneCoverageWithClient(
 
   const { data: windows } = await supabase
     .from("windows")
-    .select("id, measured")
+    .select("id, measured, bracketed, installed, updated_at")
     .in("room_id", roomIds);
   const windowRows = windows ?? [];
-  const windowIds = windowRows.map((w: { id: string; measured: boolean }) => w.id);
+  const windowIds = windowRows.map((w) => w.id);
   if (windowIds.length === 0) return empty;
 
   const totalWindows = windowIds.length;
 
   // Measurement coverage: windows.measured = true
-  const measuredWindows = windowRows.filter(
-    (w: { id: string; measured: boolean }) => w.measured
-  );
+  const measuredWindows = windowRows.filter((w) => w.measured);
   const measuredCount = measuredWindows.length;
   const allMeasured = measuredCount >= totalWindows;
 
@@ -140,67 +138,59 @@ export async function getUnitMilestoneCoverageWithClient(
     measuredCompletedAt = await resolveMeasuredCompletedAt(supabase, unitId, windowIds);
   }
 
-  // Bracketed coverage: every window has a qualifying bracketed media row.
-  const { data: bracketedMedia } = await supabase
-    .from("media_uploads")
-    .select("window_id, created_at")
-    .eq("unit_id", unitId)
-    .eq("stage", "bracketed_measured")
-    .eq("upload_kind", "window_measure")
-    .not("window_id", "is", null);
-
-  const bracketedByWindow = new Map<string, string>(); // window_id → latest created_at
-  for (const row of bracketedMedia ?? []) {
-    const existing = bracketedByWindow.get(row.window_id);
-    if (!existing || row.created_at > existing) {
-      bracketedByWindow.set(row.window_id, row.created_at);
-    }
-  }
-
-  const bracketedWindowIds = [...bracketedByWindow.keys()].filter((wid) =>
-    windowIds.includes(wid)
-  );
-  const bracketedCount = bracketedWindowIds.length;
-  const allBracketed = windowIds.every((id) => bracketedByWindow.has(id));
+  // Bracketed coverage
+  const bracketedWindows = windowRows.filter((w) => w.bracketed);
+  const bracketedCount = bracketedWindows.length;
+  const allBracketed = bracketedCount >= totalWindows;
 
   let bracketedCompletedAt: string | null = null;
   if (allBracketed) {
-    // Latest timestamp across all windows' bracketing photos
-    const timestamps = windowIds.map((id) => bracketedByWindow.get(id) ?? "");
-    bracketedCompletedAt = timestamps.sort().reverse()[0] ?? null;
-  }
-
-  // Installed coverage: every window has a qualifying installed media row.
-  const { data: installedMedia } = await supabase
-    .from("media_uploads")
-    .select("window_id, created_at")
-    .eq("unit_id", unitId)
-    .eq("stage", "installed_pending_approval")
-    .eq("upload_kind", "window_measure")
-    .not("window_id", "is", null);
-
-  const installedByWindow = new Map<string, string>(); // window_id → latest created_at
-  for (const row of installedMedia ?? []) {
-    const existing = installedByWindow.get(row.window_id);
-    if (!existing || row.created_at > existing) {
-      installedByWindow.set(row.window_id, row.created_at);
+    // Try to get latest media timestamp first
+    const { data: latestMedia } = await supabase
+      .from("media_uploads")
+      .select("created_at")
+      .eq("unit_id", unitId)
+      .eq("stage", "bracketed_measured")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    
+    if (latestMedia?.[0]?.created_at) {
+      bracketedCompletedAt = latestMedia[0].created_at;
+    } else {
+      // Fallback to latest window update
+      const latestUpdate = [...windowRows].sort((a, b) => 
+        (b.updated_at || "").localeCompare(a.updated_at || "")
+      )[0]?.updated_at;
+      bracketedCompletedAt = latestUpdate || null;
     }
   }
 
-  const installedWindowIds = [...installedByWindow.keys()].filter((wid) =>
-    windowIds.includes(wid)
-  );
-  const installedCount = installedWindowIds.length;
-  const allInstalled = windowIds.every((id) => installedByWindow.has(id));
+  // Installed coverage
+  const installedWindows = windowRows.filter((w) => w.installed);
+  const installedCount = installedWindows.length;
+  const allInstalled = installedCount >= totalWindows;
 
   let installedCompletedAt: string | null = null;
   if (allInstalled) {
-    const timestamps = windowIds.map((id) => installedByWindow.get(id) ?? "").filter(Boolean);
-    installedCompletedAt = await resolveInstalledCompletedAtFallback(
-      supabase,
-      unitId,
-      timestamps.length > 0 ? timestamps.sort().reverse()[0]! : null
-    );
+    // Try to get latest media timestamp first
+    const { data: latestMedia } = await supabase
+      .from("media_uploads")
+      .select("created_at")
+      .eq("unit_id", unitId)
+      .eq("stage", "installed_pending_approval")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const fromMedia = latestMedia?.[0]?.created_at || null;
+    if (fromMedia) {
+      installedCompletedAt = await resolveInstalledCompletedAtFallback(supabase, unitId, fromMedia);
+    } else {
+      // Fallback to latest window update
+      const latestUpdate = [...windowRows].sort((a, b) => 
+        (b.updated_at || "").localeCompare(a.updated_at || "")
+      )[0]?.updated_at;
+      installedCompletedAt = await resolveInstalledCompletedAtFallback(supabase, unitId, latestUpdate || null);
+    }
   }
 
   return {
