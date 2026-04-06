@@ -133,7 +133,6 @@ interface ReportPreviewProps {
   asOfDate: string;
   floorMap: Map<string, ReportUnit[]>;
   floors: string[];
-  maxRows: number;
   onClose: () => void;
 }
 
@@ -147,7 +146,6 @@ function ReportPreviewModal({
   asOfDate,
   floorMap,
   floors,
-  maxRows,
   onClose,
 }: ReportPreviewProps) {
   const printRef = useRef<HTMLDivElement>(null);
@@ -812,7 +810,6 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
           asOfDate={asOfDate}
           floorMap={floorMap}
           floors={floors}
-          maxRows={maxRows}
           onClose={() => setShowReport(false)}
         />
       )}

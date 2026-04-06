@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { Envelope, Phone, Buildings, CheckCircle, Plus } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
@@ -43,10 +44,11 @@ export function InstallersList({ data }: { data: AppDataset }) {
               <div className="surface-card p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-12 h-12 rounded-[var(--radius-lg)] overflow-hidden bg-surface border border-border flex-shrink-0">
-                    <img
+                    <Image
                       src={inst.avatarUrl}
                       alt={inst.name}
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
                     />
                   </div>
                   <div>

@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useMemo, useTransition } from "react";
+import { useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   UserCircle,
@@ -208,24 +208,29 @@ export function ManagementUnitDetail({
   const unit = data.units.find((u) => u.id === id);
   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
 
-  const displayActivityLog = useMemo((): UnitActivityLog[] => {
-    if (!unit?.createdAt) return activityLog;
+  const unitId = unit?.id;
+  const unitCreatedAt = unit?.createdAt;
+  const unitNumber = unit?.unitNumber;
+
+  const getDisplayActivityLog = (): UnitActivityLog[] => {
+    if (!unitCreatedAt) return activityLog;
     const hasCreation = activityLog.some((l) => l.action === "unit_created");
     if (hasCreation) return activityLog;
     const synthetic: UnitActivityLog = {
-      id: `derived-unit-created-${unit.id}`,
-      unitId: unit.id,
+      id: `derived-unit-created-${unitId}`,
+      unitId: unitId!,
       actorRole: "system",
       actorName: "System",
       action: "unit_created",
-      details: { unitNumber: unit.unitNumber },
-      createdAt: unit.createdAt as string,
+      details: { unitNumber },
+      createdAt: unitCreatedAt as string,
     };
     return [synthetic, ...activityLog].sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-  }, [activityLog, unit?.id, unit?.createdAt]);
+  };
+  const displayActivityLog = getDisplayActivityLog();
 
   const [isUpdatingDate, startDateTransition] = useTransition();
 
@@ -307,6 +312,17 @@ export function ManagementUnitDetail({
                 Assign
               </Button>
             </Link>
+            {userRole === "owner" && (
+              <Button 
+                size="sm" 
+                variant="danger" 
+                onClick={handleDeleteUnit}
+                disabled={isUpdatingDate}
+              >
+                <Trash size={14} />
+                Delete
+              </Button>
+            )}
           </div>
         }
       />
@@ -474,28 +490,6 @@ export function ManagementUnitDetail({
           <ActivityTimeline logs={displayActivityLog} />
         </motion.div>
 
-        {/* Bottom Delete Button */}
-        {userRole === "owner" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.3 }}
-            className="pt-4 border-t border-border-subtle"
-          >
-            <Button
-              variant="danger"
-              className="w-full justify-center"
-              disabled={isUpdatingDate}
-              onClick={handleDeleteUnit}
-            >
-              <Trash size={16} />
-              {isUpdatingDate ? "Deleting…" : "Delete Unit"}
-            </Button>
-            <p className="text-center text-[11px] text-muted mt-2 px-4">
-              Deleting this unit will permanently remove all associated rooms, windows, and activity records.
-            </p>
-          </motion.div>
-        )}
       </div>
     </div>
   );

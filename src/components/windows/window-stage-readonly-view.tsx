@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Camera } from "@phosphor-icons/react";
+import Image from "next/image";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
@@ -89,11 +90,12 @@ export function WindowStageReadonlyView({
 
       <div className="flex flex-1 flex-col gap-6 px-5 py-5">
         {selectedPhotoUrl ? (
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-            <img
+          <div className="relative aspect-video overflow-hidden rounded-2xl border border-border bg-surface">
+            <Image
               src={selectedPhotoUrl}
               alt={`${windowItem.label} ${modeTitle} photo`}
-              className="w-full select-none object-cover [-webkit-touch-callout:none]"
+              fill
+              className="select-none object-cover [-webkit-touch-callout:none]"
               draggable={false}
             />
           </div>
@@ -113,11 +115,11 @@ export function WindowStageReadonlyView({
           <div className="grid grid-cols-3 gap-3 text-sm">
             <div>
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Width</p>
-              <p className="mt-0.5 font-semibold text-foreground">{windowItem.width}"</p>
+              <p className="mt-0.5 font-semibold text-foreground">{windowItem.width}&quot;</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Height</p>
-              <p className="mt-0.5 font-semibold text-foreground">{windowItem.height}"</p>
+              <p className="mt-0.5 font-semibold text-foreground">{windowItem.height}&quot;</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Depth</p>

@@ -22,29 +22,33 @@ export function PageHeader({
   const router = useRouter();
 
   return (
-    <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border">
-      <div className="flex items-center gap-2 px-4 py-3">
-        {backHref && (
-          <button
-            onClick={() => router.push(backHref)}
-            aria-label="Go back"
-            className="flex items-center justify-center w-9 h-9 -ml-1.5 rounded-[var(--radius-md)] text-secondary hover:bg-surface hover:text-foreground transition-all duration-150 active:scale-[0.95]"
-          >
-            <ArrowLeft size={18} weight="bold" />
-          </button>
-        )}
-        <div className="flex-1 min-w-0">
-          <h1 className="text-[17px] font-semibold tracking-tight text-foreground truncate leading-snug">
-            {title}
-          </h1>
-          {subtitle && (
-            <p className="text-[12px] text-tertiary truncate mt-0.5 leading-none">
-              {subtitle}
-            </p>
+    <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border" suppressHydrationWarning>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 py-3 sm:py-4">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {backHref && (
+            <button
+              onClick={() => router.push(backHref)}
+              aria-label="Go back"
+              className="flex-shrink-0 flex items-center justify-center w-9 h-9 -ml-1 rounded-[var(--radius-md)] text-secondary hover:bg-surface hover:text-foreground transition-all duration-150 active:scale-[0.95]"
+            >
+              <ArrowLeft size={18} weight="bold" />
+            </button>
           )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-foreground truncate leading-snug">
+              {title}
+            </h1>
+            {subtitle && (
+              <p className="text-[12px] sm:text-[13px] text-tertiary truncate mt-0.5 leading-none">
+                {subtitle}
+              </p>
+            )}
+          </div>
         </div>
         {actions && (
-          <div className="flex items-center gap-2">{actions}</div>
+          <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto overflow-x-auto no-scrollbar pb-0.5 sm:pb-0">
+            {actions}
+          </div>
         )}
       </div>
       {belowTitle && (

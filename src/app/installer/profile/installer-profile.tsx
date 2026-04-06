@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useTransition } from "react";
 import { motion } from "framer-motion";
 import { Envelope, Phone, SignOut } from "@phosphor-icons/react";
@@ -44,10 +45,11 @@ export function InstallerProfile({
           className="flex items-center gap-4"
         >
           <div className="w-16 h-16 rounded-[var(--radius-xl)] overflow-hidden bg-accent-light flex-shrink-0 flex items-center justify-center">
-            <img
+            <Image
               src={installer.avatarUrl}
-              alt=""
-              className="w-full h-full object-cover"
+              alt={installer.name}
+              fill
+              className="object-cover"
             />
           </div>
           <div>

@@ -3,9 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireOwner, requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
-import type { AppUser } from "@/lib/auth";
-import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
+import { requireOwner } from "@/lib/auth";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -17,23 +15,6 @@ function revalidateApp() {
 }
 
 /** For scheduler callers: unit must match `loadSchedulerDataset` scope (assignments or team installer). */
-async function assertSchedulerUnitScope(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  caller: AppUser,
-  unitId: string
-): Promise<ActionResult | null> {
-  if (caller.role === "owner") return null;
-
-  const schedulerId = await getLinkedSchedulerId(caller.id);
-  if (!schedulerId) return { ok: false, error: "Scheduler account not found." };
-
-  const allowed = await isSchedulerScopedUnit(supabase, schedulerId, unitId);
-  if (!allowed) {
-    return { ok: false, error: "Access denied: this unit has not been assigned to you." };
-  }
-
-  return null;
-}
 
 async function logUnitActivity(
   supabase: Awaited<ReturnType<typeof createClient>>,

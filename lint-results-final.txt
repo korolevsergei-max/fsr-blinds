@@ -1,0 +1,125 @@
+
+> fsr-blinds@0.1.0 lint
+> eslint
+
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/actions/fsr-data.ts
+     5:57  warning  'requireOwner' is defined but never used                @typescript-eslint/no-unused-vars
+    10:3   warning  'UNIT_STATUS_LABELS' is defined but never used          @typescript-eslint/no-unused-vars
+   282:16  warning  'countBeforeBracketingMedia' is defined but never used  @typescript-eslint/no-unused-vars
+   298:16  warning  'countAfterBracketingMedia' is defined but never used   @typescript-eslint/no-unused-vars
+   752:3   warning  '_unitId' is defined but never used                     @typescript-eslint/no-unused-vars
+   753:3   warning  '_status' is defined but never used                     @typescript-eslint/no-unused-vars
+   754:3   warning  '_note' is defined but never used                       @typescript-eslint/no-unused-vars
+  1053:19  warning  'unitRow' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  1246:19  warning  'unitRow' is assigned a value but never used            @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/actions/management-actions.ts
+   6:24  warning  'requireOwnerOrScheduler' is defined but never used   @typescript-eslint/no-unused-vars
+  20:16  warning  'assertSchedulerUnitScope' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/installer/profile/installer-profile.tsx
+  47:13  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/installer/units/[id]/status/status-update.tsx
+  17:15  warning  '_mediaItems' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/installers/installers-list.tsx
+  46:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/reports/status-grid-report.tsx
+  150:3  warning  'maxRows' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/schedule/owner-schedule.tsx
+  65:24  warning  'setActionResult' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/assign/assign-unit.tsx
+  3:10  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx
+  215:30  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:215:30
+  213 |   const unitNumber = unit?.unitNumber;
+  214 |
+> 215 |   const displayActivityLog = useMemo((): UnitActivityLog[] => {
+      |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 216 |     if (!unitCreatedAt) return activityLog;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 217 |     const hasCreation = activityLog.some((l) => l.action === "unit_created");
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 231 |     );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 232 |   }, [activityLog, unitId, unitCreatedAt, unitNumber]);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Could not preserve existing memoization
+  233 |
+  234 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  235 |  react-hooks/preserve-manual-memoization
+  232:20  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:232:20
+  230 |         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  231 |     );
+> 232 |   }, [activityLog, unitId, unitCreatedAt, unitNumber]);
+      |                    ^^^^^^ This dependency may be modified later
+  233 |
+  234 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  235 |                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/preserve-manual-memoization
+  232:28  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:232:28
+  230 |         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  231 |     );
+> 232 |   }, [activityLog, unitId, unitCreatedAt, unitNumber]);
+      |                            ^^^^^^^^^^^^^ This dependency may be modified later
+  233 |
+  234 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  235 |                                                                                                                                                                                                                                                                                                                                                                                                                             react-hooks/preserve-manual-memoization
+  232:43  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:232:43
+  230 |         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  231 |     );
+> 232 |   }, [activityLog, unitId, unitCreatedAt, unitNumber]);
+      |                                           ^^^^^^^^^^ This dependency may be modified later
+  233 |
+  234 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  235 |                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/preserve-manual-memoization
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/scheduler/units/[id]/assign/assign-unit-scheduler.tsx
+  3:10  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/scheduler/units/[id]/status/status-update.tsx
+  17:15  warning  '_mediaItems' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/rooms/room-windows-view.tsx
+  253:21  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+  432:35  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/unit-stage-media-viewer.tsx
+  14:3  warning  'UNIT_PHOTO_STAGE_HELPERS' is defined but never used   @typescript-eslint/no-unused-vars
+  52:9  warning  'stagesWithPhotos' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/units/bulk-assign-sheet.tsx
+  3:10  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/windows/installed-photo-form.tsx
+  111:11  warning  'hasPhoto' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/windows/post-bracketing-photo-form.tsx
+  99:11  warning  'hasPhoto' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/components/windows/window-form.tsx
+  416:15  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+✖ 31 problems (4 errors, 27 warnings)
+

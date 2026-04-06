@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, CheckCircle, Images, Ruler, X } from "@phosphor-icons/react";
@@ -250,9 +251,11 @@ export function RoomWindowsView({
                         : ""
                     }`}
                   >
-                    <img
+                    <Image
                       src={selectedImageUrl}
                       alt={`${win.label} photo`}
+                      width={800}
+                      height={600}
                       onLoad={(e) => {
                         const img = e.currentTarget;
                         const next: ImageOrientation =
@@ -266,7 +269,7 @@ export function RoomWindowsView({
                           return { ...cur, [selectedImageUrl]: next };
                         });
                       }}
-                      className={`w-full bg-surface ${
+                      className={`w-full bg-surface h-auto ${
                         imageOrientationByUrl[selectedImageUrl] === "portrait"
                           ? "max-h-[28rem] object-contain"
                           : imageOrientationByUrl[selectedImageUrl] === "square"
@@ -429,10 +432,11 @@ export function RoomWindowsView({
                                 className="group overflow-hidden rounded-2xl border border-border bg-surface transition-colors hover:border-zinc-300"
                               >
                                 <div className="aspect-square overflow-hidden bg-zinc-100">
-                                  <img
+                                  <Image
                                     src={item.url}
                                     alt={item.title}
-                                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                                    fill
+                                    className="object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                                   />
                                 </div>
                                 <div className="px-3 py-2.5">

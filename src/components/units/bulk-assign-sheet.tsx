@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CalendarBlank, CheckCircle, Users, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -48,11 +48,9 @@ export function BulkAssignSheet({
     ? validInstallerIds.has(selectedInstaller)
     : false;
 
-  useEffect(() => {
-    if (selectedInstaller && !validInstallerIds.has(selectedInstaller)) {
-      setSelectedInstaller("");
-    }
-  }, [selectedInstaller, validInstallerIds]);
+  if (selectedInstaller && !validInstallerIds.has(selectedInstaller)) {
+    setSelectedInstaller("");
+  }
 
   const handleSave = () => {
     if (!selectedInstaller && !measurementDate && !bracketingDate && !installationDate && (!showCompleteBy || !completeByDate)) return;

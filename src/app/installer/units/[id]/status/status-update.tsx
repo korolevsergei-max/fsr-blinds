@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
-import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
@@ -14,11 +13,9 @@ import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-mi
 
 export function StatusUpdate({
   data,
-  mediaItems: _mediaItems,
   milestones,
 }: {
   data: AppDataset;
-  mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();

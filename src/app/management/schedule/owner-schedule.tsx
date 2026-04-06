@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import {
   CaretLeft,
   CaretRight,
-  CheckCircle,
   X,
   FunnelSimple,
 } from "@phosphor-icons/react";
@@ -62,7 +61,6 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
   const [clientFilter, setClientFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [installFilter, setInstallFilter] = useState<DateRange>("all");
-  const [actionResult, setActionResult] = useState<string>("");
 
   const availableBuildings = useMemo(
     () => (clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter)),
@@ -146,14 +144,6 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
     <div className="flex flex-col">
       <PageHeader title="Schedule" />
 
-      {actionResult && (
-        <div className="px-4 pt-3">
-          <div className="flex items-center gap-2 px-3.5 py-3 rounded-[var(--radius-md)] bg-success-light border border-[rgba(15,118,110,0.2)] text-[13px] font-medium text-success">
-            <CheckCircle size={16} weight="fill" />
-            {actionResult}
-          </div>
-        </div>
-      )}
 
       {/* Filters */}
       <div className="px-4 pt-3 pb-2 flex items-center justify-between">

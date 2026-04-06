@@ -283,7 +283,7 @@ export function UnitsList({
   ];
 
   return (
-    <div className="flex flex-col pb-32">
+    <div className="flex flex-col pb-32" suppressHydrationWarning>
       <PageHeader
         title="All Units"
         subtitle={`${filtered.length} of ${units.length} units`}
@@ -308,100 +308,103 @@ export function UnitsList({
             </button>
           )
         }
-      />
+        belowTitle={
+          <div className="flex flex-col">
+            {/* Search */}
+            <div className="pt-2 pb-2">
+              <div className="relative">
+                <MagnifyingGlass size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search units, buildings, clients…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-white text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                />
+              </div>
+            </div>
 
-      {/* Search */}
-      <div className="px-4 pt-3 pb-2">
-        <div className="relative">
-          <MagnifyingGlass size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            placeholder="Search units, buildings, clients…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-border bg-white text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
-          />
-        </div>
-      </div>
+            {/* Filter bar */}
+            <div className="pb-1">
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                <div className="flex items-center gap-1.5 flex-shrink-0 text-zinc-400">
+                  <FunnelSimple size={14} />
+                  {activeFilterCount > 0 && (
+                    <span className="text-[10px] font-bold bg-accent text-white rounded-full w-4 h-4 flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </div>
+                <FilterDropdown label="Client" value={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); setFloorFilter("all"); }} />
+                <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter("all"); }} />
+                <FilterDropdown label="Floor" value={floorFilter} options={floorOptions} onChange={setFloorFilter} />
+                <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
+                <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
+                <FilterDropdown label="Scheduler" value={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
+                <CreatedDateFilter
+                  value={dateAddedFilter}
+                  onChange={setDateAddedFilter}
+                  distinctDates={distinctAddedDates}
+                />
+                <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
+                <FilterDropdown
+                  label="Issues"
+                  value={issueFilter}
+                  options={issueOptions}
+                  onChange={(v) => setIssueFilter(v as typeof issueFilter)}
+                />
+                <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientFilter("all");
+                      setBuildingFilter("all");
+                      setStatusFilter("all");
+                      setInstallerFilter("all");
+                      setSchedulerFilter("all");
+                      setFloorFilter("all");
+                      setDateAddedFilter("all");
+                      setCompleteByFilter("all");
+                      setIssueFilter("all");
+                      setSortOrder("none");
+                    }}
+                    className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
+                  >
+                    <X size={11} weight="bold" />
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
 
-      {/* Filter bar */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          <div className="flex items-center gap-1.5 flex-shrink-0 text-zinc-400">
-            <FunnelSimple size={14} />
-            {activeFilterCount > 0 && (
-              <span className="text-[10px] font-bold bg-accent text-white rounded-full w-4 h-4 flex items-center justify-center">
-                {activeFilterCount}
-              </span>
-            )}
-          </div>
-          <FilterDropdown label="Client" value={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); setFloorFilter("all"); }} />
-          <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter("all"); }} />
-          <FilterDropdown label="Floor" value={floorFilter} options={floorOptions} onChange={setFloorFilter} />
-          <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
-          <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-          <FilterDropdown label="Scheduler" value={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
-          <CreatedDateFilter
-            value={dateAddedFilter}
-            onChange={setDateAddedFilter}
-            distinctDates={distinctAddedDates}
-          />
-          <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
-          <FilterDropdown
-            label="Issues"
-            value={issueFilter}
-            options={issueOptions}
-            onChange={(v) => setIssueFilter(v as typeof issueFilter)}
-          />
-          <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setClientFilter("all");
-                setBuildingFilter("all");
-                setStatusFilter("all");
-                setInstallerFilter("all");
-                setSchedulerFilter("all");
-                setFloorFilter("all");
-                setDateAddedFilter("all");
-                setCompleteByFilter("all");
-                setIssueFilter("all");
-                setSortOrder("none");
-              }}
-              className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
-            >
-              <X size={11} weight="bold" />
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Select-all row */}
-      <AnimatePresence>
-        {selectMode && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-4 pb-2 overflow-hidden"
-          >
-            <button
-              type="button"
-              onClick={toggleAll}
-              className="flex items-center gap-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
-            >
-              {allFilteredSelected ? (
-                <CheckSquare size={16} weight="fill" className="text-accent" />
-              ) : (
-                <Square size={16} className="text-zinc-400" />
+            {/* Select-all row */}
+            <AnimatePresence>
+              {selectMode && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-1 overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="flex items-center gap-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+                  >
+                    {allFilteredSelected ? (
+                      <CheckSquare size={16} weight="fill" className="text-accent" />
+                    ) : (
+                      <Square size={16} className="text-zinc-400" />
+                    )}
+                    {allFilteredSelected ? "Deselect all" : `Select all ${filtered.length}`}
+                  </button>
+                </motion.div>
               )}
-              {allFilteredSelected ? "Deselect all" : `Select all ${filtered.length}`}
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </AnimatePresence>
+          </div>
+        }
+      />
 
       {/* Unit cards */}
       <div className="px-4 flex flex-col gap-2">
@@ -439,15 +442,15 @@ export function UnitsList({
                     </div>
                   </div>
                   <div className="flex items-center justify-between pl-[26px]">
-                    <div className="flex flex-col gap-1 items-start">
-                      <StatusChip status={unit.status} />
-                      {unit.installationDate && (
-                        <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono">
-                          <CheckSquare size={12} />
-                          Install: {unit.installationDate}
-                        </span>
-                      )}
-                    </div>
+                      <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
+                        <StatusChip status={unit.status} />
+                        {unit.installationDate && (
+                          <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>
+                            <CheckSquare size={12} />
+                            Install: {unit.installationDate}
+                          </span>
+                        )}
+                      </div>
                     {unit.assignedInstallerName && (
                       <span className="flex items-center gap-1 text-[12px] text-secondary">
                         <UserCircle size={14} />
@@ -469,16 +472,16 @@ export function UnitsList({
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-1 items-start">
+                      <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
                         <StatusChip status={unit.status} />
                         {unit.installationDate && (
-                          <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono">
+                          <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>
                             <CheckSquare size={12} />
                             Install: {unit.installationDate}
                           </span>
                         )}
                         {unit.completeByDate && (
-                          <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+                          <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium" suppressHydrationWarning>
                             Due: {formatStoredDateForDisplay(unit.completeByDate)}
                           </span>
                         )}

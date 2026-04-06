@@ -1,0 +1,51 @@
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx
+  211:30  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:211:30
+  209 |   const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  210 |
+> 211 |   const displayActivityLog = useMemo((): UnitActivityLog[] => {
+      |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 212 |     if (!unit?.createdAt) return activityLog;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 213 |     const hasCreation = activityLog.some((l) => l.action === "unit_created");
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 227 |     );
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 228 |   }, [activityLog, unit?.id, unit?.createdAt]);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Could not preserve existing memoization
+  229 |
+  230 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  231 |  react-hooks/preserve-manual-memoization
+  228:6   warning  React Hook useMemo has a missing dependency: 'unit.unitNumber'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/exhaustive-deps
+  228:20  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:228:20
+  226 |         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  227 |     );
+> 228 |   }, [activityLog, unit?.id, unit?.createdAt]);
+      |                    ^^^^ This dependency may be modified later
+  229 |
+  230 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  231 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/preserve-manual-memoization
+  228:30  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.
+
+/Users/sergeikorolev/5. Vibe coding/260322-FSRblinds/src/app/management/units/[id]/management-unit-detail.tsx:228:30
+  226 |         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  227 |     );
+> 228 |   }, [activityLog, unit?.id, unit?.createdAt]);
+      |                              ^^^^ This dependency may be modified later
+  229 |
+  230 |   const [isUpdatingDate, startDateTransition] = useTransition();
+  231 |                                                                                                                                                                                                                                                                                                                                                                                                                                                        react-hooks/preserve-manual-memoization
+
+✖ 4 problems (3 errors, 1 warning)
+

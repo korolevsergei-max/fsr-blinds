@@ -245,100 +245,104 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
             </button>
           )
         }
-      />
+        belowTitle={
+          <div className="flex flex-col">
+            {/* Search */}
+            <div className="pt-2 pb-2">
+              <div className="flex items-center gap-2 px-3 h-10 rounded-[var(--radius-md)] border border-border bg-surface">
+                <MagnifyingGlass size={15} className="text-zinc-400 flex-shrink-0" />
+                <input
+                  type="search"
+                  placeholder="Search units, buildings, clients…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted"
+                />
+                {search && (
+                  <button type="button" onClick={() => setSearch("")}>
+                    <X size={13} className="text-zinc-400" />
+                  </button>
+                )}
+              </div>
+            </div>
 
-      {/* Search */}
-      <div className="px-4 pt-3 pb-2">
-        <div className="flex items-center gap-2 px-3 h-10 rounded-[var(--radius-md)] border border-border bg-surface">
-          <MagnifyingGlass size={15} className="text-zinc-400 flex-shrink-0" />
-          <input
-            type="search"
-            placeholder="Search units, buildings, clients…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted"
-          />
-          {search && (
-            <button type="button" onClick={() => setSearch("")}>
-              <X size={13} className="text-zinc-400" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1 flex-shrink-0 text-zinc-400">
-          <FunnelSimple size={13} />
-          {activeFilterCount > 0 && (
-            <span className="text-[9px] font-bold bg-accent text-white rounded-full w-3.5 h-3.5 flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </div>
-        <FilterDropdown
-          label="Client"
-          value={clientFilter}
-          options={clientOptions}
-          onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); }}
-        />
-        <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
-        <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
-        <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-        <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
-        <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
-        <FilterDropdown
-          label="Issues"
-          value={issueFilter}
-          options={issueOptions}
-          onChange={(v) => setIssueFilter(v as typeof issueFilter)}
-        />
-        <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
-        <FilterDropdown label="Flag" value={flagFilter} options={flagOptions} onChange={setFlagFilter} />
-        {activeFilterCount > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              setClientFilter("all");
-              setBuildingFilter("all");
-              setStatusFilter("all");
-              setInstallerFilter("all");
-              setDateAddedFilter("all");
-              setCompleteByFilter("all");
-              setIssueFilter("all");
-              setSortOrder("none");
-              setFlagFilter("all");
-            }}
-            className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
-          >
-            <X size={10} weight="bold" /> Clear
-          </button>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {selectMode && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-4 pb-2 overflow-hidden"
-          >
-            <button
-              type="button"
-              onClick={toggleAll}
-              className="flex items-center gap-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
-            >
-              {allFilteredSelected ? (
-                <CheckSquare size={16} weight="fill" className="text-accent" />
-              ) : (
-                <Square size={16} className="text-zinc-400" />
+            {/* Filters */}
+            <div className="pb-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-1 flex-shrink-0 text-zinc-400">
+                <FunnelSimple size={13} />
+                {activeFilterCount > 0 && (
+                  <span className="text-[9px] font-bold bg-accent text-white rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </div>
+              <FilterDropdown
+                label="Client"
+                value={clientFilter}
+                options={clientOptions}
+                onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); }}
+              />
+              <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
+              <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
+              <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
+              <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
+              <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
+              <FilterDropdown
+                label="Issues"
+                value={issueFilter}
+                options={issueOptions}
+                onChange={(v) => setIssueFilter(v as typeof issueFilter)}
+              />
+              <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
+              <FilterDropdown label="Flag" value={flagFilter} options={flagOptions} onChange={setFlagFilter} />
+              {activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClientFilter("all");
+                    setBuildingFilter("all");
+                    setStatusFilter("all");
+                    setInstallerFilter("all");
+                    setDateAddedFilter("all");
+                    setCompleteByFilter("all");
+                    setIssueFilter("all");
+                    setSortOrder("none");
+                    setFlagFilter("all");
+                  }}
+                  className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
+                >
+                  <X size={10} weight="bold" /> Clear
+                </button>
               )}
-              {allFilteredSelected ? "Deselect all" : `Select all ${sortedFilteredUnits.length}`}
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+
+            {/* Select-all row */}
+            <AnimatePresence>
+              {selectMode && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-1 overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="flex items-center gap-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+                  >
+                    {allFilteredSelected ? (
+                      <CheckSquare size={16} weight="fill" className="text-accent" />
+                    ) : (
+                      <Square size={16} className="text-zinc-400" />
+                    )}
+                    {allFilteredSelected ? "Deselect all" : `Select all ${sortedFilteredUnits.length}`}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        }
+      />
 
       {/* List */}
       <div className="px-4 flex flex-col gap-2 pb-24">

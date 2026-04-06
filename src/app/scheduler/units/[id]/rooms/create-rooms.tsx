@@ -20,12 +20,6 @@ interface LocalRoom {
 export function CreateRooms({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const unit = data.units.find((u) => u.id === id);
-  const existingRooms = unit ? getRoomsByUnit(data, unit.id) : [];
-
-  if (!unit) {
-    return <div className="p-6 text-center text-muted">Unit not found</div>;
-  }
 
   const [newRooms, setNewRooms] = useState<LocalRoom[]>([]);
   const [customName, setCustomName] = useState("");
@@ -34,6 +28,13 @@ export function CreateRooms({ data }: { data: AppDataset }) {
   const [editingNewRoomTempId, setEditingNewRoomTempId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [pending, startTransition] = useTransition();
+
+  const unit = data.units.find((u) => u.id === id);
+  const existingRooms = unit ? getRoomsByUnit(data, unit.id) : [];
+
+  if (!unit) {
+    return <div className="p-6 text-center text-muted">Unit not found</div>;
+  }
 
   const allNames = new Set([
     ...existingRooms.map((r) => r.name),

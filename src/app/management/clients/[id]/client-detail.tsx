@@ -119,6 +119,17 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
               <PencilSimple size={14} weight="bold" />
               Edit
             </Button>
+            {userRole === "owner" && (
+              <Button 
+                size="sm" 
+                variant="danger" 
+                onClick={handleDeleteClient}
+                disabled={isUpdating || isDeleting}
+              >
+                <Trash size={14} weight="bold" />
+                Delete
+              </Button>
+            )}
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               <Plus size={14} weight="bold" />
               Building
@@ -243,27 +254,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
           );
         })}
 
-        {userRole === "owner" && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.3 }}
-            className="mt-8 pt-6 border-t border-border-subtle"
-          >
-            <Button
-              variant="danger"
-              className="w-full justify-center"
-              disabled={isUpdating || isDeleting}
-              onClick={handleDeleteClient}
-            >
-              <Trash size={16} />
-              {isDeleting ? "Deleting…" : "Delete Client"}
-            </Button>
-            <p className="text-center text-[11px] text-muted mt-2 px-4">
-              Deleting this client will permanently remove all associated buildings, units, and records.
-            </p>
-          </motion.div>
-        )}
+
       </div>
     </div>
   );

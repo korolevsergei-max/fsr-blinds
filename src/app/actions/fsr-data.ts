@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwnerOrScheduler, getLinkedSchedulerId, requireOwner } from "@/lib/auth";
+import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import { getSchedulerScopedUnitIds, isSchedulerScopedUnit } from "@/lib/scheduler-scope";
 import {
   UNIT_PHOTO_STAGES,
-  UNIT_STATUS_LABELS,
   UNIT_PHOTO_STAGE_LABELS,
   type BlindType,
   type RiskFlag,
@@ -261,53 +260,7 @@ async function logUnitActivity(
   });
 }
 
-async function countStageMedia(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  unitId: string,
-  stage: UnitPhotoStage
-) {
-  const { count } = await supabase
-    .from("media_uploads")
-    .select("*", { count: "exact", head: true })
-    .eq("unit_id", unitId)
-    .eq("stage", stage);
 
-  return count ?? 0;
-}
-
-function isPostBracketingLabel(label: string | null): boolean {
-  return /post-bracketing/i.test(label ?? "");
-}
-
-async function countBeforeBracketingMedia(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  unitId: string
-) {
-  const scheduledCount = await countStageMedia(supabase, unitId, "scheduled_bracketing");
-  const { data: legacyBracketedRows } = await supabase
-    .from("media_uploads")
-    .select("upload_kind, label")
-    .eq("unit_id", unitId)
-    .eq("stage", "bracketed_measured");
-  const legacyBeforeCount = (legacyBracketedRows ?? []).filter(
-    (row) => row.upload_kind === "window_measure" && !isPostBracketingLabel(row.label)
-  ).length;
-  return scheduledCount + legacyBeforeCount;
-}
-
-async function countAfterBracketingMedia(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  unitId: string
-) {
-  const { data: rows } = await supabase
-    .from("media_uploads")
-    .select("upload_kind, label")
-    .eq("unit_id", unitId)
-    .eq("stage", "bracketed_measured");
-  return (rows ?? []).filter(
-    (row) => row.upload_kind !== "window_measure" || isPostBracketingLabel(row.label)
-  ).length;
-}
 
 export async function bulkAssignUnits(
   unitIds: string[],
@@ -748,11 +701,7 @@ export async function updateUnitAssignment(
 }
 
 /** @deprecated Status is auto-derived via recomputeUnitStatus from window data. */
-export async function updateUnitStatus(
-  _unitId: string,
-  _status: UnitStatus,
-  _note: string
-): Promise<ActionResult> {
+export async function updateUnitStatus(): Promise<ActionResult> {
   return { ok: false, error: "Manual status updates are no longer supported. Status is auto-derived from window data." };
 }
 
@@ -1050,11 +999,6 @@ export async function createWindowWithPhoto(
     }
 
     // Measurements should appear in the bracketed or installed photo stage.
-    const { data: unitRow } = await supabase
-      .from("units")
-      .select("status")
-      .eq("id", unitId)
-      .single();
     const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
@@ -1243,11 +1187,6 @@ export async function updateWindowWithOptionalPhoto(
     }
 
     // Measurements should appear in the bracketed or installed photo stage.
-    const { data: unitRow } = await supabase
-      .from("units")
-      .select("status")
-      .eq("id", unitId)
-      .single();
     const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 

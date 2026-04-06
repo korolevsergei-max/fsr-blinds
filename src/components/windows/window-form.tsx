@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -413,10 +414,22 @@ export function WindowForm({
               onClick={() => fileRef.current?.click()}
               className="relative w-full rounded-2xl overflow-hidden border border-border text-left"
             >
-              <img
+              <Image
                 src={photoPreview}
                 alt="Window measurement"
-                className={`w-full bg-surface ${
+                width={800}
+                height={600}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalHeight > img.naturalWidth) {
+                    setPhotoOrientation("portrait");
+                  } else if (img.naturalHeight < img.naturalWidth) {
+                    setPhotoOrientation("landscape");
+                  } else {
+                    setPhotoOrientation("square");
+                  }
+                }}
+                className={`w-full bg-surface h-auto ${
                   photoOrientation === "portrait"
                     ? "max-h-[70dvh] object-contain"
                     : photoOrientation === "square"

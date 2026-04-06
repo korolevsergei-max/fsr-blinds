@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
 import { uploadWindowInstalledPhoto } from "@/app/actions/fsr-data";
@@ -55,14 +56,6 @@ export function InstalledPhotoForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
 
-  if (!unit || !room || !windowItem) {
-    return <div className="p-6 text-center text-muted">Window not found</div>;
-  }
-
-  const installPhotosBlocked =
-    !existingInstalled &&
-    !canUploadInstallationPhotos(unit.status as UnitStatus);
-
   useEffect(() => {
     if (!photoPreview) return;
     const probe = new window.Image();
@@ -77,6 +70,14 @@ export function InstalledPhotoForm({
     };
     probe.src = photoPreview;
   }, [photoPreview]);
+
+  if (!unit || !room || !windowItem) {
+    return <div className="p-6 text-center text-muted">Window not found</div>;
+  }
+
+  const installPhotosBlocked =
+    !existingInstalled &&
+    !canUploadInstallationPhotos(unit.status as UnitStatus);
 
   const onFileChange = (file: File | null) => {
     setError("");
@@ -107,7 +108,6 @@ export function InstalledPhotoForm({
     }
 
     const isGreen = riskFlag === "green";
-    const hasPhoto = photoFile || existingInstalled?.publicUrl;
 
     if (!isGreen && !photoFile && !existingInstalled) {
       setError("Installed photo is required for yellow or red risk.");
@@ -208,17 +208,20 @@ export function InstalledPhotoForm({
               onClick={() => fileRef.current?.click()}
               className="relative w-full overflow-hidden rounded-2xl border border-border text-left disabled:pointer-events-none disabled:opacity-50"
             >
-              <img
-                src={photoPreview}
-                alt="Installed preview"
-                className={`w-full bg-surface ${
-                  photoOrientation === "portrait"
-                    ? "max-h-[70dvh] object-contain"
-                    : photoOrientation === "square"
-                      ? "aspect-square object-cover"
-                      : "aspect-[16/9] object-cover"
-                }`}
-              />
+              <div className={`relative w-full bg-surface overflow-hidden ${
+                photoOrientation === "portrait"
+                  ? "h-[70dvh]"
+                  : photoOrientation === "square"
+                    ? "aspect-square"
+                    : "aspect-[16/9]"
+              }`}>
+                <Image
+                  src={photoPreview}
+                  alt="Installed preview"
+                  fill
+                  className="object-contain"
+                />
+              </div>
               <div className="absolute right-3 top-3">
                 <span className="flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-white">
                   <CheckCircle size={14} weight="fill" />

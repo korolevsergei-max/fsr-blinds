@@ -92,11 +92,13 @@ export function DateInput({
     startOfMonth(selectedDate ?? new Date())
   );
 
-  useEffect(() => {
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (selectedDate) {
       setVisibleMonth(startOfMonth(selectedDate));
     }
-  }, [selectedDate]);
+  }
 
   useEffect(() => {
     if (!open) return;

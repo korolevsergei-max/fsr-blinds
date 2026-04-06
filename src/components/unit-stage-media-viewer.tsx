@@ -11,7 +11,6 @@ import {
 } from "@phosphor-icons/react";
 import {
   UNIT_PHOTO_STAGES,
-  UNIT_PHOTO_STAGE_HELPERS,
   UNIT_PHOTO_STAGE_LABELS,
 } from "@/lib/types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -49,9 +48,6 @@ export function UnitStageMediaViewer({
     return groups;
   }, [items]);
 
-  const stagesWithPhotos = UNIT_PHOTO_STAGES.filter(
-    (stage) => (groupedItems.get(stage) ?? []).length > 0
-  );
   const emptyStages = UNIT_PHOTO_STAGES.filter(
     (stage) => (groupedItems.get(stage) ?? []).length === 0
   );
