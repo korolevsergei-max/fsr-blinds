@@ -21,7 +21,7 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
 import { Button } from "@/components/ui/button";
 import { BulkAssignSheet } from "@/components/units/bulk-assign-sheet";
-import { isCreatedOnLocalDay, isStoredDateOnLocalDay, formatStoredDateForDisplay, type AddedDateFilter } from "@/lib/created-date";
+import { isCreatedOnLocalDay, isStoredDateOnLocalDay, formatStoredDateForDisplay, createdAtToLocalYmd, type AddedDateFilter } from "@/lib/created-date";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 
@@ -52,9 +52,36 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const [showBulkSheet, setShowBulkSheet] = useState(false);
 
   const availableBuildings = useMemo(
-    () => clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter),
+    () => (clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter)),
     [buildings, clientFilter]
   );
+
+  const unitsForDateOptions = useMemo(() => {
+    return units.filter((u) => {
+      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
+      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      return true;
+    });
+  }, [units, clientFilter, buildingFilter]);
+
+  const distinctAddedDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      // Use assignedAt for scheduler view, fall back to createdAt for legacy/unassigned
+      const dateToUse = u.assignedAt || u.createdAt;
+      const ymd = createdAtToLocalYmd(dateToUse);
+      if (ymd) set.add(ymd);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
+  const distinctCompleteByDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      if (u.completeByDate) set.add(u.completeByDate);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
 
   const unitIdsWithIssues = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
 
@@ -79,7 +106,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
         } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
           return false;
         }
-        if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
+        if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.assignedAt || u.createdAt, dateAddedFilter)) return false;
         if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
         if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
         if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
@@ -220,7 +247,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   }
 
   return (
-    <div className="flex flex-col pb-32">
+    <div className="flex flex-col h-[100dvh] overflow-hidden">
       <PageHeader
         title="Units"
         subtitle={`${sortedFilteredUnits.length} of ${units.length} units`}
@@ -285,8 +312,13 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
               <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
               <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
               <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-              <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} />
-              <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
+              <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} distinctDates={distinctAddedDates} />
+              <CreatedDateFilter
+                value={completeByFilter}
+                onChange={setCompleteByFilter}
+                label="Complete by"
+                distinctDates={distinctCompleteByDates}
+              />
               <FilterDropdown
                 label="Issues"
                 value={issueFilter}
@@ -346,7 +378,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
       />
 
       {/* List */}
-      <div className="px-4 flex flex-col gap-2 pb-24 mt-2">
+      <div className="flex-1 overflow-y-auto px-4 flex flex-col gap-2 pb-24 mt-2">
         {sortedFilteredUnits.length === 0 && (
           <div className="text-center py-12 text-[13px] text-tertiary">
             No units match your filters.

@@ -68,6 +68,8 @@ type UnitRow = {
   photos_uploaded: number;
   notes_count: number;
   created_at: string | null;
+  assigned_at?: string | null;
+  manufacturing_risk_flag?: RiskFlag | null;
 };
 
 type UnitActivityLogRow = {
@@ -205,6 +207,8 @@ function mapUnit(r: UnitRow, schedulerName?: string | null, schedulerId?: string
     photosUploaded: r.photos_uploaded,
     notesCount: r.notes_count,
     createdAt: r.created_at,
+    assignedAt: schedulerId ? r.assigned_at ?? null : null,
+    manufacturingRiskFlag: r.manufacturing_risk_flag ?? undefined,
   };
 }
 
@@ -382,7 +386,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const [manufacturersRes, schedulersRes, assignmentsRes] = await Promise.all([
     supabase.from("manufacturers").select("*").order("name"),
     supabase.from("schedulers").select("*").order("name"),
-    supabase.from("scheduler_unit_assignments").select("unit_id, scheduler_id"),
+    supabase.from("scheduler_unit_assignments").select("unit_id, scheduler_id, assigned_at"),
   ]);
 
   const coreResponses = [
@@ -410,15 +414,19 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const schedulersData = (schedulersRes.data as SchedulerRow[]) ?? [];
   const schedulerMap = new Map(schedulersData.map((s) => [s.id, s.name]));
   const assignmentMap = new Map(
-    ((assignmentsRes.data as { unit_id: string; scheduler_id: string }[]) ?? []).map((a) => [
+    ((assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? []).map((a) => [
       a.unit_id,
-      { id: a.scheduler_id, name: schedulerMap.get(a.scheduler_id) || "Unknown" },
+      { id: a.scheduler_id, name: schedulerMap.get(a.scheduler_id) || "Unknown", assigned_at: a.assigned_at },
     ])
   );
 
   const units = (unitsRes.data as UnitRow[]).map((r) => {
     const assignment = assignmentMap.get(r.id);
-    return mapUnit(r, assignment?.name, assignment?.id);
+    return mapUnit(
+      { ...r, assigned_at: assignment?.assigned_at },
+      assignment?.name,
+      assignment?.id
+    );
   });
   const schedule = normalizeScheduleEntries(units, (scheduleRes.data as ScheduleRow[]).map(mapSchedule));
 
@@ -524,10 +532,18 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     .order("unit_number");
 
   if (unitError) return emptyDataset();
+  const { data: assignmentsData } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("unit_id, assigned_at")
+    .eq("scheduler_id", schedulerId);
+  const assignmentAtMap = new Map((assignmentsData ?? []).map((a: any) => [a.unit_id, a.assigned_at]));
+
   const { data: schedulerRow } = await supabase.from("schedulers").select("name").eq("id", schedulerId).single();
   const schedulerName = (schedulerRow as { name: string })?.name || "Unknown";
 
-  const units = ((unitData as UnitRow[]) ?? []).map((r) => mapUnit(r, schedulerName, schedulerId));
+  const units = ((unitData as UnitRow[]) ?? []).map((r) =>
+    mapUnit({ ...r, assigned_at: assignmentAtMap.get(r.id) }, schedulerName, schedulerId)
+  );
 
   // Derive unique building and client id sets from the loaded units.
   const allowedBuildingIds = [...new Set(units.map((u) => u.buildingId))];

@@ -21,7 +21,7 @@ export function CreatedDateFilter({
   distinctDates,
 }: CreatedDateFilterProps) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const active = value !== "all";
@@ -29,7 +29,18 @@ export function CreatedDateFilter({
   function handleToggle() {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 6, left: rect.left });
+      const viewportWidth = window.innerWidth;
+      const midpoint = viewportWidth / 2;
+      const padding = 16;
+
+      if (rect.left > midpoint) {
+        // Right side: align menu's right edge with button's right edge
+        const right = viewportWidth - rect.right;
+        setPosition({ top: rect.bottom + 6, right: Math.max(padding, right) });
+      } else {
+        // Left side: align menu's left edge with button's left edge
+        setPosition({ top: rect.bottom + 6, left: Math.max(padding, rect.left) });
+      }
     }
     setOpen((current) => !current);
   }
@@ -76,7 +87,7 @@ export function CreatedDateFilter({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.97 }}
               transition={{ duration: 0.15 }}
-              style={{ top: position.top, left: position.left }}
+              style={{ top: position.top, left: position.left, right: position.right }}
               className="fixed z-50 w-[min(calc(100vw-2rem),260px)] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card p-3 shadow-[var(--shadow-md)]"
               onClick={(e) => e.stopPropagation()}
             >
@@ -84,7 +95,7 @@ export function CreatedDateFilter({
                 {label}
               </p>
               {distinctDates && distinctDates.length > 0 ? (
-                <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+                <div className="flex max-h-64 flex-col gap-1 overflow-y-auto pr-1 -mr-1 custom-scrollbar">
                   {distinctDates.map((ymd) => (
                     <button
                       key={ymd}
@@ -93,46 +104,62 @@ export function CreatedDateFilter({
                         onChange(ymd);
                         setOpen(false);
                       }}
-                      className={`rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors ${
+                      className={`group flex items-center justify-between rounded-lg px-3 py-2.5 text-left transition-all ${
                         value === ymd
-                          ? "bg-accent text-white"
-                          : "bg-surface text-foreground hover:bg-zinc-100"
+                          ? "bg-accent text-white shadow-sm"
+                          : "bg-surface text-foreground hover:bg-zinc-100 hover:pl-4"
                       }`}
                     >
-                      {formatAddedDateLabel(ymd)}
+                      <span className="text-[13px] font-semibold">{formatAddedDateLabel(ymd)}</span>
+                      {value === ymd && (
+                        <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                      )}
                     </button>
                   ))}
                 </div>
               ) : distinctDates && distinctDates.length === 0 ? (
-                <p className="text-xs text-muted py-2">
-                  No units in the current list — adjust client/building filters to see dates.
-                </p>
+                <div className="bg-zinc-50 rounded-xl p-4 text-center border border-dashed border-zinc-200">
+                  <p className="text-[11px] text-zinc-500 font-medium leading-relaxed">
+                    No activity found in the current list.<br/>
+                    <span className="opacity-60 italic">Adjust filters to see dates.</span>
+                  </p>
+                </div>
               ) : (
-                <input
-                  type="date"
-                  value={value === "all" ? "" : value}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    if (next) onChange(next);
-                    else onChange("all");
-                  }}
-                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-                />
+                <div className="space-y-2">
+                  <input
+                    type="date"
+                    value={value === "all" ? "" : value}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next) onChange(next);
+                      else onChange("all");
+                    }}
+                    className="w-full h-10 rounded-xl border border-border bg-white px-3 text-[13px] font-medium text-foreground focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/10 transition-all font-mono"
+                  />
+                  <p className="text-[9px] text-center text-zinc-400 font-medium uppercase tracking-tight">Manual Selection</p>
+                </div>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  onChange("all");
-                  setOpen(false);
-                }}
-                className="mt-2 w-full rounded-lg border border-border bg-surface py-2 text-xs font-medium text-secondary hover:bg-zinc-50 transition-colors"
-              >
-                Any time
-              </button>
-        </motion.div>
-      </div>
-    )}
-  </AnimatePresence>
+              
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange("all");
+                    setOpen(false);
+                  }}
+                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
+                    value === "all"
+                      ? "bg-zinc-100 text-zinc-400 cursor-default"
+                      : "bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm active:scale-[0.98]"
+                  }`}
+                >
+                  {value === "all" ? "Currently showing all" : "Clear Filter"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -18,7 +18,7 @@ export function FilterDropdown({
   onChange,
 }: FilterDropdownProps) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const active = value !== options[0]?.value;
@@ -27,7 +27,19 @@ export function FilterDropdown({
   function handleToggle() {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 6, left: rect.left });
+      const viewportWidth = window.innerWidth;
+      const midpoint = viewportWidth / 2;
+      const padding = 12;
+
+      // Decide alignment based on screen side
+      if (rect.left > midpoint) {
+        // Right side: align menu's right edge with button's right edge
+        const right = viewportWidth - rect.right;
+        setPosition({ top: rect.bottom + 6, right: Math.max(padding, right) });
+      } else {
+        // Left side: align menu's left edge with button's left edge
+        setPosition({ top: rect.bottom + 6, left: Math.max(padding, rect.left) });
+      }
     }
     setOpen((current) => !current);
   }
@@ -76,7 +88,7 @@ export function FilterDropdown({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.97 }}
               transition={{ duration: 0.15 }}
-              style={{ top: position.top, left: position.left }}
+              style={{ top: position.top, left: position.left, right: position.right }}
               className="fixed z-50 min-w-[168px] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card py-1 shadow-[var(--shadow-md)]"
             >
               {options.map((option) => (

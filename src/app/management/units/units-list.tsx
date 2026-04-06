@@ -175,6 +175,14 @@ export function UnitsList({
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [unitsForDateOptions]);
 
+  const distinctCompleteByDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      if (u.completeByDate) set.add(u.completeByDate);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
   const filtered = useMemo(() => {
     return units.filter((u) => {
       if (search) {
@@ -404,7 +412,12 @@ export function UnitsList({
                   onChange={setDateAddedFilter}
                   distinctDates={distinctAddedDates}
                 />
-                <CreatedDateFilter value={completeByFilter} onChange={setCompleteByFilter} label="Complete by" />
+                <CreatedDateFilter
+                  value={completeByFilter}
+                  onChange={setCompleteByFilter}
+                  label="Complete by"
+                  distinctDates={distinctCompleteByDates}
+                />
                 <FilterDropdown
                   label="Issues"
                   value={issueFilter}
@@ -502,7 +515,19 @@ export function UnitsList({
                   </div>
                   <div className="flex items-center justify-between pl-[26px]">
                       <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
-                        <StatusChip status={unit.status} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <StatusChip status={unit.status} />
+                          {unit.manufacturingRiskFlag && unit.manufacturingRiskFlag !== "green" && (
+                            <span className={[
+                              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
+                              unit.manufacturingRiskFlag === "red"
+                                ? "bg-red-50 text-red-600 border-red-200"
+                                : "bg-yellow-50 text-yellow-600 border-yellow-200",
+                            ].join(" ")}>
+                              MFG
+                            </span>
+                          )}
+                        </div>
                         {unit.installationDate && (
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>
                             <CheckSquare size={12} />
@@ -532,7 +557,19 @@ export function UnitsList({
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
-                        <StatusChip status={unit.status} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <StatusChip status={unit.status} />
+                          {unit.manufacturingRiskFlag && unit.manufacturingRiskFlag !== "green" && (
+                            <span className={[
+                              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
+                              unit.manufacturingRiskFlag === "red"
+                                ? "bg-red-50 text-red-600 border-red-200"
+                                : "bg-yellow-50 text-yellow-600 border-yellow-200",
+                            ].join(" ")}>
+                              MFG
+                            </span>
+                          )}
+                        </div>
                         {unit.installationDate && (
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>
                             <CheckSquare size={12} />

@@ -126,6 +126,7 @@ export interface Unit {
   photosUploaded: number;
   notesCount: number;
   createdAt: string | null;
+  assignedAt?: string | null;
   manufacturingRiskFlag?: RiskFlag;
 }
 

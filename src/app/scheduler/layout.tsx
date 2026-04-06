@@ -11,8 +11,11 @@ export default async function SchedulerLayout({
   if (!user) {
     redirect("/login");
   }
-  if (user.role === "owner" || user.role === "manufacturer") {
+  if (user.role === "owner") {
     redirect("/management");
+  }
+  if (user.role === "manufacturer") {
+    redirect("/manufacturer");
   }
   if (user.role === "installer") {
     redirect("/installer");
