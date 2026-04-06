@@ -345,7 +345,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
       />
 
       {/* List */}
-      <div className="px-4 flex flex-col gap-2 pb-24">
+      <div className="px-4 flex flex-col gap-2 pb-24 mt-2">
         {sortedFilteredUnits.length === 0 && (
           <div className="text-center py-12 text-[13px] text-tertiary">
             No units match your filters.

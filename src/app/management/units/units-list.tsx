@@ -407,7 +407,7 @@ export function UnitsList({
       />
 
       {/* Unit cards */}
-      <div className="px-4 flex flex-col gap-2">
+      <div className="px-4 flex flex-col gap-2 mt-2">
         {sortedFiltered.length === 0 && (
           <div className="py-12 text-center text-muted text-sm">No units match your filters</div>
         )}
