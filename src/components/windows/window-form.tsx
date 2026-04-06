@@ -418,7 +418,7 @@ export function WindowForm({
                 src={photoPreview}
                 alt="Window measurement"
                 width={800}
-                height={600}
+                height={600} unoptimized 
                 onLoad={(e) => {
                   const img = e.currentTarget;
                   if (img.naturalHeight > img.naturalWidth) {

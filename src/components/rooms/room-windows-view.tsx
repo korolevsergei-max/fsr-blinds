@@ -256,6 +256,7 @@ export function RoomWindowsView({
                       alt={`${win.label} photo`}
                       width={800}
                       height={600}
+                      unoptimized
                       onLoad={(e) => {
                         const img = e.currentTarget;
                         const next: ImageOrientation =
