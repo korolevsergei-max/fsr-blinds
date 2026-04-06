@@ -42,7 +42,12 @@ export async function markWindowBuilt(
       return { ok: false, error: "Window not found." };
     }
 
-    const unitId = (window.rooms as { unit_id: string }).unit_id;
+    const rooms = window.rooms as unknown as { unit_id: string } | { unit_id: string }[];
+    const unitId = Array.isArray(rooms) ? rooms[0]?.unit_id : rooms?.unit_id;
+
+    if (!unitId) {
+      return { ok: false, error: "Unit ID not found for this window." };
+    }
     const now = new Date().toISOString();
 
     const { error } = await supabase.from("window_production_status").upsert(

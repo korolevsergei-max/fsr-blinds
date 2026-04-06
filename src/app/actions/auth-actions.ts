@@ -729,3 +729,125 @@ export async function deleteOwnerAccount(
     return { ok: false, error: e instanceof Error ? e.message : "Failed to delete owner account" };
   }
 }
+
+/** Remove qc_persons rows for this email so re-creation is not blocked by stale/orphan rows. */
+async function deleteQCPersonsByEmail(admin: SupabaseClient, email: string) {
+  const e = email.trim();
+  if (!e) return;
+  await admin.from("qc_persons").delete().ilike("email", e);
+}
+
+/**
+ * Create a QC person account (direct password, no email invite).
+ * Mirrors createSchedulerAccount.
+ */
+export async function createQCAccount(
+  name: string,
+  email: string,
+  phone: string,
+  password: string
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    if (!password || password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    const admin = createAdminClient();
+
+    const existingId = await findAuthUserIdByEmail(email);
+    if (existingId) {
+      const selfGuard = await ensureNotDeletingSelf(email);
+      if (!selfGuard.ok) return { ok: false, error: selfGuard.error };
+      await admin.auth.admin.deleteUser(existingId);
+    }
+
+    const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: name, role: "qc" },
+    });
+
+    if (authErr) return { ok: false, error: authErr.message };
+    if (!authUser?.user?.id) {
+      return { ok: false, error: "Account created but no user id was returned." };
+    }
+
+    await deleteQCPersonsByEmail(admin, email);
+
+    const supabase = await createClient();
+    const qcId = `qc-${crypto.randomUUID().slice(0, 8)}`;
+
+    const { error: qcErr } = await supabase.from("qc_persons").insert({
+      id: qcId,
+      name,
+      email,
+      phone,
+      auth_user_id: authUser.user.id,
+    });
+
+    if (qcErr) return { ok: false, error: qcErr.message };
+
+    revalidatePath("/management", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create QC account" };
+  }
+}
+
+/**
+ * Delete a QC person account.
+ */
+export async function deleteQCAccount(
+  qcPersonId: string,
+  authUserId: string | null,
+  email?: string
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    const admin = createAdminClient();
+
+    const linkedAuthId = authUserId?.trim();
+    if (linkedAuthId) {
+      try {
+        await admin.auth.admin.deleteUser(linkedAuthId);
+      } catch {
+        // continue with row delete
+      }
+    }
+
+    const { data: deletedById, error: delIdErr } = await admin
+      .from("qc_persons")
+      .delete()
+      .eq("id", qcPersonId)
+      .select("id");
+
+    if (delIdErr) return { ok: false, error: delIdErr.message };
+
+    if (!deletedById?.length && email?.trim()) {
+      const normalized = email.trim();
+      const { data: deletedByEmail, error: delEmailErr } = await admin
+        .from("qc_persons")
+        .delete()
+        .ilike("email", normalized)
+        .select("id");
+      if (delEmailErr) return { ok: false, error: delEmailErr.message };
+      if (!deletedByEmail?.length) {
+        return {
+          ok: false,
+          error: "No QC person row was removed. Refresh the page and try again.",
+        };
+      }
+    }
+
+    revalidatePath("/management/accounts", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete QC account" };
+  }
+}

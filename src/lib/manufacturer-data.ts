@@ -1,0 +1,166 @@
+import { createClient } from "@/lib/supabase/server";
+import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus } from "@/lib/types";
+
+export interface ManufacturerUnit {
+  id: string;
+  unitNumber: string;
+  buildingName: string;
+  clientName: string;
+  installationDate: string | null;
+  status: UnitStatus;
+  windowCount: number;
+  manufacturingRiskFlag: RiskFlag;
+}
+
+export interface ManufacturerRoom {
+  id: string;
+  unitId: string;
+  name: string;
+  windowCount: number;
+}
+
+export interface ManufacturerWindow {
+  id: string;
+  roomId: string;
+  label: string;
+  blindType: BlindType;
+  width: number | null;
+  height: number | null;
+  depth: number | null;
+  blindWidth: number | null;
+  blindHeight: number | null;
+  blindDepth: number | null;
+  notes: string;
+  production: WindowProductionStatus | null;
+}
+
+export interface ManufacturerDataset {
+  units: ManufacturerUnit[];
+}
+
+export interface ManufacturerUnitDetail {
+  unit: ManufacturerUnit;
+  rooms: ManufacturerRoom[];
+  windows: ManufacturerWindow[];
+}
+
+/** All units in 'measured' status with an installation date — the production queue. */
+export async function loadManufacturerDataset(): Promise<ManufacturerDataset> {
+  const supabase = await createClient();
+
+  const { data: units, error } = await supabase
+    .from("units")
+    .select(
+      "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
+    )
+    .eq("status", "measured")
+    .order("installation_date", { ascending: true, nullsFirst: false });
+
+  if (error || !units) return { units: [] };
+
+  return {
+    units: units.map((u) => ({
+      id: u.id,
+      unitNumber: u.unit_number,
+      buildingName: u.building_name,
+      clientName: u.client_name,
+      installationDate: u.installation_date ?? null,
+      status: u.status as UnitStatus,
+      windowCount: u.window_count ?? 0,
+      manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
+    })),
+  };
+}
+
+/** Full detail for one unit: rooms, windows, and production statuses. */
+export async function loadManufacturerUnitDetail(
+  unitId: string
+): Promise<ManufacturerUnitDetail | null> {
+  const supabase = await createClient();
+
+  const [unitRes, roomsRes, windowsRes, productionRes] = await Promise.all([
+    supabase
+      .from("units")
+      .select(
+        "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
+      )
+      .eq("id", unitId)
+      .single(),
+    supabase
+      .from("rooms")
+      .select("id, unit_id, name, window_count")
+      .eq("unit_id", unitId)
+      .order("name"),
+    supabase
+      .from("windows")
+      .select(
+        "id, room_id, label, blind_type, width, height, depth, blind_width, blind_height, blind_depth, notes"
+      )
+      .order("label"),
+    supabase
+      .from("window_production_status")
+      .select("*")
+      .eq("unit_id", unitId),
+  ]);
+
+  if (unitRes.error || !unitRes.data) return null;
+
+  const u = unitRes.data;
+  const unit: ManufacturerUnit = {
+    id: u.id,
+    unitNumber: u.unit_number,
+    buildingName: u.building_name,
+    clientName: u.client_name,
+    installationDate: u.installation_date ?? null,
+    status: u.status as UnitStatus,
+    windowCount: u.window_count ?? 0,
+    manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
+  };
+
+  const rooms: ManufacturerRoom[] = (roomsRes.data ?? []).map((r) => ({
+    id: r.id,
+    unitId: r.unit_id,
+    name: r.name,
+    windowCount: r.window_count ?? 0,
+  }));
+
+  // Filter windows to only those in rooms belonging to this unit
+  const roomIds = new Set(rooms.map((r) => r.id));
+  const productionMap = new Map<string, WindowProductionStatus>(
+    (productionRes.data ?? []).map((p) => [
+      p.window_id,
+      {
+        id: p.id,
+        windowId: p.window_id,
+        unitId: p.unit_id,
+        status: p.status as ProductionStatus,
+        builtByManufacturerId: p.built_by_manufacturer_id ?? null,
+        builtAt: p.built_at ?? null,
+        builtNotes: p.built_notes ?? "",
+        qcApprovedByQcId: p.qc_approved_by_qc_id ?? null,
+        qcApprovedAt: p.qc_approved_at ?? null,
+        qcNotes: p.qc_notes ?? "",
+        createdAt: p.created_at,
+      },
+    ])
+  );
+
+  const windows: ManufacturerWindow[] = (windowsRes.data ?? [])
+    .filter((w) => roomIds.has(w.room_id))
+    .map((w) => ({
+      id: w.id,
+      roomId: w.room_id,
+      label: w.label,
+      blindType: w.blind_type as BlindType,
+      width: w.width ?? null,
+      height: w.height ?? null,
+      depth: w.depth ?? null,
+      blindWidth: w.blind_width ?? null,
+      blindHeight: w.blind_height ?? null,
+      blindDepth: w.blind_depth ?? null,
+      notes: w.notes ?? "",
+      production: productionMap.get(w.id) ?? null,
+    }));
+
+  return { unit, rooms, windows };
+}
