@@ -6,6 +6,7 @@ import {
   isInvalidRefreshTokenError,
   isSupabaseBrowserCookieName,
 } from "@/lib/supabase/auth-errors";
+import { homePathForRole } from "@/lib/role-routes";
 
 function supabaseAuthCookieNames(request: NextRequest): string[] {
   return request.cookies.getAll().map((c) => c.name).filter(isSupabaseBrowserCookieName);
@@ -84,41 +85,32 @@ export async function updateSession(request: NextRequest) {
   let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null = null;
   try {
     const { data, error } = await supabase.auth.getUser();
-    if (error && isInvalidRefreshTokenError(error)) {
-      authInvalidated = true;
-      const names = supabaseAuthCookieNames(request);
-      deletedAuthCookieNames = names;
-      for (const name of names) {
-        request.cookies.delete(name);
-      }
-      supabaseResponse = NextResponse.next({
-        request: { headers: request.headers },
-      });
-      for (const name of names) {
-        supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
-      }
-      user = null;
-    } else {
-      user = data.user;
-    }
+    if (error) throw error;
+    user = data.user;
   } catch (error) {
     if (isInvalidRefreshTokenError(error)) {
       authInvalidated = true;
       const names = supabaseAuthCookieNames(request);
       deletedAuthCookieNames = names;
+
+      // Wipe from incoming request so downstream Server Components don't see it
       for (const name of names) {
         request.cookies.delete(name);
       }
+
+      // Re-initialize response with stripped headers
       supabaseResponse = NextResponse.next({
-        request: { headers: request.headers },
+        request: {
+          headers: request.headers,
+        },
       });
+
+      // Also wipe from outgoing response so browser deletes them
       for (const name of names) {
         supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
       }
-      user = null;
-    } else {
-      user = null;
     }
+    user = null;
   }
 
   const pathname = request.nextUrl.pathname;
@@ -135,10 +127,26 @@ export async function updateSession(request: NextRequest) {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profile?.role === "owner" || profile?.role === "manufacturer")
+      if (profile?.role === "owner")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      if (profile?.role === "manufacturer")
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/manufacturer", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      if (profile?.role === "qc")
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/qc", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -173,7 +181,9 @@ export async function updateSession(request: NextRequest) {
     !user &&
     (pathname.startsWith("/management") ||
       pathname.startsWith("/installer") ||
-      pathname.startsWith("/scheduler"))
+      pathname.startsWith("/scheduler") ||
+      pathname.startsWith("/manufacturer") ||
+      pathname.startsWith("/qc"))
   ) {
     return finish(
       applyAuthCookieDeletions(
@@ -217,7 +227,25 @@ export async function updateSession(request: NextRequest) {
         authInvalidated
       );
     }
-    if (role && role !== "owner" && role !== "manufacturer") {
+    if (role === "manufacturer") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/manufacturer", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+    if (role === "qc") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(new URL("/qc", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+    if (role && role !== "owner") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(new URL("/login", request.url)),
@@ -236,10 +264,19 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle();
 
     if (profile?.role !== "installer") {
-      if (profile?.role === "owner" || profile?.role === "manufacturer") {
+      if (profile?.role === "owner") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      }
+      if (profile?.role === "manufacturer") {
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/manufacturer", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -249,6 +286,15 @@ export async function updateSession(request: NextRequest) {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/scheduler", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      }
+      if (profile?.role === "qc") {
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/qc", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -272,10 +318,19 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle();
 
     if (profile?.role !== "scheduler") {
-      if (profile?.role === "owner" || profile?.role === "manufacturer") {
+      if (profile?.role === "owner") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      }
+      if (profile?.role === "manufacturer") {
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/manufacturer", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -290,9 +345,58 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
+      if (profile?.role === "qc") {
+        return finish(
+          applyAuthCookieDeletions(
+            NextResponse.redirect(new URL("/qc", request.url)),
+            deletedAuthCookieNames ?? []
+          ),
+          authInvalidated
+        );
+      }
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(new URL("/login", request.url)),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+  }
+
+  if (user && pathname.startsWith("/manufacturer")) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "manufacturer") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(
+            new URL(homePathForRole(profile?.role), request.url)
+          ),
+          deletedAuthCookieNames ?? []
+        ),
+        authInvalidated
+      );
+    }
+  }
+
+  if (user && pathname.startsWith("/qc")) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.role !== "qc") {
+      return finish(
+        applyAuthCookieDeletions(
+          NextResponse.redirect(
+            new URL(homePathForRole(profile?.role), request.url)
+          ),
           deletedAuthCookieNames ?? []
         ),
         authInvalidated

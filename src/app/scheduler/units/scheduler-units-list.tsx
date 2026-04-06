@@ -320,6 +320,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
             <AnimatePresence>
               {selectMode && (
                 <motion.div
+                  key="scheduler-select-all-row"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
@@ -470,6 +471,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
       <AnimatePresence>
         {selectMode && selectedIds.size > 0 && (
           <motion.div
+            key="scheduler-bulk-bar"
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
@@ -496,6 +498,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
       <AnimatePresence>
         {showBulkSheet && (
           <BulkAssignSheet
+            key="scheduler-bulk-assign"
             unitIds={[...selectedIds]}
             installers={installers}
             onClose={() => setShowBulkSheet(false)}

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { ManagementNav } from "./management-nav";
+import { ManufacturerNav } from "./manufacturer-nav";
 
-export default async function ManagementLayout({
+export default async function ManufacturerLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -11,19 +11,19 @@ export default async function ManagementLayout({
   if (!user) {
     redirect("/login");
   }
+  if (user.role === "owner") {
+    redirect("/management");
+  }
   if (user.role === "installer") {
     redirect("/installer");
   }
   if (user.role === "scheduler") {
     redirect("/scheduler");
   }
-  if (user.role === "manufacturer") {
-    redirect("/manufacturer");
-  }
   if (user.role === "qc") {
     redirect("/qc");
   }
-  if (user.role !== "owner") {
+  if (user.role !== "manufacturer") {
     redirect("/login");
   }
 
@@ -34,7 +34,7 @@ export default async function ManagementLayout({
           <main id="main-content">{children}</main>
         </div>
       </div>
-      <ManagementNav showAccounts={user.role === "owner"} />
+      <ManufacturerNav />
     </>
   );
 }

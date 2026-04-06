@@ -47,6 +47,28 @@ export const UNIT_PHOTO_STAGE_HELPERS: Record<UnitPhotoStage, string> = {
 
 export type RiskFlag = "green" | "yellow" | "red";
 
+export type ProductionStatus = "pending" | "built" | "qc_approved";
+
+export const PRODUCTION_STATUS_LABELS: Record<ProductionStatus, string> = {
+  pending: "Pending",
+  built: "Built",
+  qc_approved: "QC Approved",
+};
+
+export interface WindowProductionStatus {
+  id: string;
+  windowId: string;
+  unitId: string;
+  status: ProductionStatus;
+  builtByManufacturerId: string | null;
+  builtAt: string | null;
+  builtNotes: string;
+  qcApprovedByQcId: string | null;
+  qcApprovedAt: string | null;
+  qcNotes: string;
+  createdAt: string;
+}
+
 export const RISK_LABELS: Record<RiskFlag, string> = {
   green: "No Issue",
   yellow: "Needs Escalation",
@@ -102,6 +124,7 @@ export interface Unit {
   photosUploaded: number;
   notesCount: number;
   createdAt: string | null;
+  manufacturingRiskFlag?: RiskFlag;
 }
 
 export interface UnitActivityLog {
@@ -160,6 +183,14 @@ export interface Manufacturer {
 }
 
 export interface Scheduler {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  authUserId: string | null;
+}
+
+export interface QCPerson {
   id: string;
   name: string;
   email: string;

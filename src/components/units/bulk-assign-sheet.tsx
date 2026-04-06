@@ -79,9 +79,14 @@ export function BulkAssignSheet({
   };
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" onClick={onClose} />
+    <>
+      <div
+        key="sheet-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+        onClick={onClose}
+      />
       <motion.div
+        key="sheet-content"
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
@@ -233,6 +238,6 @@ export function BulkAssignSheet({
           </div>
         </div>
       </motion.div>
-    </AnimatePresence>
+    </>
   );
 }

@@ -145,6 +145,26 @@ export async function deleteUnit(unitId: string): Promise<ActionResult> {
   }
 }
 
+export async function bulkDeleteUnits(unitIds: string[]): Promise<ActionResult> {
+  try {
+    await requireOwner();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("units")
+      .delete()
+      .in("id", unitIds);
+    if (error) return { ok: false, error: error.message };
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to delete units";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can delete units." };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
 /**
  * Owner-only: removes every client row (CASCADE deletes buildings, units, rooms, windows,
  * schedule rows, media_uploads rows, activity log, scheduler access tied to those buildings/units).

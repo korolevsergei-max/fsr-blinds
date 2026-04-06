@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
-export type UserRole = "owner" | "installer" | "manufacturer" | "client" | "scheduler";
+export type UserRole = "owner" | "installer" | "manufacturer" | "client" | "scheduler" | "qc";
 
 export interface AppUser {
   id: string;
@@ -122,6 +122,22 @@ export async function requireScheduler(): Promise<AppUser> {
   return user;
 }
 
+export async function requireManufacturer(): Promise<AppUser> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "manufacturer") {
+    throw new Error("Unauthorized: manufacturer role required");
+  }
+  return user;
+}
+
+export async function requireQC(): Promise<AppUser> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "qc") {
+    throw new Error("Unauthorized: qc role required");
+  }
+  return user;
+}
+
 export async function requireOwnerOrScheduler(): Promise<AppUser> {
   const user = await getCurrentUser();
   if (!user || (user.role !== "owner" && user.role !== "scheduler")) {
@@ -136,6 +152,30 @@ export async function getLinkedSchedulerId(
   const supabase = await createClient();
   const { data } = await supabase
     .from("schedulers")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
+  return data?.id ?? null;
+}
+
+export async function getLinkedManufacturerId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("manufacturers")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
+  return data?.id ?? null;
+}
+
+export async function getLinkedQCPersonId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("qc_persons")
     .select("id")
     .eq("auth_user_id", authUserId)
     .single();

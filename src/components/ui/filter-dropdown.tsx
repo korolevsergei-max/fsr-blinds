@@ -64,9 +64,14 @@ export function FilterDropdown({
 
       <AnimatePresence>
         {open && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div key="dropdown-container">
+            <div
+              key="dropdown-backdrop"
+              className="fixed inset-0 z-40"
+              onClick={() => setOpen(false)}
+            />
             <motion.div
+              key="dropdown-menu"
               initial={{ opacity: 0, y: -4, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.97 }}
@@ -93,7 +98,7 @@ export function FilterDropdown({
                 </button>
               ))}
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
     </>

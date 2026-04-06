@@ -54,6 +54,11 @@ export function createClient() {
 
   const { url, key } = getSupabaseEnv();
   browserSingleton = createBrowserClient(url, key, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
     cookies: {
       getAll() {
         return getAllCookiesFromDocument();

@@ -23,11 +23,15 @@ export function SupabaseAuthRecovery() {
     window.__fsrAuthRecoveryStarted = true;
 
     const supabase = createClient();
+    const hasAuthCookies = document.cookie.split(";").some((c) => c.trim().startsWith("sb-"));
 
     void (async () => {
+      if (!hasAuthCookies) return;
+
       const { error } = await supabase.auth.getUser();
       if (!error || !isInvalidRefreshTokenError(error)) return;
 
+      // We have an error that indicates a dead refresh token. Clear everything.
       clearSupabaseBrowserCookies();
       try {
         await supabase.auth.signOut({ scope: "local" });

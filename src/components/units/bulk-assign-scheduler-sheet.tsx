@@ -43,9 +43,14 @@ export function BulkAssignSchedulerSheet({
   };
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" onClick={onClose} />
+    <>
+      <div
+        key="scheduler-sheet-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
+        onClick={onClose}
+      />
       <motion.div
+        key="scheduler-sheet-content"
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
@@ -140,6 +145,6 @@ export function BulkAssignSchedulerSheet({
           </div>
         </div>
       </motion.div>
-    </AnimatePresence>
+    </>
   );
 }
