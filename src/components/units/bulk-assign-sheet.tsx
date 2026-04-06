@@ -164,36 +164,38 @@ export function BulkAssignSheet({
             </div>
           )}
 
-          <div>
-            <SectionLabel className="flex items-center gap-1.5">
-              <CalendarBlank size={13} className="inline" />
-              {datesOnly ? "Schedule & deadlines" : "Dates (optional)"}
-            </SectionLabel>
-            <div className="flex flex-col gap-3">
-              <DateInput
-                label="Measurement Date"
-                value={measurementDate}
-                onChange={setMeasurementDate}
-              />
-              <DateInput
-                label="Bracketing Date"
-                value={bracketingDate}
-                onChange={setBracketingDate}
-              />
-              <DateInput
-                label="Installation Date"
-                value={installationDate}
-                onChange={setInstallationDate}
-              />
-              {showCompleteBy && (
+          {datesOnly && (
+            <div>
+              <SectionLabel className="flex items-center gap-1.5">
+                <CalendarBlank size={13} className="inline" />
+                Schedule & deadlines
+              </SectionLabel>
+              <div className="flex flex-col gap-3">
                 <DateInput
-                  label="Complete by"
-                  value={completeByDate}
-                  onChange={setCompleteByDate}
+                  label="Measurement Date"
+                  value={measurementDate}
+                  onChange={setMeasurementDate}
                 />
-              )}
+                <DateInput
+                  label="Bracketing Date"
+                  value={bracketingDate}
+                  onChange={setBracketingDate}
+                />
+                <DateInput
+                  label="Installation Date"
+                  value={installationDate}
+                  onChange={setInstallationDate}
+                />
+                {showCompleteBy && (
+                  <DateInput
+                    label="Complete by"
+                    value={completeByDate}
+                    onChange={setCompleteByDate}
+                  />
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="pb-32">
             {saved ? (
