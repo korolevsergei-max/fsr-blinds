@@ -117,7 +117,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" onClick={() => setShowEditForm(!showEditForm)}>
               <PencilSimple size={14} weight="bold" />
-              Edit Client
+              Edit
             </Button>
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               <Plus size={14} weight="bold" />
@@ -143,13 +143,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
             <Input label="Contact Email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="jane@example.com" />
             <Input label="Contact Phone" type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="(555) 123-4567" />
             
-            <div className="flex items-center justify-between mt-2 pt-3 border-t border-border-subtle">
-              {userRole === "owner" && (
-                <Button size="sm" variant="danger" disabled={isUpdating || isDeleting} onClick={handleDeleteClient}>
-                  <Trash size={14} weight="bold" />
-                  {isDeleting ? "Deleting…" : "Delete"}
-                </Button>
-              )}
+            <div className="flex items-center justify-end mt-2 pt-3 border-t border-border-subtle">
               <div className="flex gap-2">
                 <Button size="sm" variant="secondary" onClick={() => setShowEditForm(false)}>
                   Cancel
@@ -248,6 +242,28 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
             </motion.div>
           );
         })}
+
+        {userRole === "owner" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            className="mt-8 pt-6 border-t border-border-subtle"
+          >
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={isUpdating || isDeleting}
+              onClick={handleDeleteClient}
+            >
+              <Trash size={16} />
+              {isDeleting ? "Deleting…" : "Delete Client"}
+            </Button>
+            <p className="text-center text-[11px] text-muted mt-2 px-4">
+              Deleting this client will permanently remove all associated buildings, units, and records.
+            </p>
+          </motion.div>
+        )}
       </div>
     </div>
   );

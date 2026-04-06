@@ -115,22 +115,22 @@ function buildLogDescription(log: UnitActivityLog): string {
       d && typeof d.unitNumber === "string" ? d.unitNumber : null;
     const when = formatDateTime(log.createdAt);
     return num
-      ? `Unit ${num} · Added to database ${when}`
+      ? `Unit ${num} \u2022 Added to database ${when}`
       : `Added to database ${when}`;
   }
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
     const parts: string[] = [];
-    if (d.installer) parts.push(`→ ${d.installer}`);
+    if (d.installer) parts.push(`\u2192 ${d.installer}`);
     if (d.measurementDate) parts.push(`Measurement: ${d.measurementDate}`);
     if (d.bracketingDate) parts.push(`Bracketing: ${d.bracketingDate}`);
     if (d.installationDate) parts.push(`Install: ${d.installationDate}`);
-    return parts.join(" · ");
+    return parts.join(" \u2022 ");
   }
   if (log.action === "status_changed") {
     const from = resolveStatusLabel(d.from);
     const to = resolveStatusLabel(d.to);
-    const note = d.note ? ` — "${d.note}"` : "";
-    return from && to ? `${from} → ${to}${note}` : to || from;
+    const note = d.note ? ` \u2014 "${d.note}"` : "";
+    return from && to ? `${from} \u2192 ${to}${note}` : to || from;
   }
   return "";
 }
@@ -295,12 +295,6 @@ export function ManagementUnitDetail({
         backHref="/management/units"
         actions={
           <div className="flex items-center gap-2">
-            {userRole === "owner" && (
-              <Button size="sm" variant="danger" disabled={isUpdatingDate} onClick={handleDeleteUnit}>
-                <Trash size={14} />
-                {isUpdatingDate ? "Deleting…" : "Delete"}
-              </Button>
-            )}
             <Link href={`/management/units/${unit.id}/dates`}>
               <Button size="sm" variant="secondary">
                 <CalendarBlank size={14} />
@@ -479,6 +473,29 @@ export function ManagementUnitDetail({
           </div>
           <ActivityTimeline logs={displayActivityLog} />
         </motion.div>
+
+        {/* Bottom Delete Button */}
+        {userRole === "owner" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.3 }}
+            className="pt-4 border-t border-border-subtle"
+          >
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={isUpdatingDate}
+              onClick={handleDeleteUnit}
+            >
+              <Trash size={16} />
+              {isUpdatingDate ? "Deleting…" : "Delete Unit"}
+            </Button>
+            <p className="text-center text-[11px] text-muted mt-2 px-4">
+              Deleting this unit will permanently remove all associated rooms, windows, and activity records.
+            </p>
+          </motion.div>
+        )}
       </div>
     </div>
   );

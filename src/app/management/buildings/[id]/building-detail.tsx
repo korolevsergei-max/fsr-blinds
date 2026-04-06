@@ -105,12 +105,6 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
                 Import
               </Button>
             </Link>
-            {userRole === "owner" && (
-              <Button size="sm" variant="danger" disabled={pending} onClick={handleDeleteBuilding}>
-                <Trash size={14} weight="bold" />
-                {pending ? "Deleting…" : "Delete"}
-              </Button>
-            )}
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               <Plus size={14} weight="bold" />
               Unit
@@ -206,6 +200,28 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
             </Link>
           </motion.div>
         ))}
+
+        {userRole === "owner" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            className="mt-8 pt-6 border-t border-border-subtle"
+          >
+            <Button
+              variant="danger"
+              className="w-full justify-center"
+              disabled={pending}
+              onClick={handleDeleteBuilding}
+            >
+              <Trash size={16} />
+              {pending ? "Deleting…" : "Delete Building"}
+            </Button>
+            <p className="text-center text-[11px] text-muted mt-2 px-4">
+              Deleting this building will permanently remove all associated units, rooms, windows, and records.
+            </p>
+          </motion.div>
+        )}
       </div>
     </div>
   );
