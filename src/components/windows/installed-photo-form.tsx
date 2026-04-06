@@ -166,6 +166,9 @@ export function InstalledPhotoForm({
           unitId={id}
           roomId={roomId}
           windowId={windowItem.id}
+          isMeasured={windowItem.measured}
+          isBracketed={windowItem.bracketed}
+          isInstalled={windowItem.installed}
           active="installed"
           routeBasePath={routeBasePath}
         />
@@ -179,14 +182,18 @@ export function InstalledPhotoForm({
           onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
         />
 
-        <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-xs text-zinc-600">
-          Upload one installed/completion photo for this window.
+        <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] text-zinc-500 leading-relaxed">
+          <p className="font-bold text-zinc-700 mb-1 flex items-center gap-1.5">
+            <UploadSimple size={14} weight="bold" />
+            Installation Step
+          </p>
+          Confirm that the blind is installed correctly. A photo is {riskFlag === "green" ? <span className="font-bold text-emerald-600">optional</span> : <span className="font-bold text-amber-600 underline">required</span>} for this window based on its status. 
         </div>
 
         {installPhotosBlocked && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Both measurements and bracketing photos must be completed for every window in this unit
-            before installation photos can be uploaded.
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-zinc-700 leading-snug">
+            <p className="font-bold text-amber-900 mb-1">Pre-requisites Pending</p>
+            Measurements and bracketing must be completed for all windows in this unit before marking installation as complete.
           </div>
         )}
 
@@ -197,16 +204,21 @@ export function InstalledPhotoForm({
         )}
 
         <div>
-          <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+          <h2 className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
             Installed Photo
             {riskFlag !== "green" && <span className="ml-1 text-red-500">*</span>}
           </h2>
+          <p className="text-[11px] text-zinc-400 mb-3">
+            {riskFlag === "green" 
+              ? "Optional for green status windows." 
+              : "Required for yellow or red risk indicators."}
+          </p>
           {photoPreview ? (
             <button
               type="button"
               disabled={installPhotosBlocked}
               onClick={() => fileRef.current?.click()}
-              className="relative w-full overflow-hidden rounded-2xl border border-border text-left disabled:pointer-events-none disabled:opacity-50"
+              className="relative w-full overflow-hidden rounded-2xl border border-border text-left disabled:opacity-50"
             >
               <div className={`relative w-full bg-surface overflow-hidden ${
                 photoOrientation === "portrait"
@@ -219,11 +231,12 @@ export function InstalledPhotoForm({
                   src={photoPreview}
                   alt="Installed preview"
                   fill
+                  unoptimized
                   className="object-contain"
                 />
               </div>
               <div className="absolute right-3 top-3">
-                <span className="flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-white">
+                <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
                   <CheckCircle size={14} weight="fill" />
                   {photoFile ? "New photo" : "Saved - tap to replace"}
                 </span>
@@ -234,19 +247,18 @@ export function InstalledPhotoForm({
               type="button"
               disabled={installPhotosBlocked}
               onClick={() => fileRef.current?.click()}
-              className="flex h-44 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-white transition-colors active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50"
+              className="flex h-44 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 transition-all active:scale-[0.98] hover:bg-zinc-100/50 disabled:opacity-50 disabled:pointer-events-none"
             >
-              <Camera size={28} className="text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-500">Tap to take or choose a photo</span>
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border border-zinc-200 shadow-sm">
+                <Camera size={24} className="text-zinc-500" />
+              </div>
+              <div className="text-center">
+                <span className="block text-sm font-bold text-zinc-700">Take Installed Photo</span>
+                <span className="block text-[11px] text-zinc-500 uppercase tracking-wider mt-0.5">Optional for green</span>
+              </div>
             </button>
           )}
         </div>
-
-        {existingInstalled && (
-          <p className="text-xs text-zinc-500">
-            An installed photo is already saved for this window. You can replace it anytime.
-          </p>
-        )}
 
         <div>
           <WindowRiskNotesFields
@@ -261,22 +273,35 @@ export function InstalledPhotoForm({
           />
         </div>
 
-        <div className="pb-24 pt-2">
-          <Button
-            type="submit"
-            fullWidth
-            size="lg"
+        <div className="pb-24 pt-4">
+          <Button 
+            type="submit" 
+            fullWidth 
+            size="lg" 
             disabled={pending || optimizingPhoto || installPhotosBlocked}
+            className={!photoFile && !existingInstalled && !installPhotosBlocked ? "bg-emerald-600 hover:bg-emerald-700 shadow-md" : ""}
           >
-            <UploadSimple size={18} weight="bold" />
-            {optimizingPhoto
-              ? "Optimizing photo…"
-              : pending
-              ? "Saving…"
-              : existingInstalled
-                ? "Update Installed Photo"
-                : "Save Installed Photo"}
+            {optimizingPhoto ? (
+              "Optimizing photo…"
+            ) : pending ? (
+              "Saving…"
+            ) : !photoFile && !existingInstalled ? (
+              <>
+                <CheckCircle size={20} weight="bold" />
+                Mark Installation as Complete
+              </>
+            ) : (
+              <>
+                <UploadSimple size={20} weight="bold" />
+                {existingInstalled ? "Update Installation" : "Save Installed Photo"}
+              </>
+            )}
           </Button>
+          {!photoFile && !existingInstalled && !installPhotosBlocked && riskFlag === "green" && (
+            <p className="text-center text-[11px] text-zinc-400 mt-3 italic">
+              You can complete this stage without a photo for green status windows.
+            </p>
+          )}
         </div>
       </form>
     </div>

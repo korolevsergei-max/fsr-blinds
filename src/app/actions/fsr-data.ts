@@ -1413,14 +1413,13 @@ export async function uploadWindowPostBracketingPhoto(
       .eq("id", unitId)
       .single();
 
-    await refreshUnitAggregates(supabase, unitId);
     await logUnitActivity(
       supabase,
       unitId,
       "installer",
       unit?.assigned_installer_name ?? "Installer",
-      "post_bracketing_photo_added",
-      { roomId, windowId, windowLabel: windowRow.label, riskFlag }
+      hasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
+      { roomId, windowId, windowLabel: windowRow.label, riskFlag, hasPhoto }
     );
     await refreshUnitAggregates(supabase, unitId);
     await recomputeUnitStatus(supabase, unitId);
@@ -1562,8 +1561,8 @@ export async function uploadWindowInstalledPhoto(
       unitId,
       "installer",
       unit?.assigned_installer_name ?? "Installer",
-      "installed_photo_added",
-      { roomId, windowId, windowLabel: windowRow.label, riskFlag }
+      hasPhoto ? "installed_photo_added" : "installation_completed",
+      { roomId, windowId, windowLabel: windowRow.label, riskFlag, hasPhoto }
     );
     await recomputeUnitStatus(supabase, unitId);
     revalidateApp();

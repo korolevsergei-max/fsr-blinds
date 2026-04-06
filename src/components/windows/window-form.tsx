@@ -266,6 +266,9 @@ export function WindowForm({
             roomId={roomId}
             windowId={existingWindow.id}
             active="before"
+            isMeasured={existingWindow.measured}
+            isBracketed={existingWindow.bracketed}
+            isInstalled={existingWindow.installed}
             routeBasePath={routeBasePath}
           />
         )}
@@ -404,10 +407,15 @@ export function WindowForm({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
+          <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-1">
             Pre-bracketing Photo
             {riskFlag !== "green" && <span className="text-red-500 ml-1">*</span>}
           </h2>
+          <p className="text-[11px] text-zinc-400 mb-3">
+            {riskFlag === "green" 
+              ? "Optional for green status windows." 
+              : "Required for yellow or red risk indicators."}
+          </p>
           {photoPreview ? (
             <button
               type="button"

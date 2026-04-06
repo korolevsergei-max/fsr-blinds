@@ -231,10 +231,13 @@ export function RoomWindowsView({
                   >
                     <WindowStageNav
                       {...getStageNavProps(win.id)}
+                      isMeasured={win.measured}
+                      isBracketed={win.bracketed}
+                      isInstalled={win.installed}
                       active={
-                        stageMedia.installed
+                        win.installed
                           ? "installed"
-                          : stageMedia.bracketed
+                          : win.bracketed
                             ? "bracketed"
                             : "before"
                       }
