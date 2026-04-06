@@ -103,6 +103,8 @@ type WindowRow = {
   risk_flag: RiskFlag;
   photo_url: string | null;
   measured: boolean;
+  bracketed: boolean;
+  installed: boolean;
 };
 
 type ScheduleRow = {
@@ -242,6 +244,8 @@ function mapWindow(r: WindowRow): Window {
     notes: r.notes || "",
     photoUrl: r.photo_url,
     measured: r.measured,
+    bracketed: r.bracketed,
+    installed: r.installed,
   };
 }
 
