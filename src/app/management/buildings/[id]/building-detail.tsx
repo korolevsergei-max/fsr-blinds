@@ -11,6 +11,7 @@ import {
   CalendarBlank,
   UploadSimple,
   Trash,
+  PencilSimple,
 } from "@phosphor-icons/react";
 import { getUnitsByBuilding } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -20,7 +21,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { createUnit, deleteBuilding } from "@/app/actions/management-actions";
+import { createUnit, deleteBuilding, updateBuilding } from "@/app/actions/management-actions";
 import { UserRole } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
@@ -32,6 +33,9 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
     ? data.clients.find((c) => c.id === building.clientId)
     : null;
 
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editName, setEditName] = useState(building?.name ?? "");
+  const [editAddress, setEditAddress] = useState(building?.address ?? "");
   const [showForm, setShowForm] = useState(false);
   const [unitNumber, setUnitNumber] = useState("");
   const [earliestBracketing, setEarliestBracketing] = useState("");
@@ -74,6 +78,19 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
     });
   };
 
+  const handleEditBuilding = () => {
+    if (!editName.trim()) return;
+    startTransition(async () => {
+      const result = await updateBuilding(building.id, editName, editAddress);
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
+      setShowEditForm(false);
+      window.location.reload();
+    });
+  };
+
   const handleDeleteBuilding = () => {
     if (
       !window.confirm(
@@ -106,15 +123,29 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
               </Button>
             </Link>
             {userRole === "owner" && (
-              <Button 
-                size="sm" 
-                variant="danger" 
-                onClick={handleDeleteBuilding}
-                disabled={pending}
-              >
-                <Trash size={14} weight="bold" />
-                Delete
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setEditName(building.name);
+                    setEditAddress(building.address ?? "");
+                    setShowEditForm(true);
+                  }}
+                >
+                  <PencilSimple size={14} weight="bold" />
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={handleDeleteBuilding}
+                  disabled={pending}
+                >
+                  <Trash size={14} weight="bold" />
+                  Delete
+                </Button>
+              </>
             )}
             <Button size="sm" onClick={() => setShowForm(!showForm)}>
               <Plus size={14} weight="bold" />
@@ -123,6 +154,38 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
           </div>
         }
       />
+
+      {showEditForm && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="px-4 pt-4"
+        >
+          <div className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3">
+            <SectionLabel as="h3" noMargin>Edit building</SectionLabel>
+            {formError && <p className="text-xs text-red-600">{formError}</p>}
+            <Input
+              label="Building Name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              autoFocus
+            />
+            <Input
+              label="Address"
+              value={editAddress}
+              onChange={(e) => setEditAddress(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setShowEditForm(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={pending || !editName.trim()} onClick={handleEditBuilding}>
+                {pending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {showForm && (
         <motion.div
@@ -203,7 +266,9 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <ArrowRight size={14} className="text-zinc-400" />
+                    <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
+                      <ArrowRight size={14} weight="bold" className="text-white" />
+                    </div>
                   </div>
                 </div>
                 <StatusChip status={unit.status} />

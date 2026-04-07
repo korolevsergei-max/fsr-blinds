@@ -37,7 +37,19 @@ function formatActivityDate(dateStr: string): string {
 function buildWindowActivityDescription(log: UnitActivityLog): string {
   const details = log.details ?? {};
   if (log.action === "window_created") {
-    return "Window created with measurements and pre-bracketing photo.";
+    const w = details.width != null ? details.width : null;
+    const h = details.height != null ? details.height : null;
+    const d = details.depth != null ? details.depth : null;
+    const measurementParts = [
+      w != null ? `W: ${w}"` : null,
+      h != null ? `H: ${h}"` : null,
+      d != null ? `D: ${d}"` : null,
+    ].filter(Boolean);
+    const measurementStr = measurementParts.length > 0
+      ? `Measurements set (${measurementParts.join(", ")}).`
+      : "Window created.";
+    const photoStr = details.hasPhoto ? " Photo uploaded." : " No photo uploaded.";
+    return measurementStr + photoStr;
   }
   if (log.action === "window_updated") {
     return details.replacedPhoto
@@ -122,6 +134,8 @@ export function WindowForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const addAnotherRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -239,7 +253,12 @@ export function WindowForm({
         setFormError(result.error);
         return;
       }
-      router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
+      if (addAnotherRef.current) {
+        addAnotherRef.current = false;
+        router.push(`${routeBasePath}/${id}/rooms/${roomId}/windows/new`);
+      } else {
+        router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
+      }
       router.refresh();
     });
   };
@@ -257,6 +276,7 @@ export function WindowForm({
       />
 
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
         className="flex-1 px-5 py-5 flex flex-col gap-6"
       >
@@ -494,16 +514,28 @@ export function WindowForm({
           />
         </motion.div>
 
-        <div className="pt-2 pb-24">
+        <div className="pt-2 pb-24 flex flex-col gap-3">
           <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>
             <UploadSimple size={18} weight="bold" />
             {optimizingPhoto
               ? "Optimizing photo…"
-              : pending
+              : pending && !addAnotherRef.current
               ? "Saving…"
-              : existingWindow
-                ? "Update Window"
-                : "Save Window"}
+              : "Save Window & Back to Room"}
+          </Button>
+
+          <Button
+            type="button"
+            fullWidth
+            size="lg"
+            variant="secondary"
+            disabled={pending || optimizingPhoto}
+            onClick={() => {
+              addAnotherRef.current = true;
+              formRef.current?.requestSubmit();
+            }}
+          >
+            {pending && addAnotherRef.current ? "Saving…" : "+ Add Another Window"}
           </Button>
 
           {formError && (

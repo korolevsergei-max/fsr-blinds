@@ -552,7 +552,9 @@ export function UnitsList({
                         <p className="text-[12px] text-tertiary">{unit.buildingName} &bull; {unit.clientName}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <ArrowRight size={14} className="text-zinc-400" />
+                        <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
+                          <ArrowRight size={14} weight="bold" className="text-white" />
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">

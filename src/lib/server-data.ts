@@ -536,7 +536,12 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     .from("scheduler_unit_assignments")
     .select("unit_id, assigned_at")
     .eq("scheduler_id", schedulerId);
-  const assignmentAtMap = new Map((assignmentsData ?? []).map((a: any) => [a.unit_id, a.assigned_at]));
+  const assignmentAtMap = new Map(
+    ((assignmentsData ?? []) as { unit_id: string; assigned_at: string }[]).map((a) => [
+      a.unit_id,
+      a.assigned_at,
+    ])
+  );
 
   const { data: schedulerRow } = await supabase.from("schedulers").select("name").eq("id", schedulerId).single();
   const schedulerName = (schedulerRow as { name: string })?.name || "Unknown";

@@ -1111,6 +1111,10 @@ export async function createWindowWithPhoto(
         windowLabel: label,
         blindType,
         riskFlag,
+        width: wn,
+        height: hn,
+        depth: dn !== null && Number.isFinite(dn) ? dn : null,
+        hasPhoto: !!publicUrl,
       }
     );
 

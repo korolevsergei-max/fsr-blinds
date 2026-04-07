@@ -216,10 +216,9 @@ export function StatusDrilldownPanel({
                       {unit.buildingName} · {unit.clientName}
                     </p>
                   </div>
-                  <ArrowRight
-                    size={13}
-                    className="text-zinc-300 group-hover:text-accent transition-colors flex-shrink-0 mt-0.5"
-                  />
+                  <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm flex-shrink-0">
+                    <ArrowRight size={14} weight="bold" className="text-white" />
+                  </div>
                 </div>
 
                 {/* Flag badges */}

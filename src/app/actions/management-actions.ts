@@ -105,6 +105,30 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
   }
 }
 
+export async function updateBuilding(
+  buildingId: string,
+  name: string,
+  address: string
+): Promise<ActionResult> {
+  try {
+    await requireOwner();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("buildings")
+      .update({ name: name.trim(), address: address.trim() })
+      .eq("id", buildingId);
+    if (error) return { ok: false, error: error.message };
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to update building";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can edit a building." };
+    }
+    return { ok: false, error: msg };
+  }
+}
+
 export async function deleteBuilding(buildingId: string): Promise<ActionResult> {
   try {
     await requireOwner();

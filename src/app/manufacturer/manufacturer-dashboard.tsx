@@ -151,7 +151,7 @@ export function ManufacturerDashboard({
 
       {/* No units message */}
       {units.length === 0 && (
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-8 text-center">
+        <div className="rounded-xl border border-border bg-white px-4 py-8 text-center">
           <CheckCircle size={32} className="mx-auto mb-2 text-green-500" weight="fill" />
           <p className="text-sm font-medium text-primary">All caught up!</p>
           <p className="text-xs text-tertiary mt-1">No units in the production queue right now.</p>

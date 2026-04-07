@@ -157,7 +157,7 @@ export function ManufacturerUnitDetail({ detail }: { detail: DetailType }) {
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
           <span className="text-secondary font-medium">Production Progress</span>
-          <span className="text-tertiary">{builtCount}/{total} built · {qcCount}/{total} QC'd</span>
+          <span className="text-tertiary">{builtCount}/{total} built · {qcCount}/{total} QC&apos;d</span>
         </div>
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div

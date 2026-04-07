@@ -148,7 +148,7 @@ export function ProductionQueue({ units }: { units: ManufacturerUnit[] }) {
       </div>
 
       {units.length === 0 ? (
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-10 text-center">
+        <div className="rounded-xl border border-border bg-white px-4 py-10 text-center">
           <p className="text-sm font-medium text-primary">Queue is empty</p>
           <p className="text-xs text-tertiary mt-1">
             Units will appear here once all windows are measured by the installer.

@@ -460,10 +460,9 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusChip status={unit.status} />
-                      <ArrowRight
-                        size={13}
-                        className="text-zinc-300 group-hover:text-accent transition-colors flex-shrink-0"
-                      />
+                      <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
+                        <ArrowRight size={14} weight="bold" className="text-white" />
+                      </div>
                     </div>
                   </div>
 
