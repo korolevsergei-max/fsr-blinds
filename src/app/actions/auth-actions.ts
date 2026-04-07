@@ -250,61 +250,38 @@ export async function createManufacturerAccount(
   name: string,
   email: string,
   contactName: string,
-  phone: string
+  phone: string,
+  password: string
 ): Promise<ActionResult> {
   try {
     const denied = await assertOwnerForAccountActions();
     if (denied) return denied;
 
+    if (!password || password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
     const admin = createAdminClient();
-    const redirectTo = `${getAuthRedirectBaseUrl()}/auth/set-password`;
 
-    // NOTE: Delete stale rows only AFTER auth invite succeeds to avoid leaving
-    // orphaned auth users when the invite email hits a rate limit.
-    let { data: authUser, error: authErr } =
-      await admin.auth.admin.inviteUserByEmail(email, {
-        redirectTo,
-        data: { display_name: name, role: "manufacturer" },
-      });
-
-    if (authErr && isAlreadyRegisteredAuthError(authErr.message)) {
+    const existingId = await findAuthUserIdByEmail(email);
+    if (existingId) {
       const selfGuard = await ensureNotDeletingSelf(email);
       if (!selfGuard.ok) return { ok: false, error: selfGuard.error };
-
-      const existingId = await findAuthUserIdByEmail(email);
-      if (existingId) {
-        await admin.auth.admin.deleteUser(existingId);
-        ({ data: authUser, error: authErr } =
-          await admin.auth.admin.inviteUserByEmail(email, {
-            redirectTo,
-            data: { display_name: name, role: "manufacturer" },
-          }));
-      }
+      await admin.auth.admin.deleteUser(existingId);
     }
 
-    // Fallback: if email rate limit hit, create the user directly with a temp password.
-    let tempPassword: string | undefined;
-    if (authErr && isRateLimitError(authErr.message)) {
-      tempPassword = generateTempPassword();
-      const { data: createdUser, error: createErr } =
-        await admin.auth.admin.createUser({
-          email,
-          password: tempPassword,
-          email_confirm: true,
-          user_metadata: { display_name: name, role: "manufacturer" },
-        });
-      if (createErr) return { ok: false, error: createErr.message };
-      authUser = createdUser;
-      authErr = null;
-    }
+    const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: name, role: "manufacturer" },
+    });
 
     if (authErr) return { ok: false, error: authErr.message };
-
     if (!authUser?.user?.id) {
-      return { ok: false, error: "Invite succeeded but no user id was returned." };
+      return { ok: false, error: "Account created but no user id was returned." };
     }
 
-    // Auth invite succeeded — now safe to clean up any stale manufacturer rows for this email.
     await deleteManufacturersByContactEmail(admin, email);
 
     const supabase = await createClient();
@@ -337,7 +314,7 @@ export async function createManufacturerAccount(
     if (mfrErr) return { ok: false, error: mfrErr.message };
 
     revalidatePath("/management", "layout");
-    return { ok: true, tempPassword };
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create manufacturer" };
   }
@@ -727,6 +704,34 @@ export async function deleteOwnerAccount(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to delete owner account" };
+  }
+}
+
+/**
+ * Change the password for any account. Owner-only.
+ * Uses admin API so no old-password confirmation is needed.
+ */
+export async function changeAccountPassword(
+  authUserId: string,
+  newPassword: string
+): Promise<ActionResult> {
+  try {
+    const denied = await assertOwnerForAccountActions();
+    if (denied) return denied;
+
+    if (!newPassword || newPassword.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.updateUserById(authUserId, {
+      password: newPassword,
+    });
+
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to change password." };
   }
 }
 

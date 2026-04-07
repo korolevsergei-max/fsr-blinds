@@ -5,6 +5,7 @@ import { Buildings, CheckCircle, Envelope, Phone, UserCircle } from "@phosphor-i
 import type { AppDataset } from "@/lib/app-dataset";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
+import { ChangePasswordInline } from "@/components/ui/change-password-inline";
 
 type InstallerRecord = AppDataset["installers"][number];
 
@@ -15,6 +16,7 @@ type InstallersListProps = {
   deletePending?: boolean;
   onDelete?: (installer: InstallerRecord) => void;
   emptyMessage?: string;
+  showChangePassword?: boolean;
 };
 
 function InstallerCard({
@@ -24,6 +26,7 @@ function InstallerCard({
   showDelete = false,
   deletePending = false,
   onDelete,
+  showChangePassword = false,
 }: {
   installer: InstallerRecord;
   activeUnits: number;
@@ -31,6 +34,7 @@ function InstallerCard({
   showDelete?: boolean;
   deletePending?: boolean;
   onDelete?: (installer: InstallerRecord) => void;
+  showChangePassword?: boolean;
 }) {
   return (
     <div className="surface-card p-4">
@@ -80,6 +84,9 @@ function InstallerCard({
           completed
         </span>
       </div>
+      {showChangePassword && installer.authUserId && (
+        <ChangePasswordInline authUserId={installer.authUserId} />
+      )}
     </div>
   );
 }
@@ -91,6 +98,7 @@ export function InstallersList({
   deletePending = false,
   onDelete,
   emptyMessage = "No installers added yet.",
+  showChangePassword = false,
 }: InstallersListProps) {
   const linkedInstallers = installers.filter((installer) => Boolean(installer.authUserId));
   const orphanInstallers = installers.filter((installer) => !installer.authUserId);
@@ -120,6 +128,7 @@ export function InstallersList({
               showDelete={showDelete}
               deletePending={deletePending}
               onDelete={onDelete}
+              showChangePassword={showChangePassword}
             />
           </motion.div>
         );
