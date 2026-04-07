@@ -8,6 +8,7 @@ import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
+import { deleteWindow } from "@/app/actions/fsr-data";
 
 export function RoomDetail({
   data,
@@ -57,6 +58,9 @@ export function RoomDetail({
             windowId: winId,
           })}
           addWindowHref={`/installer/units/${id}/rooms/${roomId}/windows/new`}
+          onDeleteWindow={async (winId) => {
+            await deleteWindow(winId, id);
+          }}
         />
       </div>
 

@@ -939,6 +939,71 @@ export async function deleteRoom(
   }
 }
 
+export async function deleteWindow(
+  windowId: string,
+  unitId: string
+): Promise<ActionResult> {
+  try {
+    if (!windowId || !unitId) {
+      return { ok: false, error: "Missing window or unit." };
+    }
+
+    const supabase = await createClient();
+    const { data: win, error: winError } = await supabase
+      .from("windows")
+      .select("id, room_id, rooms!inner(unit_id)")
+      .eq("id", windowId)
+      .single();
+    if (winError || !win) {
+      return { ok: false, error: "Window not found." };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((win as any).rooms?.unit_id !== unitId) {
+      return { ok: false, error: "Window does not belong to this unit." };
+    }
+
+    // Delete associated media uploads first
+    await supabase.from("media_uploads").delete().eq("window_id", windowId);
+
+    const { data: winRow } = await supabase
+      .from("windows")
+      .select("label, blind_type, room_id")
+      .eq("id", windowId)
+      .single();
+
+    const { error } = await supabase.from("windows").delete().eq("id", windowId);
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    const { data: unitRow } = await supabase
+      .from("units")
+      .select("assigned_installer_name")
+      .eq("id", unitId)
+      .single();
+    await logUnitActivity(
+      supabase,
+      unitId,
+      "installer",
+      unitRow?.assigned_installer_name ?? "Installer",
+      "window_deleted",
+      {
+        windowId,
+        windowLabel: winRow?.label ?? windowId,
+        blindType: winRow?.blind_type,
+        roomId: winRow?.room_id,
+      }
+    );
+
+    await refreshUnitAggregates(supabase, unitId);
+    revalidateApp();
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
 export async function createWindowWithPhoto(
   formData: FormData
 ): Promise<ActionResult> {

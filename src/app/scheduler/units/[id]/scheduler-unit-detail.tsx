@@ -69,6 +69,26 @@ function resolveStatusLabel(value: unknown): string {
     ?? s;
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  window_created: "Window added",
+  window_updated: "Window edited",
+  window_deleted: "Window deleted",
+  post_bracketing_photo_added: "Post-bracketing photo uploaded",
+  bracketing_completed: "Bracketing completed",
+  installed_photo_added: "Installation photo uploaded",
+  installation_completed: "Installation completed",
+  installer_assigned: "Installer assigned",
+  bulk_assigned: "Bulk assigned",
+  status_changed: "Status updated",
+  unit_created: "Unit added to the database",
+};
+
+function riskLabel(flag: unknown): string {
+  if (flag === "red") return "🔴 High risk";
+  if (flag === "yellow") return "🟡 Medium risk";
+  return "";
+}
+
 function buildLogDescription(log: UnitActivityLog): string {
   const d = log.details ?? {};
   if (log.action === "installer_assigned" || log.action === "bulk_assigned") {
@@ -84,6 +104,43 @@ function buildLogDescription(log: UnitActivityLog): string {
     const to = resolveStatusLabel(d.to);
     const note = d.note ? ` — "${d.note}"` : "";
     return from && to ? `${from} → ${to}${note}` : to || from;
+  }
+  if (log.action === "window_created") {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.blindType) parts.push(String(d.blindType));
+    if (d.width && d.height) parts.push(`${d.width}" × ${d.height}"`);
+    if (d.riskFlag && d.riskFlag !== "green") parts.push(riskLabel(d.riskFlag));
+    if (d.hasPhoto) parts.push("photo attached");
+    return parts.join(" · ");
+  }
+  if (log.action === "window_updated") {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.blindType) parts.push(String(d.blindType));
+    if (d.riskFlag && d.riskFlag !== "green") parts.push(riskLabel(d.riskFlag));
+    if (d.replacedPhoto) parts.push("new photo saved");
+    return parts.join(" · ");
+  }
+  if (log.action === "window_deleted") {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.blindType) parts.push(String(d.blindType));
+    return parts.join(" · ");
+  }
+  if (log.action === "post_bracketing_photo_added" || log.action === "bracketing_completed") {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.riskFlag && d.riskFlag !== "green") parts.push(riskLabel(d.riskFlag));
+    if (!d.hasPhoto) parts.push("no photo (green risk)");
+    return parts.join(" · ");
+  }
+  if (log.action === "installed_photo_added" || log.action === "installation_completed") {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.riskFlag && d.riskFlag !== "green") parts.push(riskLabel(d.riskFlag));
+    if (!d.hasPhoto) parts.push("no photo (green risk)");
+    return parts.join(" · ");
   }
   return "";
 }
@@ -354,7 +411,7 @@ export function SchedulerUnitDetail({
                         </span>
                       </div>
                       <p className="text-[12px] text-secondary mt-0.5">
-                        {UNIT_STATUS_LABELS[log.action as keyof typeof UNIT_STATUS_LABELS] ?? log.action.replace(/_/g, " ")}
+                        {ACTION_LABELS[log.action] ?? UNIT_STATUS_LABELS[log.action as keyof typeof UNIT_STATUS_LABELS] ?? log.action.replace(/_/g, " ")}
                       </p>
                       {description && (
                         <p className="text-[11px] text-muted mt-0.5 font-mono">{description}</p>

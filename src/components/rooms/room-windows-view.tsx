@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, CheckCircle, Images, Ruler, X } from "@phosphor-icons/react";
+import { Camera, CheckCircle, Images, Ruler, Trash, X } from "@phosphor-icons/react";
 import { getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -38,6 +38,8 @@ interface RoomWindowsViewProps {
   };
   /** When provided, renders an "Add Window" CTA (installer only). */
   addWindowHref?: string;
+  /** When provided, renders a Delete button per window with confirmation. */
+  onDeleteWindow?: (windowId: string) => Promise<void>;
 }
 
 const STAGE_META: Record<
@@ -56,12 +58,15 @@ export function RoomWindowsView({
   getEditHref,
   getStageNavProps,
   addWindowHref,
+  onDeleteWindow,
 }: RoomWindowsViewProps) {
   const windowsList = getWindowsByRoom(data, roomId);
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
     Record<string, ImageOrientation>
   >({});
   const [galleryWindowId, setGalleryWindowId] = useState<string | null>(null);
+  const [confirmDeleteWindowId, setConfirmDeleteWindowId] = useState<string | null>(null);
+  const [isPendingDelete, startDeleteTransition] = useTransition();
 
   const windowStageMediaMap = useMemo(() => {
     const map = new Map<string, Partial<Record<WindowStageKey, string>>>();
@@ -337,15 +342,30 @@ export function RoomWindowsView({
                   <p className="mt-2 line-clamp-1 text-xs italic text-zinc-500">{win.notes}</p>
                 )}
 
-                {getEditHref && (
-                  <div className="mt-4 flex justify-center">
-                    <Link
-                      href={getEditHref(win.id)}
-                      onClick={(event) => event.stopPropagation()}
-                      className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground"
-                    >
-                      Edit
-                    </Link>
+                {(getEditHref || onDeleteWindow) && (
+                  <div
+                    className="mt-4 flex items-center justify-center gap-2"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    {getEditHref && (
+                      <Link
+                        href={getEditHref(win.id)}
+                        className="inline-flex flex-1 items-center justify-center rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground"
+                      >
+                        Edit
+                      </Link>
+                    )}
+                    {onDeleteWindow && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteWindowId(win.id)}
+                        className="inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100"
+                        aria-label="Delete window"
+                      >
+                        <Trash size={16} />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -353,6 +373,61 @@ export function RoomWindowsView({
           );
         })}
       </div>
+
+      <AnimatePresence>
+        {confirmDeleteWindowId && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-40 bg-zinc-950/45"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmDeleteWindowId(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-4 bottom-1/3 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
+            >
+              <div className="p-5">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-500">
+                  <Trash size={22} />
+                </div>
+                <p className="text-sm font-bold text-foreground">Delete window?</p>
+                <p className="mt-1 text-xs text-muted">
+                  This will permanently delete the window and all its photos. This cannot be undone.
+                </p>
+              </div>
+              <div className="flex border-t border-border">
+                <button
+                  type="button"
+                  className="flex-1 py-3.5 text-sm font-semibold text-muted"
+                  onClick={() => setConfirmDeleteWindowId(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isPendingDelete}
+                  className="flex-1 border-l border-border py-3.5 text-sm font-semibold text-red-600 disabled:opacity-50"
+                  onClick={() => {
+                    if (!onDeleteWindow || !confirmDeleteWindowId) return;
+                    const idToDelete = confirmDeleteWindowId;
+                    setConfirmDeleteWindowId(null);
+                    startDeleteTransition(async () => {
+                      await onDeleteWindow(idToDelete);
+                    });
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {galleryWindow && (

@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   createWindowWithPhoto,
+  deleteWindow,
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -537,6 +538,30 @@ export function WindowForm({
           >
             {pending && addAnotherRef.current ? "Saving…" : "+ Add Another Window"}
           </Button>
+
+          {existingWindow && (
+            <Button
+              type="button"
+              fullWidth
+              size="lg"
+              variant="danger"
+              disabled={pending || optimizingPhoto}
+              onClick={async () => {
+                const confirmed = window.confirm(
+                  `Delete "${existingWindow.label || "this window"}"? This cannot be undone.`
+                );
+                if (!confirmed) return;
+                const result = await deleteWindow(existingWindow.id, id);
+                if (result.ok) {
+                  router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
+                } else {
+                  alert(`Failed to delete: ${result.error}`);
+                }
+              }}
+            >
+              Delete Window
+            </Button>
+          )}
 
           {formError && (
             <div
