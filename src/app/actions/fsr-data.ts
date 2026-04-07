@@ -931,6 +931,7 @@ export async function deleteRoom(
     }
 
     await refreshUnitAggregates(supabase, unitId);
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {
@@ -996,6 +997,7 @@ export async function deleteWindow(
     );
 
     await refreshUnitAggregates(supabase, unitId);
+    await recomputeUnitStatus(supabase, unitId);
     revalidateApp();
     return { ok: true };
   } catch (e) {
