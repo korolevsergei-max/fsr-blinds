@@ -3,11 +3,19 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { SupabaseCookiePurgeScript } from "@/components/supabase/supabase-cookie-purge-script";
 import { SupabaseAuthRecovery } from "@/components/supabase/supabase-auth-recovery";
+import { ConnectionStatus } from "@/components/ui/connection-status";
+import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "FSR Blinds",
   description: "Commercial blinds measurement, installation, and management platform",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "FSR Blinds",
+  },
 };
 
 export const viewport: Viewport = {
@@ -35,6 +43,8 @@ export default function RootLayout({
       >
         <SupabaseCookiePurgeScript />
         <SupabaseAuthRecovery />
+        <ServiceWorkerRegistrar />
+        <ConnectionStatus />
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>

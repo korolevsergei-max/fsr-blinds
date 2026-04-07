@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
+import { useQueuedUpload } from "@/lib/use-queued-upload";
 
 export function PostBracketingPhotoForm({
   data,
@@ -54,6 +55,7 @@ export function PostBracketingPhotoForm({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const enqueuePhoto = useQueuedUpload("uploadWindowPostBracketingPhoto", uploadWindowPostBracketingPhoto);
 
   useEffect(() => {
     if (!photoPreview) return;
@@ -131,11 +133,8 @@ export function PostBracketingPhotoForm({
       fd.set("riskFlag", riskFlag);
       fd.set("notes", notes);
 
-      const result = await uploadWindowPostBracketingPhoto(fd);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+      // Queue upload for background processing — navigates immediately
+      await enqueuePhoto(fd);
       router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       router.refresh();
     });

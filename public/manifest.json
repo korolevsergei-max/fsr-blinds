@@ -1,0 +1,23 @@
+{
+  "name": "FSR Blinds",
+  "short_name": "FSR Blinds",
+  "description": "Commercial blinds measurement, installation, and management platform",
+  "start_url": "/installer",
+  "display": "standalone",
+  "background_color": "#f4f4f3",
+  "theme_color": "#0f766e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
