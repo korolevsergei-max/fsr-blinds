@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { loadFullDataset, loadUnitActivityLog } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitActivityLog } from "@/lib/server-data";
 import { WindowForm } from "@/components/windows/window-form";
 
 export default async function NewWindowPage({
@@ -9,7 +9,7 @@ export default async function NewWindowPage({
 }) {
   const { id } = await params;
   const [data, activityLog] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitActivityLog(id),
   ]);
   return (

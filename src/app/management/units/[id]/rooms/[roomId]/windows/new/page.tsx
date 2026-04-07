@@ -1,4 +1,4 @@
-import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitStageMedia } from "@/lib/server-data";
 import { WindowStageReadonlyView } from "@/components/windows/window-stage-readonly-view";
 
 export default async function ManagementWindowBeforePage({
@@ -8,7 +8,7 @@ export default async function ManagementWindowBeforePage({
 }) {
   const { id } = await params;
   const [data, mediaItems] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitStageMedia(id),
   ]);
   return <WindowStageReadonlyView data={data} mediaItems={mediaItems} mode="before" />;

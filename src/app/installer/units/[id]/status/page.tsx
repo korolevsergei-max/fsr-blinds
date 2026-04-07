@@ -1,4 +1,4 @@
-import { loadFullDataset } from "@/lib/server-data";
+import { loadUnitDetail } from "@/lib/server-data";
 import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { StatusUpdate } from "./status-update";
 
@@ -9,7 +9,7 @@ export default async function StatusUpdatePage({
 }) {
   const { id } = await params;
   const [data, milestones] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     getUnitMilestoneCoverage(id),
   ]);
   return <StatusUpdate data={data} milestones={milestones} />;

@@ -10,6 +10,7 @@ import {
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
+import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import type { Unit } from "@/lib/types";
 
@@ -120,7 +121,10 @@ export function BuildingUnits({
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <StatusChip status={unit.status} />
+                    <div className="flex items-center gap-1.5">
+                      <StatusChip status={unit.status} />
+                      <MfgBadge flag={unit.manufacturingRiskFlag} />
+                    </div>
                     <div className="flex items-center gap-1.5 text-xs text-muted">
                       {unit.bracketingDate && (
                         <span className="font-mono font-semibold text-accent">

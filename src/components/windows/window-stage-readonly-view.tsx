@@ -131,6 +131,11 @@ export function WindowStageReadonlyView({
           <p className="mt-3 text-xs text-zinc-500">
             Type: <span className="font-semibold uppercase">{windowItem.blindType}</span>
           </p>
+          {windowItem.chainSide && (
+            <p className="mt-1 text-xs text-zinc-500">
+              Chain side: <span className="font-semibold capitalize">{windowItem.chainSide}</span>
+            </p>
+          )}
           {windowItem.notes && (
             <p className="mt-2 text-xs italic text-zinc-500">{windowItem.notes}</p>
           )}

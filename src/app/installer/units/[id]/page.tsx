@@ -1,8 +1,6 @@
-import { loadFullDataset, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
 import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { UnitDetail } from "./unit-detail";
-
-export const dynamic = "force-dynamic";
 
 export default async function UnitDetailPage({
   params,
@@ -11,7 +9,7 @@ export default async function UnitDetailPage({
 }) {
   const { id } = await params;
   const [data, mediaItems, activityLog, milestones] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitStageMedia(id),
     loadUnitActivityLog(id),
     getUnitMilestoneCoverage(id),

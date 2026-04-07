@@ -19,6 +19,7 @@ import {
 import type { AppDataset } from "@/lib/app-dataset";
 import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
+import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
@@ -517,16 +518,7 @@ export function UnitsList({
                       <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <StatusChip status={unit.status} />
-                          {unit.manufacturingRiskFlag && unit.manufacturingRiskFlag !== "green" && (
-                            <span className={[
-                              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
-                              unit.manufacturingRiskFlag === "red"
-                                ? "bg-red-50 text-red-600 border-red-200"
-                                : "bg-yellow-50 text-yellow-600 border-yellow-200",
-                            ].join(" ")}>
-                              MFG
-                            </span>
-                          )}
+                          <MfgBadge flag={unit.manufacturingRiskFlag} />
                         </div>
                         {unit.installationDate && (
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>
@@ -561,16 +553,7 @@ export function UnitsList({
                       <div className="flex flex-col gap-1 items-start" suppressHydrationWarning>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <StatusChip status={unit.status} />
-                          {unit.manufacturingRiskFlag && unit.manufacturingRiskFlag !== "green" && (
-                            <span className={[
-                              "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
-                              unit.manufacturingRiskFlag === "red"
-                                ? "bg-red-50 text-red-600 border-red-200"
-                                : "bg-yellow-50 text-yellow-600 border-yellow-200",
-                            ].join(" ")}>
-                              MFG
-                            </span>
-                          )}
+                          <MfgBadge flag={unit.manufacturingRiskFlag} />
                         </div>
                         {unit.installationDate && (
                           <span className="flex items-center gap-1 text-[11px] text-tertiary font-mono" suppressHydrationWarning>

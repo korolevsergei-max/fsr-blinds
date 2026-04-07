@@ -16,7 +16,7 @@ import {
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
-import { type BlindType, type RiskFlag, type UnitActivityLog } from "@/lib/types";
+import { type BlindType, type ChainSide, type RiskFlag, type UnitActivityLog } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -101,6 +101,9 @@ export function WindowForm({
   const [blindType, setBlindType] = useState<BlindType>(
     existingWindow?.blindType ?? "screen"
   );
+  const [chainSide, setChainSide] = useState<ChainSide | null>(
+    existingWindow?.chainSide ?? null
+  );
   const [riskFlag, setRiskFlag] = useState<RiskFlag>(
     existingWindow?.riskFlag ?? "green"
   );
@@ -164,6 +167,7 @@ export function WindowForm({
   const validate = () => {
     const e: Record<string, string> = {};
     if (!label.trim()) e.label = "Window label is required";
+    if (!chainSide) e.chainSide = "Chain side is required";
     if (!width || parseFloat(width) <= 0) e.width = "Valid width required";
     if (!height || parseFloat(height) <= 0) e.height = "Valid height required";
     if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
@@ -219,6 +223,7 @@ export function WindowForm({
       fd.set("roomId", room.id);
       fd.set("label", label.trim());
       fd.set("blindType", blindType);
+      fd.set("chainSide", chainSide ?? "");
       fd.set("riskFlag", riskFlag);
       fd.set("width", width);
       fd.set("height", height);
@@ -344,6 +349,34 @@ export function WindowForm({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Chain Side <span className="text-red-500">*</span>
+            </label>
+            <p className="text-[11px] text-zinc-400 -mt-0.5">Which side is the chain slot on when facing the window?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["left", "right"] as ChainSide[]).map((side) => (
+                <button
+                  key={side}
+                  type="button"
+                  onClick={() => setChainSide(side)}
+                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                    chainSide === side
+                      ? "border-accent bg-accent text-white"
+                      : errors.chainSide
+                        ? "border-red-300 bg-red-50 text-red-600"
+                        : "border-border bg-white text-zinc-600 hover:bg-surface"
+                  }`}
+                >
+                  {side === "left" ? "← Left" : "Right →"}
+                </button>
+              ))}
+            </div>
+            {errors.chainSide && (
+              <p className="text-xs text-red-500">{errors.chainSide}</p>
+            )}
           </div>
 
         </motion.div>

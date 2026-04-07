@@ -160,9 +160,9 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
       const allQCApproved = qcApprovedCount >= totalWindows;
       const allBuilt = builtCount >= totalWindows;
 
-      let flag: "green" | "yellow" | "red" = "green";
+      let flag: "green" | "yellow" | "red" | "complete" = "green";
       if (allQCApproved) {
-        flag = "green";
+        flag = "complete";
       } else if (daysUntil <= 3) {
         flag = "red";
       } else if (daysUntil <= 5 && !allBuilt) {

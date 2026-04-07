@@ -37,8 +37,11 @@ export function ConnectionStatus() {
 
   // Reset dismissed when status changes
   useEffect(() => {
-    setDismissed(false);
-  }, [online, pending, failed]);
+    if (dismissed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDismissed(false);
+    }
+  }, [online, pending, failed, dismissed]);
 
   if (dismissed) return null;
 

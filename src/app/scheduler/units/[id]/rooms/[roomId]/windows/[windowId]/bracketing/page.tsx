@@ -1,4 +1,4 @@
-import { loadSchedulerDataset, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitStageMedia } from "@/lib/server-data";
 import { PostBracketingPhotoForm } from "@/components/windows/post-bracketing-photo-form";
 
 export default async function PostBracketingPhotoPage({
@@ -8,7 +8,7 @@ export default async function PostBracketingPhotoPage({
 }) {
   const { id } = await params;
   const [data, mediaItems] = await Promise.all([
-    loadSchedulerDataset(),
+    loadUnitDetail(id),
     loadUnitStageMedia(id),
   ]);
   return (

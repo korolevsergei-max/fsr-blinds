@@ -1,4 +1,4 @@
-import { loadFullDataset, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
 import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { getCurrentUser } from "@/lib/auth";
 import { ManagementUnitDetail } from "./management-unit-detail";
@@ -10,7 +10,7 @@ export default async function ManagementUnitDetailPage({
 }) {
   const { id } = await params;
   const [data, activityLog, mediaItems, milestones, user] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitActivityLog(id),
     loadUnitStageMedia(id),
     getUnitMilestoneCoverage(id),

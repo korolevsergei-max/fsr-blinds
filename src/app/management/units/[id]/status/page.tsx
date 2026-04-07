@@ -1,4 +1,4 @@
-import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitStageMedia } from "@/lib/server-data";
 import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { UnitStatusEditor } from "@/components/units/unit-status-editor";
 
@@ -9,7 +9,7 @@ export default async function ManagementStatusPage({
 }) {
   const { id } = await params;
   const [data, mediaItems, milestones] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitStageMedia(id),
     getUnitMilestoneCoverage(id),
   ]);

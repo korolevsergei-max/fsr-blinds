@@ -45,7 +45,7 @@ export const UNIT_PHOTO_STAGE_HELPERS: Record<UnitPhotoStage, string> = {
   installed_pending_approval: "Completion photos waiting for client approval.",
 };
 
-export type RiskFlag = "green" | "yellow" | "red";
+export type RiskFlag = "green" | "yellow" | "red" | "complete";
 
 export type ProductionStatus = "pending" | "built" | "qc_approved";
 
@@ -70,9 +70,10 @@ export interface WindowProductionStatus {
 }
 
 export const RISK_LABELS: Record<RiskFlag, string> = {
-  green: "No Issue",
+  green: "On Track",
   yellow: "Needs Escalation",
   red: "Timeline at Risk",
+  complete: "MFG Complete",
 };
 
 export type BlindType = "screen" | "blackout";
@@ -148,11 +149,14 @@ export interface Room {
   completedWindows: number;
 }
 
+export type ChainSide = "left" | "right";
+
 export interface Window {
   id: string;
   roomId: string;
   label: string;
   blindType: BlindType;
+  chainSide: ChainSide | null;
   riskFlag: RiskFlag;
   width: number | null;
   height: number | null;

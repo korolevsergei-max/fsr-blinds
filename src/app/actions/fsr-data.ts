@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
@@ -96,6 +97,21 @@ function revalidateApp() {
   revalidatePath("/management", "layout");
   revalidatePath("/scheduler", "layout");
   revalidatePath("/installer", "layout");
+}
+
+/**
+ * Targeted revalidation for unit-specific mutations (window/room CRUD, photos, status).
+ * Only invalidates the affected unit's pages + the list pages that show unit counts/status.
+ * Much cheaper than revalidateApp() which busts the entire layout cache.
+ */
+function revalidateUnit(unitId: string) {
+  // Specific unit detail pages across all portals
+  revalidatePath(`/management/units/${unitId}`);
+  revalidatePath(`/scheduler/units/${unitId}`);
+  revalidatePath(`/installer/units/${unitId}`);
+  // List pages show unit status/window counts so they need a refresh too
+  revalidatePath("/management/units");
+  revalidatePath("/scheduler/units");
 }
 
 function getPhaseForStage(stage: UnitPhotoStage): "bracketing" | "installation" {
@@ -809,7 +825,7 @@ export async function uploadUnitStagePhotos(
         count: files.length,
       }
     );
-    revalidateApp();
+    revalidateUnit(unitId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -838,7 +854,7 @@ export async function createRoomsForUnit(
       return { ok: false, error: error.message };
     }
     await refreshUnitAggregates(supabase, unitId);
-    revalidateApp();
+    revalidateUnit(unitId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -886,7 +902,7 @@ export async function updateRoomName(
       return { ok: false, error: error.message };
     }
 
-    revalidateApp();
+    revalidateUnit(unitId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -932,7 +948,7 @@ export async function deleteRoom(
 
     await refreshUnitAggregates(supabase, unitId);
     await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    revalidateUnit(unitId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -977,28 +993,30 @@ export async function deleteWindow(
       return { ok: false, error: error.message };
     }
 
-    const { data: unitRow } = await supabase
-      .from("units")
-      .select("assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-    await logUnitActivity(
-      supabase,
-      unitId,
-      "installer",
-      unitRow?.assigned_installer_name ?? "Installer",
-      "window_deleted",
-      {
-        windowId,
-        windowLabel: winRow?.label ?? windowId,
-        blindType: winRow?.blind_type,
-        roomId: winRow?.room_id,
-      }
-    );
-
-    await refreshUnitAggregates(supabase, unitId);
-    await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    const capturedWinRow = winRow;
+    after(async () => {
+      const { data: unitRow } = await supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single();
+      await logUnitActivity(
+        supabase,
+        unitId,
+        "installer",
+        unitRow?.assigned_installer_name ?? "Installer",
+        "window_deleted",
+        {
+          windowId,
+          windowLabel: capturedWinRow?.label ?? windowId,
+          blindType: capturedWinRow?.blind_type,
+          roomId: capturedWinRow?.room_id,
+        }
+      );
+      await refreshUnitAggregates(supabase, unitId);
+      await recomputeUnitStatus(supabase, unitId);
+      revalidateUnit(unitId);
+    });
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1014,6 +1032,8 @@ export async function createWindowWithPhoto(
     const roomId = String(formData.get("roomId") ?? "");
     const label = String(formData.get("label") ?? "").trim();
     const blindType = String(formData.get("blindType") ?? "") as BlindType;
+    const chainSideRaw = String(formData.get("chainSide") ?? "");
+    const chainSide = chainSideRaw === "left" || chainSideRaw === "right" ? chainSideRaw : null;
     const width = String(formData.get("width") ?? "");
     const height = String(formData.get("height") ?? "");
     const depth = String(formData.get("depth") ?? "");
@@ -1029,6 +1049,9 @@ export async function createWindowWithPhoto(
     }
     if (!label) {
       return { ok: false, error: "Window label is required" };
+    }
+    if (!chainSide) {
+      return { ok: false, error: "Chain side (left or right) is required." };
     }
     if (!Number.isFinite(wn) || wn <= 0 || !Number.isFinite(hn) || hn <= 0) {
       return { ok: false, error: "Valid width and height are required" };
@@ -1110,6 +1133,7 @@ export async function createWindowWithPhoto(
       room_id: roomId,
       label,
       blind_type: blindType,
+      chain_side: chainSide,
       width: wn,
       height: hn,
       depth: dn !== null && Number.isFinite(dn) ? dn : null,
@@ -1161,34 +1185,35 @@ export async function createWindowWithPhoto(
       }
     }
 
-    const { data: unit } = await supabase
-      .from("units")
-      .select("assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-    await logUnitActivity(
-      supabase,
-      unitId,
-      "installer",
-      unit?.assigned_installer_name ?? "Installer",
-      "window_created",
-      {
-        roomId,
-        windowId,
-        windowLabel: label,
-        blindType,
-        riskFlag,
-        width: wn,
-        height: hn,
-        depth: dn !== null && Number.isFinite(dn) ? dn : null,
-        hasPhoto: !!publicUrl,
-      }
-    );
-
-    await refreshRoomAggregates(supabase, roomId);
-    await refreshUnitAggregates(supabase, unitId);
-    await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    after(async () => {
+      const { data: unit } = await supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single();
+      await logUnitActivity(
+        supabase,
+        unitId,
+        "installer",
+        unit?.assigned_installer_name ?? "Installer",
+        "window_created",
+        {
+          roomId,
+          windowId,
+          windowLabel: label,
+          blindType,
+          riskFlag,
+          width: wn,
+          height: hn,
+          depth: dn !== null && Number.isFinite(dn) ? dn : null,
+          hasPhoto: !!publicUrl,
+        }
+      );
+      await refreshRoomAggregates(supabase, roomId);
+      await refreshUnitAggregates(supabase, unitId);
+      await recomputeUnitStatus(supabase, unitId);
+      revalidateUnit(unitId);
+    });
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1205,6 +1230,8 @@ export async function updateWindowWithOptionalPhoto(
     const roomId = String(formData.get("roomId") ?? "");
     const label = String(formData.get("label") ?? "").trim();
     const blindType = String(formData.get("blindType") ?? "") as BlindType;
+    const chainSideRaw = String(formData.get("chainSide") ?? "");
+    const chainSide = chainSideRaw === "left" || chainSideRaw === "right" ? chainSideRaw : null;
     const width = String(formData.get("width") ?? "");
     const height = String(formData.get("height") ?? "");
     const depth = String(formData.get("depth") ?? "");
@@ -1220,6 +1247,9 @@ export async function updateWindowWithOptionalPhoto(
     }
     if (!label) {
       return { ok: false, error: "Window label is required" };
+    }
+    if (!chainSide) {
+      return { ok: false, error: "Chain side (left or right) is required." };
     }
     if (!Number.isFinite(wn) || wn <= 0 || !Number.isFinite(hn) || hn <= 0) {
       return { ok: false, error: "Valid width and height are required" };
@@ -1297,6 +1327,7 @@ export async function updateWindowWithOptionalPhoto(
     const patch: Record<string, unknown> = {
       label,
       blind_type: blindType,
+      chain_side: chainSide,
       width: wn,
       height: hn,
       depth: dn !== null && Number.isFinite(dn) ? dn : null,
@@ -1344,31 +1375,32 @@ export async function updateWindowWithOptionalPhoto(
       });
     }
 
-    const { data: unit } = await supabase
-      .from("units")
-      .select("assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-    await logUnitActivity(
-      supabase,
-      unitId,
-      "installer",
-      unit?.assigned_installer_name ?? "Installer",
-      "window_updated",
-      {
-        roomId,
-        windowId,
-        windowLabel: label,
-        blindType,
-        riskFlag,
-        replacedPhoto: Boolean(publicUrl),
-      }
-    );
-
-    await refreshRoomAggregates(supabase, roomId);
-    await refreshUnitAggregates(supabase, unitId);
-    await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    after(async () => {
+      const { data: unit } = await supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single();
+      await logUnitActivity(
+        supabase,
+        unitId,
+        "installer",
+        unit?.assigned_installer_name ?? "Installer",
+        "window_updated",
+        {
+          roomId,
+          windowId,
+          windowLabel: label,
+          blindType,
+          riskFlag,
+          replacedPhoto: Boolean(publicUrl),
+        }
+      );
+      await refreshRoomAggregates(supabase, roomId);
+      await refreshUnitAggregates(supabase, unitId);
+      await recomputeUnitStatus(supabase, unitId);
+      revalidateUnit(unitId);
+    });
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1478,23 +1510,26 @@ export async function uploadWindowPostBracketingPhoto(
       }
     }
 
-    const { data: unit } = await supabase
-      .from("units")
-      .select("assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-
-    await logUnitActivity(
-      supabase,
-      unitId,
-      "installer",
-      unit?.assigned_installer_name ?? "Installer",
-      hasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
-      { roomId, windowId, windowLabel: windowRow.label, riskFlag, hasPhoto }
-    );
-    await refreshUnitAggregates(supabase, unitId);
-    await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    const capturedWindowLabel = windowRow.label;
+    const capturedHasPhoto = hasPhoto;
+    after(async () => {
+      const { data: unit } = await supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single();
+      await logUnitActivity(
+        supabase,
+        unitId,
+        "installer",
+        unit?.assigned_installer_name ?? "Installer",
+        capturedHasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
+        { roomId, windowId, windowLabel: capturedWindowLabel, riskFlag, hasPhoto: capturedHasPhoto }
+      );
+      await refreshUnitAggregates(supabase, unitId);
+      await recomputeUnitStatus(supabase, unitId);
+      revalidateUnit(unitId);
+    });
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1620,23 +1655,26 @@ export async function uploadWindowInstalledPhoto(
       }
     }
 
-    const { data: unit } = await supabase
-      .from("units")
-      .select("assigned_installer_name")
-      .eq("id", unitId)
-      .single();
-
-    await refreshUnitAggregates(supabase, unitId);
-    await logUnitActivity(
-      supabase,
-      unitId,
-      "installer",
-      unit?.assigned_installer_name ?? "Installer",
-      hasPhoto ? "installed_photo_added" : "installation_completed",
-      { roomId, windowId, windowLabel: windowRow.label, riskFlag, hasPhoto }
-    );
-    await recomputeUnitStatus(supabase, unitId);
-    revalidateApp();
+    const capturedWindowLabel2 = windowRow.label;
+    const capturedHasPhoto2 = hasPhoto;
+    after(async () => {
+      const { data: unit } = await supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single();
+      await refreshUnitAggregates(supabase, unitId);
+      await logUnitActivity(
+        supabase,
+        unitId,
+        "installer",
+        unit?.assigned_installer_name ?? "Installer",
+        capturedHasPhoto2 ? "installed_photo_added" : "installation_completed",
+        { roomId, windowId, windowLabel: capturedWindowLabel2, riskFlag, hasPhoto: capturedHasPhoto2 }
+      );
+      await recomputeUnitStatus(supabase, unitId);
+      revalidateUnit(unitId);
+    });
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1661,7 +1699,8 @@ export async function markNotificationRead(
       { onConflict: "notification_id,user_role,user_id" }
     );
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidatePath("/installer/notifications");
+    revalidatePath("/scheduler/notifications");
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

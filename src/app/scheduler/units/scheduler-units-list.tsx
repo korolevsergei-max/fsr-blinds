@@ -16,6 +16,7 @@ import {
 import type { AppDataset } from "@/lib/app-dataset";
 import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
+import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
@@ -416,7 +417,10 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                         </p>
                       </div>
                     </div>
-                    <StatusChip status={unit.status} />
+                    <div className="flex items-center gap-1.5">
+                      <MfgBadge flag={unit.manufacturingRiskFlag} />
+                      <StatusChip status={unit.status} />
+                    </div>
                   </div>
 
                   {unit.flags.length > 0 && (
@@ -459,6 +463,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <MfgBadge flag={unit.manufacturingRiskFlag} />
                       <StatusChip status={unit.status} />
                       <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
                         <ArrowRight size={14} weight="bold" className="text-white" />

@@ -1,4 +1,4 @@
-import { loadFullDataset, loadUnitStageMedia } from "@/lib/server-data";
+import { loadUnitDetail, loadUnitStageMedia } from "@/lib/server-data";
 import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
 export default async function InstalledPhotoPage({
@@ -8,7 +8,7 @@ export default async function InstalledPhotoPage({
 }) {
   const { id } = await params;
   const [data, mediaItems] = await Promise.all([
-    loadFullDataset(),
+    loadUnitDetail(id),
     loadUnitStageMedia(id),
   ]);
 
