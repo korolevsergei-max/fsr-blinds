@@ -2,26 +2,26 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, CheckSquare } from "@phosphor-icons/react";
+import { ChartBar, Wrench } from "@phosphor-icons/react";
 
 const navItems = [
-  { href: "/qc", label: "Dashboard", Icon: ChartBar },
-  { href: "/qc/queue", label: "QC Queue", Icon: CheckSquare },
+  { href: "/assembler", label: "Dashboard", Icon: ChartBar },
+  { href: "/assembler/queue", label: "Queue", Icon: Wrench },
 ];
 
-export function QCNav() {
+export function AssemblerNav() {
   const pathname = usePathname();
 
   return (
     <nav
-      aria-label="QC navigation"
+      aria-label="Assembly & QC navigation"
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/98 backdrop-blur-lg lg:border-r"
     >
       <div className="mx-auto flex max-w-lg items-center justify-between px-1 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {navItems.map(({ href, label, Icon }) => {
           const active =
             pathname === href ||
-            (href !== "/qc" && pathname.startsWith(href));
+            (href !== "/assembler" && pathname.startsWith(href));
 
           return (
             <Link

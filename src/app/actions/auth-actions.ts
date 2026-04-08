@@ -41,7 +41,7 @@ function isAlreadyRegisteredAuthError(message: string): boolean {
   return normalized.includes("already been registered") || normalized.includes("already registered");
 }
 
-// Still used by createManufacturerAccount email-invite fallback.
+// Still used by createCutterAccount email-invite fallback.
 function isRateLimitError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes("email rate limit") || normalized.includes("rate limit exceeded") || normalized.includes("over_email_send_rate_limit");
@@ -92,11 +92,11 @@ async function deleteInstallersByEmail(admin: SupabaseClient, email: string) {
   await admin.from("installers").delete().ilike("email", e);
 }
 
-/** Remove manufacturer rows for this contact email (case-insensitive). */
-async function deleteManufacturersByContactEmail(admin: SupabaseClient, email: string) {
+/** Remove cutter rows for this contact email (case-insensitive). */
+async function deleteCuttersByContactEmail(admin: SupabaseClient, email: string) {
   const e = email.trim();
   if (!e) return;
-  await admin.from("manufacturers").delete().ilike("contact_email", e);
+  await admin.from("cutters").delete().ilike("contact_email", e);
 }
 
 function getAuthRedirectBaseUrl(): string {
@@ -246,7 +246,7 @@ export async function createInstallerAccount(
   }
 }
 
-export async function createManufacturerAccount(
+export async function createCutterAccount(
   name: string,
   email: string,
   contactName: string,
@@ -274,7 +274,7 @@ export async function createManufacturerAccount(
       email,
       password,
       email_confirm: true,
-      user_metadata: { display_name: name, role: "manufacturer" },
+      user_metadata: { display_name: name, role: "cutter" },
     });
 
     if (authErr) return { ok: false, error: authErr.message };
@@ -282,13 +282,13 @@ export async function createManufacturerAccount(
       return { ok: false, error: "Account created but no user id was returned." };
     }
 
-    await deleteManufacturersByContactEmail(admin, email);
+    await deleteCuttersByContactEmail(admin, email);
 
     const supabase = await createClient();
-    const mfrId = `mfr-${crypto.randomUUID().slice(0, 8)}`;
+    const cutterId = `cut-${crypto.randomUUID().slice(0, 8)}`;
 
-    const manufacturerInsertWithAuth = {
-      id: mfrId,
+    const cutterInsertWithAuth = {
+      id: cutterId,
       name,
       contact_name: contactName,
       contact_email: email,
@@ -296,27 +296,27 @@ export async function createManufacturerAccount(
       auth_user_id: authUser.user.id,
     };
 
-    let { error: mfrErr } = await supabase.from("manufacturers").insert(
-      manufacturerInsertWithAuth
+    let { error: cutErr } = await supabase.from("cutters").insert(
+      cutterInsertWithAuth
     );
-    if (isMissingColumnError(mfrErr, "manufacturers", "auth_user_id")) {
-      const manufacturerInsertLegacy = {
-        id: mfrId,
+    if (isMissingColumnError(cutErr, "cutters", "auth_user_id")) {
+      const cutterInsertLegacy = {
+        id: cutterId,
         name,
         contact_name: contactName,
         contact_email: email,
         contact_phone: phone,
       };
-      const retry = await supabase.from("manufacturers").insert(manufacturerInsertLegacy);
-      mfrErr = retry.error;
+      const retry = await supabase.from("cutters").insert(cutterInsertLegacy);
+      cutErr = retry.error;
     }
 
-    if (mfrErr) return { ok: false, error: mfrErr.message };
+    if (cutErr) return { ok: false, error: cutErr.message };
 
     revalidatePath("/management", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to create manufacturer" };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create cutter" };
   }
 }
 
@@ -379,8 +379,8 @@ export async function deleteInstallerAccount(
   }
 }
 
-export async function deleteManufacturerAccount(
-  manufacturerId: string,
+export async function deleteCutterAccount(
+  cutterId: string,
   authUserId: string | null,
   contactEmail?: string
 ): Promise<ActionResult> {
@@ -403,15 +403,15 @@ export async function deleteManufacturerAccount(
     }
 
     const { error: rowDelErr, count } = await admin
-      .from("manufacturers")
+      .from("cutters")
       .delete({ count: "exact" })
-      .eq("id", manufacturerId);
+      .eq("id", cutterId);
 
     if (rowDelErr) return { ok: false, error: rowDelErr.message };
 
     if ((count ?? 0) === 0 && contactEmail?.trim()) {
       const { error: emailDelErr } = await admin
-        .from("manufacturers")
+        .from("cutters")
         .delete()
         .ilike("contact_email", contactEmail.trim());
       if (emailDelErr) return { ok: false, error: emailDelErr.message };
@@ -420,7 +420,7 @@ export async function deleteManufacturerAccount(
     revalidatePath("/management/accounts", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete manufacturer" };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete cutter" };
   }
 }
 
@@ -593,7 +593,7 @@ export async function deleteSchedulerAccount(
   }
 }
 
-/** Remove an Auth user (and cascaded profile) that has no linked installer/manufacturer row. */
+/** Remove an Auth user (and cascaded profile) that has no linked installer/cutter row. */
 export async function deleteOrphanAuthAccount(
   authUserId: string,
   email: string
@@ -735,18 +735,18 @@ export async function changeAccountPassword(
   }
 }
 
-/** Remove qc_persons rows for this email so re-creation is not blocked by stale/orphan rows. */
-async function deleteQCPersonsByEmail(admin: SupabaseClient, email: string) {
+/** Remove assembler rows for this email so re-creation is not blocked by stale/orphan rows. */
+async function deleteAssemblersByEmail(admin: SupabaseClient, email: string) {
   const e = email.trim();
   if (!e) return;
-  await admin.from("qc_persons").delete().ilike("email", e);
+  await admin.from("assemblers").delete().ilike("email", e);
 }
 
 /**
- * Create a QC person account (direct password, no email invite).
+ * Create an assembler account (direct password, no email invite).
  * Mirrors createSchedulerAccount.
  */
-export async function createQCAccount(
+export async function createAssemblerAccount(
   name: string,
   email: string,
   phone: string,
@@ -773,7 +773,7 @@ export async function createQCAccount(
       email,
       password,
       email_confirm: true,
-      user_metadata: { display_name: name, role: "qc" },
+      user_metadata: { display_name: name, role: "assembler" },
     });
 
     if (authErr) return { ok: false, error: authErr.message };
@@ -781,33 +781,33 @@ export async function createQCAccount(
       return { ok: false, error: "Account created but no user id was returned." };
     }
 
-    await deleteQCPersonsByEmail(admin, email);
+    await deleteAssemblersByEmail(admin, email);
 
     const supabase = await createClient();
-    const qcId = `qc-${crypto.randomUUID().slice(0, 8)}`;
+    const asmId = `asm-${crypto.randomUUID().slice(0, 8)}`;
 
-    const { error: qcErr } = await supabase.from("qc_persons").insert({
-      id: qcId,
+    const { error: asmErr } = await supabase.from("assemblers").insert({
+      id: asmId,
       name,
       email,
       phone,
       auth_user_id: authUser.user.id,
     });
 
-    if (qcErr) return { ok: false, error: qcErr.message };
+    if (asmErr) return { ok: false, error: asmErr.message };
 
     revalidatePath("/management", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to create QC account" };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to create assembler account" };
   }
 }
 
 /**
- * Delete a QC person account.
+ * Delete an assembler account.
  */
-export async function deleteQCAccount(
-  qcPersonId: string,
+export async function deleteAssemblerAccount(
+  assemblerId: string,
   authUserId: string | null,
   email?: string
 ): Promise<ActionResult> {
@@ -827,9 +827,9 @@ export async function deleteQCAccount(
     }
 
     const { data: deletedById, error: delIdErr } = await admin
-      .from("qc_persons")
+      .from("assemblers")
       .delete()
-      .eq("id", qcPersonId)
+      .eq("id", assemblerId)
       .select("id");
 
     if (delIdErr) return { ok: false, error: delIdErr.message };
@@ -837,7 +837,7 @@ export async function deleteQCAccount(
     if (!deletedById?.length && email?.trim()) {
       const normalized = email.trim();
       const { data: deletedByEmail, error: delEmailErr } = await admin
-        .from("qc_persons")
+        .from("assemblers")
         .delete()
         .ilike("email", normalized)
         .select("id");
@@ -845,7 +845,7 @@ export async function deleteQCAccount(
       if (!deletedByEmail?.length) {
         return {
           ok: false,
-          error: "No QC person row was removed. Refresh the page and try again.",
+          error: "No assembler row was removed. Refresh the page and try again.",
         };
       }
     }
@@ -853,6 +853,6 @@ export async function deleteQCAccount(
     revalidatePath("/management/accounts", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete QC account" };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to delete assembler account" };
   }
 }

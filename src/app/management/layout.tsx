@@ -17,11 +17,11 @@ export default async function ManagementLayout({
   if (user.role === "scheduler") {
     redirect("/scheduler");
   }
-  if (user.role === "manufacturer") {
-    redirect("/manufacturer");
+  if (user.role === "cutter") {
+    redirect("/cutter");
   }
-  if (user.role === "qc") {
-    redirect("/qc");
+  if (user.role === "assembler") {
+    redirect("/assembler");
   }
   if (user.role !== "owner") {
     redirect("/login");

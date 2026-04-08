@@ -5,23 +5,23 @@ import { usePathname } from "next/navigation";
 import { ChartBar, Queue } from "@phosphor-icons/react";
 
 const navItems = [
-  { href: "/manufacturer", label: "Dashboard", Icon: ChartBar },
-  { href: "/manufacturer/queue", label: "Queue", Icon: Queue },
+  { href: "/cutter", label: "Dashboard", Icon: ChartBar },
+  { href: "/cutter/queue", label: "Queue", Icon: Queue },
 ];
 
-export function ManufacturerNav() {
+export function CutterNav() {
   const pathname = usePathname();
 
   return (
     <nav
-      aria-label="Manufacturer navigation"
+      aria-label="Cutter navigation"
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/98 backdrop-blur-lg lg:border-r"
     >
       <div className="mx-auto flex max-w-lg items-center justify-between px-1 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {navItems.map(({ href, label, Icon }) => {
           const active =
             pathname === href ||
-            (href !== "/manufacturer" && pathname.startsWith(href));
+            (href !== "/cutter" && pathname.startsWith(href));
 
           return (
             <Link

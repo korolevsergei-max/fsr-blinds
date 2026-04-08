@@ -135,18 +135,18 @@ export async function updateSession(request: NextRequest) {
           ),
           authInvalidated
         );
-      if (profile?.role === "manufacturer")
+      if (profile?.role === "cutter")
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/manufacturer", request.url)),
+            NextResponse.redirect(new URL("/cutter", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
         );
-      if (profile?.role === "qc")
+      if (profile?.role === "assembler")
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/qc", request.url)),
+            NextResponse.redirect(new URL("/assembler", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -182,8 +182,8 @@ export async function updateSession(request: NextRequest) {
     (pathname.startsWith("/management") ||
       pathname.startsWith("/installer") ||
       pathname.startsWith("/scheduler") ||
-      pathname.startsWith("/manufacturer") ||
-      pathname.startsWith("/qc"))
+      pathname.startsWith("/cutter") ||
+      pathname.startsWith("/assembler"))
   ) {
     return finish(
       applyAuthCookieDeletions(
@@ -204,7 +204,7 @@ export async function updateSession(request: NextRequest) {
     const role = profile?.role;
 
     /**
-     * Route installers/schedulers to their portals. Allow owner, manufacturer, or **missing**
+     * Route installers/schedulers to their portals. Allow owner, cutter, or **missing**
      * profile through — `getCurrentUser` in layouts can repair / infer profile. Previously,
      * `profile == null` made `profile?.role` undefined, which matched "not owner" and sent
      * users to `/login` (e.g. flaky RLS/read or row not visible yet on cold navigation).
@@ -227,19 +227,19 @@ export async function updateSession(request: NextRequest) {
         authInvalidated
       );
     }
-    if (role === "manufacturer") {
+    if (role === "cutter") {
       return finish(
         applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/manufacturer", request.url)),
+          NextResponse.redirect(new URL("/cutter", request.url)),
           deletedAuthCookieNames ?? []
         ),
         authInvalidated
       );
     }
-    if (role === "qc") {
+    if (role === "assembler") {
       return finish(
         applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/qc", request.url)),
+          NextResponse.redirect(new URL("/assembler", request.url)),
           deletedAuthCookieNames ?? []
         ),
         authInvalidated
@@ -273,10 +273,10 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "manufacturer") {
+      if (profile?.role === "cutter") {
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/manufacturer", request.url)),
+            NextResponse.redirect(new URL("/cutter", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -291,10 +291,10 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "qc") {
+      if (profile?.role === "assembler") {
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/qc", request.url)),
+            NextResponse.redirect(new URL("/assembler", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -327,10 +327,10 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "manufacturer") {
+      if (profile?.role === "cutter") {
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/manufacturer", request.url)),
+            NextResponse.redirect(new URL("/cutter", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -345,10 +345,10 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "qc") {
+      if (profile?.role === "assembler") {
         return finish(
           applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/qc", request.url)),
+            NextResponse.redirect(new URL("/assembler", request.url)),
             deletedAuthCookieNames ?? []
           ),
           authInvalidated
@@ -364,14 +364,14 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  if (user && pathname.startsWith("/manufacturer")) {
+  if (user && pathname.startsWith("/cutter")) {
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "manufacturer") {
+    if (profile?.role !== "cutter") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(
@@ -384,14 +384,14 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  if (user && pathname.startsWith("/qc")) {
+  if (user && pathname.startsWith("/assembler")) {
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "qc") {
+    if (profile?.role !== "assembler") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(

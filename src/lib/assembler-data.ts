@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus } from "@/lib/types";
 
-export interface QCUnit {
+export interface AssemblerUnit {
   id: string;
   unitNumber: string;
   buildingName: string;
@@ -9,11 +9,12 @@ export interface QCUnit {
   installationDate: string | null;
   windowCount: number;
   manufacturingRiskFlag: RiskFlag;
-  builtCount: number;
+  cutCount: number;
+  assembledCount: number;
   qcApprovedCount: number;
 }
 
-export interface QCWindow {
+export interface AssemblerWindow {
   id: string;
   roomId: string;
   label: string;
@@ -28,54 +29,79 @@ export interface QCWindow {
   production: WindowProductionStatus | null;
 }
 
-export interface QCRoom {
+export interface AssemblerRoom {
   id: string;
   unitId: string;
   name: string;
 }
 
-export interface QCUnitDetail {
-  unit: QCUnit;
-  rooms: QCRoom[];
-  windows: QCWindow[];
+export interface AssemblerUnitDetail {
+  unit: AssemblerUnit;
+  rooms: AssemblerRoom[];
+  windows: AssemblerWindow[];
 }
 
-/** Units where at least one window is in 'built' status (ready for QC). */
-export async function loadQCDataset(): Promise<{ units: QCUnit[] }> {
+function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus {
+  return {
+    id: p.id as string,
+    windowId: p.window_id as string,
+    unitId: p.unit_id as string,
+    status: p.status as ProductionStatus,
+    cutByCutterId: (p.cut_by_cutter_id as string) ?? null,
+    cutAt: (p.cut_at as string) ?? null,
+    cutNotes: (p.cut_notes as string) ?? "",
+    assembledByAssemblerId: (p.assembled_by_assembler_id as string) ?? null,
+    assembledAt: (p.assembled_at as string) ?? null,
+    assembledNotes: (p.assembled_notes as string) ?? "",
+    qcApprovedByAssemblerId: (p.qc_approved_by_assembler_id as string) ?? null,
+    qcApprovedAt: (p.qc_approved_at as string) ?? null,
+    qcNotes: (p.qc_notes as string) ?? "",
+    createdAt: p.created_at as string,
+  };
+}
+
+/** Units where at least one window is in 'cut' or 'assembled' status (ready for assembler). */
+export async function loadAssemblerDataset(): Promise<{ units: AssemblerUnit[] }> {
   const supabase = await createClient();
 
-  // Get all window_production_status rows to find units with 'built' windows
+  // Get all window_production_status rows to find units with cut/assembled windows
   const { data: prodRows } = await supabase
     .from("window_production_status")
     .select("unit_id, status");
 
   if (!prodRows || prodRows.length === 0) return { units: [] };
 
-  // Find unit IDs that have at least one 'built' window
-  const unitIdsWithBuilt = [
+  // Find unit IDs that have at least one 'cut' or 'assembled' window
+  const unitIdsReady = [
     ...new Set(
-      prodRows.filter((r) => r.status === "built").map((r) => r.unit_id)
+      prodRows
+        .filter((r) => r.status === "cut" || r.status === "assembled")
+        .map((r) => r.unit_id)
     ),
   ];
 
-  if (unitIdsWithBuilt.length === 0) return { units: [] };
+  if (unitIdsReady.length === 0) return { units: [] };
 
   const { data: units } = await supabase
     .from("units")
     .select(
       "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag"
     )
-    .in("id", unitIdsWithBuilt)
+    .in("id", unitIdsReady)
     .order("installation_date", { ascending: true, nullsFirst: false });
 
   if (!units) return { units: [] };
 
   // Build counts per unit
-  const builtMap = new Map<string, number>();
+  const cutMap = new Map<string, number>();
+  const assembledMap = new Map<string, number>();
   const qcMap = new Map<string, number>();
   for (const row of prodRows) {
-    if (row.status === "built" || row.status === "qc_approved") {
-      builtMap.set(row.unit_id, (builtMap.get(row.unit_id) ?? 0) + 1);
+    if (row.status === "cut" || row.status === "assembled" || row.status === "qc_approved") {
+      cutMap.set(row.unit_id, (cutMap.get(row.unit_id) ?? 0) + 1);
+    }
+    if (row.status === "assembled" || row.status === "qc_approved") {
+      assembledMap.set(row.unit_id, (assembledMap.get(row.unit_id) ?? 0) + 1);
     }
     if (row.status === "qc_approved") {
       qcMap.set(row.unit_id, (qcMap.get(row.unit_id) ?? 0) + 1);
@@ -91,13 +117,14 @@ export async function loadQCDataset(): Promise<{ units: QCUnit[] }> {
       installationDate: u.installation_date ?? null,
       windowCount: u.window_count ?? 0,
       manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
-      builtCount: builtMap.get(u.id) ?? 0,
+      cutCount: cutMap.get(u.id) ?? 0,
+      assembledCount: assembledMap.get(u.id) ?? 0,
       qcApprovedCount: qcMap.get(u.id) ?? 0,
     })),
   };
 }
 
-export async function loadQCUnitDetail(unitId: string): Promise<QCUnitDetail | null> {
+export async function loadAssemblerUnitDetail(unitId: string): Promise<AssemblerUnitDetail | null> {
   const supabase = await createClient();
 
   const [unitRes, roomsRes, windowsRes, productionRes] = await Promise.all([
@@ -128,7 +155,7 @@ export async function loadQCUnitDetail(unitId: string): Promise<QCUnitDetail | n
   if (unitRes.error || !unitRes.data) return null;
 
   const u = unitRes.data;
-  const rooms: QCRoom[] = (roomsRes.data ?? []).map((r) => ({
+  const rooms: AssemblerRoom[] = (roomsRes.data ?? []).map((r) => ({
     id: r.id,
     unitId: r.unit_id,
     name: r.name,
@@ -138,30 +165,21 @@ export async function loadQCUnitDetail(unitId: string): Promise<QCUnitDetail | n
   const productionMap = new Map<string, WindowProductionStatus>(
     (productionRes.data ?? []).map((p) => [
       p.window_id,
-      {
-        id: p.id,
-        windowId: p.window_id,
-        unitId: p.unit_id,
-        status: p.status as ProductionStatus,
-        builtByManufacturerId: p.built_by_manufacturer_id ?? null,
-        builtAt: p.built_at ?? null,
-        builtNotes: p.built_notes ?? "",
-        qcApprovedByQcId: p.qc_approved_by_qc_id ?? null,
-        qcApprovedAt: p.qc_approved_at ?? null,
-        qcNotes: p.qc_notes ?? "",
-        createdAt: p.created_at,
-      },
+      mapProductionStatus(p as unknown as Record<string, unknown>),
     ])
   );
 
-  const builtCount = [...productionMap.values()].filter(
-    (p) => p.status === "built" || p.status === "qc_approved"
+  const cutCount = [...productionMap.values()].filter(
+    (p) => p.status === "cut" || p.status === "assembled" || p.status === "qc_approved"
+  ).length;
+  const assembledCount = [...productionMap.values()].filter(
+    (p) => p.status === "assembled" || p.status === "qc_approved"
   ).length;
   const qcApprovedCount = [...productionMap.values()].filter(
     (p) => p.status === "qc_approved"
   ).length;
 
-  const unit: QCUnit = {
+  const unit: AssemblerUnit = {
     id: u.id,
     unitNumber: u.unit_number,
     buildingName: u.building_name,
@@ -169,11 +187,12 @@ export async function loadQCUnitDetail(unitId: string): Promise<QCUnitDetail | n
     installationDate: u.installation_date ?? null,
     windowCount: u.window_count ?? 0,
     manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
-    builtCount,
+    cutCount,
+    assembledCount,
     qcApprovedCount,
   };
 
-  const windows: QCWindow[] = (windowsRes.data ?? [])
+  const windows: AssemblerWindow[] = (windowsRes.data ?? [])
     .filter((w) => roomIds.has(w.room_id))
     .map((w) => ({
       id: w.id,

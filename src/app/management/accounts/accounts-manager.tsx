@@ -19,8 +19,8 @@ import {
   Crown,
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
-import type { Building, Client, QCPerson } from "@/lib/types";
-import type { InstallerManufacturerAuthDrift } from "@/lib/account-sync";
+import type { Building, Client, Assembler } from "@/lib/types";
+import type { InstallerCutterAuthDrift } from "@/lib/account-sync";
 import type { OwnerProfile } from "./page";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -29,14 +29,14 @@ import { InlineAlert } from "@/components/ui/inline-alert";
 import { InstallersList } from "@/components/installers/installers-list";
 import { InviteInstallerForm } from "@/components/installers/invite-installer-form";
 import {
-  createManufacturerAccount,
+  createCutterAccount,
   createSchedulerAccount,
-  createQCAccount,
+  createAssemblerAccount,
   createOwnerAccount,
   deleteInstallerAccount,
-  deleteManufacturerAccount,
+  deleteCutterAccount,
   deleteSchedulerAccount,
-  deleteQCAccount,
+  deleteAssemblerAccount,
   deleteOwnerAccount,
   deleteOrphanAuthAccount,
   setSchedulerBuildingAccess,
@@ -44,7 +44,7 @@ import {
 import { CalendarCheck } from "@phosphor-icons/react";
 import { ChangePasswordInline } from "@/components/ui/change-password-inline";
 
-type Tab = "installers" | "manufacturers" | "schedulers" | "qc" | "owners";
+type Tab = "installers" | "cutters" | "schedulers" | "assemblers" | "owners";
 
 function humanizeInviteError(message: string): string {
   const normalized = message.toLowerCase();
@@ -67,29 +67,29 @@ export function AccountsManager({
   authDrift,
   schedulerAccess,
   ownerProfiles,
-  qcPersons,
+  assemblers,
   currentUserAuthId,
 }: {
   data: AppDataset;
-  authDrift: InstallerManufacturerAuthDrift[];
+  authDrift: InstallerCutterAuthDrift[];
   schedulerAccess: Record<string, string[]>;
   ownerProfiles: OwnerProfile[];
-  qcPersons: QCPerson[];
+  assemblers: Assembler[];
   currentUserAuthId: string;
 }) {
-  const { installers, manufacturers, schedulers, units, clients, buildings } = data;
+  const { installers, cutters, schedulers, units, clients, buildings } = data;
   const [tab, setTab] = useState<Tab>("installers");
   const [showForm, setShowForm] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deletePending, startDeleteTransition] = useTransition();
   const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
 
-  const linkedManufacturers = manufacturers.filter((m) => Boolean(m.authUserId));
-  const orphanManufacturers = manufacturers.filter((m) => !m.authUserId);
+  const linkedCutters = cutters.filter((m) => Boolean(m.authUserId));
+  const orphanCutters = cutters.filter((m) => !m.authUserId);
   const linkedSchedulers = schedulers.filter((s) => Boolean(s.authUserId));
   const orphanSchedulers = schedulers.filter((s) => !s.authUserId);
-  const linkedQCPersons = qcPersons.filter((q) => Boolean(q.authUserId));
-  const orphanQCPersons = qcPersons.filter((q) => !q.authUserId);
+  const linkedAssemblers = assemblers.filter((a: Assembler) => Boolean(a.authUserId));
+  const orphanAssemblers = assemblers.filter((a: Assembler) => !a.authUserId);
 
   const handleDeleteInstaller = (inst: AppDataset["installers"][number]) => {
     if (!confirm(`Delete installer "${inst.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
@@ -106,13 +106,13 @@ export function AccountsManager({
     });
   };
 
-  const handleDeleteManufacturer = (mfr: AppDataset["manufacturers"][number]) => {
-    if (!confirm(`Delete manufacturer "${mfr.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
+  const handleDeleteCutter = (cutter: AppDataset["cutters"][number]) => {
+    if (!confirm(`Delete cutter "${cutter.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
       return;
     }
     setDeleteError("");
     startDeleteTransition(async () => {
-      const result = await deleteManufacturerAccount(mfr.id, mfr.authUserId, mfr.contactEmail);
+      const result = await deleteCutterAccount(cutter.id, cutter.authUserId, cutter.contactEmail);
       if (!result.ok) {
         setDeleteError(result.error);
         return;
@@ -136,13 +136,13 @@ export function AccountsManager({
     });
   };
 
-  const handleDeleteQCPerson = (qc: QCPerson) => {
-    if (!confirm(`Delete QC person "${qc.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
+  const handleDeleteAssembler = (asm: Assembler) => {
+    if (!confirm(`Delete assembler "${asm.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
       return;
     }
     setDeleteError("");
     startDeleteTransition(async () => {
-      const result = await deleteQCAccount(qc.id, qc.authUserId, qc.email);
+      const result = await deleteAssemblerAccount(asm.id, asm.authUserId, asm.email);
       if (!result.ok) {
         setDeleteError(result.error);
         return;
@@ -170,7 +170,7 @@ export function AccountsManager({
     });
   };
 
-  const handleRemoveDrift = (entry: InstallerManufacturerAuthDrift) => {
+  const handleRemoveDrift = (entry: InstallerCutterAuthDrift) => {
     if (
       !confirm(
         `Remove Supabase login for ${entry.email}? They will not be able to sign in until invited again.`
@@ -204,7 +204,7 @@ export function AccountsManager({
       {authDrift.length > 0 && (
         <div className="px-4 pt-4 flex flex-col gap-3">
           <InlineAlert variant="warning">
-            These logins exist in Supabase Authentication (installer or manufacturer) but are not
+            These logins exist in Supabase Authentication (installer or cutter) but are not
             linked from this Accounts list. Remove them to clear stale users, then invite again if
             needed.
           </InlineAlert>
@@ -255,7 +255,7 @@ export function AccountsManager({
 
       {/* Tabs */}
       <div className="px-4 pt-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
-        {(["installers", "manufacturers", "schedulers", "qc", "owners"] as Tab[]).map((t) => (
+        {(["installers", "cutters", "schedulers", "assemblers", "owners"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -267,9 +267,9 @@ export function AccountsManager({
             ].join(" ")}
           >
             {t === "installers" ? "Installers"
-              : t === "manufacturers" ? "Manufacturers"
+              : t === "cutters" ? "Cutters"
               : t === "schedulers" ? "Schedulers"
-              : t === "qc" ? "QC"
+              : t === "assemblers" ? "Assemblers"
               : "Owners"}
           </button>
         ))}
@@ -282,16 +282,16 @@ export function AccountsManager({
             <InviteInstallerForm
               onDone={() => { setShowForm(false); window.location.reload(); }}
             />
-          ) : tab === "manufacturers" ? (
-            <InviteManufacturerForm
+          ) : tab === "cutters" ? (
+            <InviteCutterForm
               onDone={() => { setShowForm(false); window.location.reload(); }}
             />
           ) : tab === "schedulers" ? (
             <InviteSchedulerForm
               onDone={() => { setShowForm(false); window.location.reload(); }}
             />
-          ) : tab === "qc" ? (
-            <InviteQCForm
+          ) : tab === "assemblers" ? (
+            <InviteAssemblerForm
               onDone={() => { setShowForm(false); window.location.reload(); }}
             />
           ) : (
@@ -320,9 +320,9 @@ export function AccountsManager({
           </>
         )}
 
-        {tab === "manufacturers" && (
+        {tab === "cutters" && (
           <>
-            {linkedManufacturers.map((mfr, i) => (
+            {linkedCutters.map((mfr, i) => (
               <motion.div
                 key={mfr.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -343,14 +343,14 @@ export function AccountsManager({
                         <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
                           {mfr.name}
                         </h3>
-                        <p className="text-[12px] text-tertiary">Manufacturer</p>
+                        <p className="text-[12px] text-tertiary">Cutter</p>
                       </div>
                     </div>
                     <Button
                       size="sm"
                       variant="danger"
                       disabled={deletePending}
-                      onClick={() => handleDeleteManufacturer(mfr)}
+                      onClick={() => handleDeleteCutter(mfr)}
                     >
                       Delete
                     </Button>
@@ -379,15 +379,15 @@ export function AccountsManager({
               </motion.div>
             ))}
 
-            {orphanManufacturers.length > 0 && (
+            {orphanCutters.length > 0 && (
               <>
                 <div className="pt-2">
                   <InlineAlert variant="error">
-                    Orphaned manufacturer records (not linked to Supabase Auth):{" "}
-                    {orphanManufacturers.length}. Use Delete to remove them.
+                    Orphaned cutter records (not linked to Supabase Auth):{" "}
+                    {orphanCutters.length}. Use Delete to remove them.
                   </InlineAlert>
                 </div>
-                {orphanManufacturers.map((mfr, i) => (
+                {orphanCutters.map((mfr, i) => (
                   <motion.div
                     key={mfr.id}
                     initial={{ opacity: 0, y: 8 }}
@@ -408,14 +408,14 @@ export function AccountsManager({
                             <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
                               {mfr.name}
                             </h3>
-                            <p className="text-[12px] text-tertiary">Manufacturer</p>
+                            <p className="text-[12px] text-tertiary">Cutter</p>
                           </div>
                         </div>
                         <Button
                           size="sm"
                           variant="danger"
                           disabled={deletePending}
-                          onClick={() => handleDeleteManufacturer(mfr)}
+                          onClick={() => handleDeleteCutter(mfr)}
                         >
                           Delete
                         </Button>
@@ -445,9 +445,9 @@ export function AccountsManager({
               </>
             )}
 
-            {manufacturers.length === 0 && (
+            {cutters.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No manufacturers yet. Tap Invite to add one.
+                No cutters yet. Tap Invite to add one.
               </div>
             )}
           </>
@@ -571,9 +571,9 @@ export function AccountsManager({
           </>
         )}
 
-        {tab === "qc" && (
+        {tab === "assemblers" && (
           <>
-            {linkedQCPersons.map((qc, i) => (
+            {linkedAssemblers.map((qc: Assembler, i: number) => (
               <motion.div
                 key={qc.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -588,14 +588,14 @@ export function AccountsManager({
                       </div>
                       <div>
                         <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                        <p className="text-[12px] text-tertiary">QC Person</p>
+                        <p className="text-[12px] text-tertiary">Assembler</p>
                       </div>
                     </div>
                     <Button
                       size="sm"
                       variant="danger"
                       disabled={deletePending}
-                      onClick={() => handleDeleteQCPerson(qc)}
+                      onClick={() => handleDeleteAssembler(qc)}
                     >
                       Delete
                     </Button>
@@ -617,15 +617,15 @@ export function AccountsManager({
               </motion.div>
             ))}
 
-            {orphanQCPersons.length > 0 && (
+            {orphanAssemblers.length > 0 && (
               <>
                 <div className="pt-2">
                   <InlineAlert variant="error">
-                    Orphaned QC records (not linked to Supabase Auth):{" "}
-                    {orphanQCPersons.length}. Use Delete to remove them.
+                    Orphaned assembler records (not linked to Supabase Auth):{" "}
+                    {orphanAssemblers.length}. Use Delete to remove them.
                   </InlineAlert>
                 </div>
-                {orphanQCPersons.map((qc, i) => (
+                {orphanAssemblers.map((qc: Assembler, i: number) => (
                   <motion.div
                     key={qc.id}
                     initial={{ opacity: 0, y: 8 }}
@@ -640,10 +640,10 @@ export function AccountsManager({
                           </div>
                           <div>
                             <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                            <p className="text-[12px] text-tertiary">QC Person (orphan)</p>
+                            <p className="text-[12px] text-tertiary">Assembler (orphan)</p>
                           </div>
                         </div>
-                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteQCPerson(qc)}>
+                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteAssembler(qc)}>
                           Delete
                         </Button>
                       </div>
@@ -653,9 +653,9 @@ export function AccountsManager({
               </>
             )}
 
-            {qcPersons.length === 0 && (
+            {assemblers.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No QC persons yet. Tap Invite to add one.
+                No assemblers yet. Tap Invite to add one.
               </div>
             )}
           </>
@@ -996,7 +996,7 @@ function InviteSchedulerForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function InviteManufacturerForm({ onDone }: { onDone: () => void }) {
+function InviteCutterForm({ onDone }: { onDone: () => void }) {
   const [contactName, setContactName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -1018,7 +1018,7 @@ function InviteManufacturerForm({ onDone }: { onDone: () => void }) {
     }
     setError("");
     startTransition(async () => {
-      const result = await createManufacturerAccount(contactName, email, "", phone, password);
+      const result = await createCutterAccount(contactName, email, "", phone, password);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -1040,7 +1040,7 @@ function InviteManufacturerForm({ onDone }: { onDone: () => void }) {
           <CheckCircle size={18} weight="fill" className="text-success" />
           <p className="text-[15px] font-semibold text-foreground tracking-tight">Account created</p>
         </div>
-        <p className="text-[12px] text-tertiary -mt-2">Share these login credentials with the manufacturer directly.</p>
+        <p className="text-[12px] text-tertiary -mt-2">Share these login credentials with the cutter directly.</p>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 bg-surface border border-border rounded-[var(--radius-md)] px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-tertiary w-14 flex-shrink-0">Email</span>
@@ -1072,7 +1072,7 @@ function InviteManufacturerForm({ onDone }: { onDone: () => void }) {
   return (
     <div className="surface-card p-4 flex flex-col gap-4">
       <div>
-        <p className="text-[15px] font-semibold text-foreground tracking-tight">Add manufacturer</p>
+        <p className="text-[15px] font-semibold text-foreground tracking-tight">Add cutter</p>
         <p className="text-[12px] text-tertiary mt-0.5">Set their email and password — no email sent. Share credentials directly.</p>
       </div>
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
@@ -1101,7 +1101,7 @@ function InviteManufacturerForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function InviteQCForm({ onDone }: { onDone: () => void }) {
+function InviteAssemblerForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -1123,7 +1123,7 @@ function InviteQCForm({ onDone }: { onDone: () => void }) {
     }
     setError("");
     startTransition(async () => {
-      const result = await createQCAccount(name, email, phone, password);
+      const result = await createAssemblerAccount(name, email, phone, password);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -1145,7 +1145,7 @@ function InviteQCForm({ onDone }: { onDone: () => void }) {
           <CheckCircle size={18} weight="fill" className="text-success" />
           <p className="text-[15px] font-semibold text-foreground tracking-tight">Account created</p>
         </div>
-        <p className="text-[12px] text-tertiary -mt-2">Share these login credentials with the QC person directly.</p>
+        <p className="text-[12px] text-tertiary -mt-2">Share these login credentials with the assembler directly.</p>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 bg-surface border border-border rounded-[var(--radius-md)] px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-tertiary w-14 flex-shrink-0">Email</span>
@@ -1177,7 +1177,7 @@ function InviteQCForm({ onDone }: { onDone: () => void }) {
   return (
     <div className="surface-card p-4 flex flex-col gap-4">
       <div>
-        <p className="text-[15px] font-semibold text-foreground tracking-tight">Add QC person</p>
+        <p className="text-[15px] font-semibold text-foreground tracking-tight">Add assembler</p>
         <p className="text-[12px] text-tertiary mt-0.5">Set their email and password — no email sent. Share credentials directly.</p>
       </div>
       {error && <InlineAlert variant="error">{error}</InlineAlert>}

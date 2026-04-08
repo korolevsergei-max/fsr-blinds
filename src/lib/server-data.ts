@@ -7,7 +7,7 @@ import type {
   Building,
   Client,
   Installer,
-  Manufacturer,
+  Cutter,
   Scheduler,
   Notification,
   Room,
@@ -124,7 +124,7 @@ type ScheduleRow = {
   risk_flag: RiskFlag;
 };
 
-type ManufacturerRow = {
+type CutterRow = {
   id: string;
   name: string;
   contact_name: string;
@@ -342,7 +342,7 @@ function normalizeScheduleEntries(units: Unit[], schedule: ScheduleEntry[]): Sch
   );
 }
 
-function mapManufacturer(r: ManufacturerRow): Manufacturer {
+function mapCutter(r: CutterRow): Cutter {
   return {
     id: r.id,
     name: r.name,
@@ -385,8 +385,8 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   ]);
 
   // Optional tables — only exist after their migration is applied.
-  const [manufacturersRes, schedulersRes, assignmentsRes] = await Promise.all([
-    supabase.from("manufacturers").select("*").order("name"),
+  const [cuttersRes, schedulersRes, assignmentsRes] = await Promise.all([
+    supabase.from("cutters").select("*").order("name"),
     supabase.from("schedulers").select("*").order("name"),
     supabase.from("scheduler_unit_assignments").select("unit_id, scheduler_id, assigned_at"),
   ]);
@@ -456,9 +456,9 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     windows: (windowsRes.data as WindowRow[]).map(mapWindow),
     installers: combinedInstallers,
     schedule,
-    manufacturers: manufacturersRes.error
+    cutters: cuttersRes.error
       ? []
-      : (manufacturersRes.data as ManufacturerRow[])?.map(mapManufacturer) ?? [],
+      : (cuttersRes.data as CutterRow[])?.map(mapCutter) ?? [],
     schedulers,
   };
 });
@@ -472,7 +472,7 @@ function emptyDataset(): AppDataset {
     windows: [],
     installers: [],
     schedule: [],
-    manufacturers: [],
+    cutters: [],
     schedulers: [],
   };
 }
@@ -629,7 +629,7 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     windows,
     installers,
     schedule,
-    manufacturers: [],
+    cutters: [],
     schedulers: [],
   };
 }

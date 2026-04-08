@@ -47,11 +47,12 @@ export const UNIT_PHOTO_STAGE_HELPERS: Record<UnitPhotoStage, string> = {
 
 export type RiskFlag = "green" | "yellow" | "red" | "complete";
 
-export type ProductionStatus = "pending" | "built" | "qc_approved";
+export type ProductionStatus = "pending" | "cut" | "assembled" | "qc_approved";
 
 export const PRODUCTION_STATUS_LABELS: Record<ProductionStatus, string> = {
   pending: "Pending",
-  built: "Built",
+  cut: "Cut",
+  assembled: "Assembled",
   qc_approved: "QC Approved",
 };
 
@@ -60,10 +61,13 @@ export interface WindowProductionStatus {
   windowId: string;
   unitId: string;
   status: ProductionStatus;
-  builtByManufacturerId: string | null;
-  builtAt: string | null;
-  builtNotes: string;
-  qcApprovedByQcId: string | null;
+  cutByCutterId: string | null;
+  cutAt: string | null;
+  cutNotes: string;
+  assembledByAssemblerId: string | null;
+  assembledAt: string | null;
+  assembledNotes: string;
+  qcApprovedByAssemblerId: string | null;
   qcApprovedAt: string | null;
   qcNotes: string;
   createdAt: string;
@@ -180,7 +184,7 @@ export interface Installer {
   authUserId: string | null;
 }
 
-export interface Manufacturer {
+export interface Cutter {
   id: string;
   name: string;
   contactName: string;
@@ -197,7 +201,7 @@ export interface Scheduler {
   authUserId: string | null;
 }
 
-export interface QCPerson {
+export interface Assembler {
   id: string;
   name: string;
   email: string;

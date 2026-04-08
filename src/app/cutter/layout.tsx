@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { ManufacturerNav } from "./manufacturer-nav";
+import { CutterNav } from "./cutter-nav";
 
-export default async function ManufacturerLayout({
+export default async function CutterLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -20,10 +20,10 @@ export default async function ManufacturerLayout({
   if (user.role === "scheduler") {
     redirect("/scheduler");
   }
-  if (user.role === "qc") {
-    redirect("/qc");
+  if (user.role === "assembler") {
+    redirect("/assembler");
   }
-  if (user.role !== "manufacturer") {
+  if (user.role !== "cutter") {
     redirect("/login");
   }
 
@@ -34,7 +34,7 @@ export default async function ManufacturerLayout({
           <main id="main-content">{children}</main>
         </div>
       </div>
-      <ManufacturerNav />
+      <CutterNav />
     </>
   );
 }

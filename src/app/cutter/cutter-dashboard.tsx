@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { SignOut, WarningCircle, CheckCircle, Hourglass, Queue } from "@phosphor-icons/react";
 import { signOut } from "@/app/actions/auth-actions";
-import type { ManufacturerDataset } from "@/lib/manufacturer-data";
+import type { CutterDataset } from "@/lib/cutter-data";
 
 function urgencyBucket(installationDate: string | null): "overdue" | "due_soon" | "upcoming" | "no_date" {
   if (!installationDate) return "no_date";
@@ -18,11 +18,11 @@ function urgencyBucket(installationDate: string | null): "overdue" | "due_soon" 
   return "upcoming";
 }
 
-export function ManufacturerDashboard({
+export function CutterDashboard({
   data,
   userName,
 }: {
-  data: ManufacturerDataset;
+  data: CutterDataset;
   userName?: string;
 }) {
   const router = useRouter();
@@ -39,9 +39,9 @@ export function ManufacturerDashboard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-tertiary uppercase tracking-widest font-medium mb-1">Manufacturer</p>
+          <p className="text-xs text-tertiary uppercase tracking-widest font-medium mb-1">Cutter</p>
           <h1 className="text-xl font-semibold text-primary">
-            {userName ? `Hi, ${userName.split(" ")[0]}` : "Production"}
+            {userName ? `Hi, ${userName.split(" ")[0]}` : "Cutting"}
           </h1>
         </div>
         <button
@@ -78,12 +78,12 @@ export function ManufacturerDashboard({
 
       {/* Quick access to queue */}
       <button
-        onClick={() => router.push("/manufacturer/queue")}
+        onClick={() => router.push("/cutter/queue")}
         className="w-full flex items-center justify-between px-4 py-3 bg-accent text-white rounded-xl font-medium text-sm active:opacity-80 transition-opacity"
       >
         <span className="flex items-center gap-2">
           <Queue size={18} />
-          Open Production Queue
+          Open Cutting Queue
         </span>
         <span className="text-white/80">{units.length} unit{units.length !== 1 ? "s" : ""}</span>
       </button>
@@ -93,16 +93,16 @@ export function ManufacturerDashboard({
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 space-y-1">
           <p className="text-sm font-semibold text-red-700 flex items-center gap-1.5">
             <WarningCircle size={16} weight="fill" />
-            {overdue.length} unit{overdue.length !== 1 ? "s" : ""} past the build deadline
+            {overdue.length} unit{overdue.length !== 1 ? "s" : ""} past the cutting deadline
           </p>
           <p className="text-xs text-red-600">
-            Installation date is within 3 days. Complete and QC these urgently.
+            Installation date is within 3 days. Cut these urgently.
           </p>
           <div className="mt-2 space-y-1">
             {overdue.slice(0, 3).map((u) => (
               <button
                 key={u.id}
-                onClick={() => router.push(`/manufacturer/units/${u.id}`)}
+                onClick={() => router.push(`/cutter/units/${u.id}`)}
                 className="w-full text-left text-xs text-red-700 font-medium hover:underline"
               >
                 Unit {u.unitNumber} — {u.buildingName}
@@ -131,7 +131,7 @@ export function ManufacturerDashboard({
             {dueSoon.slice(0, 3).map((u) => (
               <button
                 key={u.id}
-                onClick={() => router.push(`/manufacturer/units/${u.id}`)}
+                onClick={() => router.push(`/cutter/units/${u.id}`)}
                 className="w-full text-left text-xs text-yellow-700 font-medium hover:underline"
               >
                 Unit {u.unitNumber} — {u.buildingName}
@@ -154,11 +154,11 @@ export function ManufacturerDashboard({
         <div className="rounded-xl border border-border bg-white px-4 py-8 text-center">
           <CheckCircle size={32} className="mx-auto mb-2 text-green-500" weight="fill" />
           <p className="text-sm font-medium text-primary">All caught up!</p>
-          <p className="text-xs text-tertiary mt-1">No units in the production queue right now.</p>
+          <p className="text-xs text-tertiary mt-1">No units in the cutting queue right now.</p>
         </div>
       )}
 
-      {/* Upcoming count */}
+      {/* No date */}
       {noDate.length > 0 && (
         <p className="text-xs text-tertiary text-center">
           {noDate.length} unit{noDate.length !== 1 ? "s" : ""} without an installation date assigned

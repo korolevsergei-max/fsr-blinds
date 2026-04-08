@@ -5,21 +5,20 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle,
-  Hammer,
+  Scissors,
   Ruler,
   Warning,
-  Hourglass,
 } from "@phosphor-icons/react";
-import { markWindowQCApproved } from "@/app/actions/manufacturer-actions";
-import type { QCUnitDetail as DetailType, QCWindow } from "@/lib/qc-data";
+import { markWindowCut } from "@/app/actions/production-actions";
+import type { CutterUnitDetail as DetailType, CutterWindow } from "@/lib/cutter-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 
 function formatDim(val: number | null): string {
-  if (val === null) return "—";
+  if (val === null) return "\u2014";
   return `${val}"`;
 }
 
-function QCWindowCard({ window, roomName }: { window: QCWindow; roomName: string }) {
+function WindowCard({ window, roomName }: { window: CutterWindow; roomName: string }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const production = window.production;
@@ -29,21 +28,27 @@ function QCWindowCard({ window, roomName }: { window: QCWindow; roomName: string
   const h = window.blindHeight ?? window.height;
   const d = window.blindDepth ?? window.depth;
 
-  const statusColors = {
-    pending: "bg-gray-50 text-gray-500 border-gray-200",
-    built: "bg-blue-50 text-blue-600 border-blue-200",
+  const statusColors: Record<string, string> = {
+    pending: "bg-gray-100 text-gray-500 border-gray-200",
+    cut: "bg-blue-50 text-blue-600 border-blue-200",
+    assembled: "bg-purple-50 text-purple-600 border-purple-200",
     qc_approved: "bg-green-50 text-green-600 border-green-200",
   };
 
-  function handleApprove() {
+  const blindTypeLabel =
+    window.blindType === "blackout" ? "Blackout" : "Screen";
+
+  function handleMarkCut() {
     startTransition(async () => {
-      await markWindowQCApproved(window.id);
+      await markWindowCut(window.id);
       router.refresh();
     });
   }
 
   return (
-    <div className={`rounded-xl border px-4 py-3.5 space-y-2 ${statusColors[status]}`}>
+    <div
+      className={`rounded-xl border px-4 py-3.5 space-y-2 ${statusColors[status] ?? statusColors.pending}`}
+    >
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -51,7 +56,7 @@ function QCWindowCard({ window, roomName }: { window: QCWindow; roomName: string
           <p className="text-xs text-tertiary">{roomName}</p>
         </div>
         <span
-          className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status]}`}
+          className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status] ?? statusColors.pending}`}
         >
           {PRODUCTION_STATUS_LABELS[status]}
         </span>
@@ -61,11 +66,11 @@ function QCWindowCard({ window, roomName }: { window: QCWindow; roomName: string
       <div className="flex items-center gap-3 text-xs text-secondary">
         <span className="flex items-center gap-1">
           <Ruler size={12} />
-          {formatDim(w)} × {formatDim(h)}
-          {d !== null ? ` × ${formatDim(d)}` : ""}
+          {formatDim(w)} &times; {formatDim(h)}
+          {d !== null ? ` \u00d7 ${formatDim(d)}` : ""}
         </span>
         <span className="px-1.5 py-0.5 bg-card border border-border rounded text-[10px] font-medium text-primary">
-          {window.blindType === "blackout" ? "Blackout" : "Screen"}
+          {blindTypeLabel}
         </span>
       </div>
 
@@ -77,50 +82,58 @@ function QCWindowCard({ window, roomName }: { window: QCWindow; roomName: string
         </p>
       )}
 
-      {/* Build info */}
-      {status !== "pending" && production?.builtAt && (
-        <p className="text-xs text-blue-500 flex items-center gap-1">
-          <Hammer size={12} weight="fill" />
-          Built {new Date(production.builtAt).toLocaleDateString()}
-        </p>
-      )}
-
-      {/* QC approved info */}
+      {/* Status info */}
       {status === "qc_approved" && production?.qcApprovedAt && (
         <p className="text-xs text-green-600 flex items-center gap-1">
           <CheckCircle size={12} weight="fill" />
           QC approved {new Date(production.qcApprovedAt).toLocaleDateString()}
         </p>
       )}
-
-      {/* Action — only show for built windows */}
-      {status === "built" && (
-        <button
-          onClick={handleApprove}
-          disabled={pending}
-          className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
-        >
-          <CheckCircle size={16} weight="fill" />
-          {pending ? "Approving…" : "Approve QC"}
-        </button>
+      {status === "cut" && production?.cutAt && (
+        <p className="text-xs text-blue-500 flex items-center gap-1">
+          <Scissors size={12} weight="fill" />
+          Cut {new Date(production.cutAt).toLocaleDateString()}
+          <span className="text-tertiary ml-1">&mdash; awaiting assembly</span>
+        </p>
+      )}
+      {status === "assembled" && production?.assembledAt && (
+        <p className="text-xs text-purple-500 flex items-center gap-1">
+          <CheckCircle size={12} weight="fill" />
+          Assembled {new Date(production.assembledAt).toLocaleDateString()}
+          <span className="text-tertiary ml-1">&mdash; awaiting QC</span>
+        </p>
       )}
 
-      {/* Pending — not yet built */}
+      {/* Action */}
       {status === "pending" && (
-        <p className="text-xs text-tertiary flex items-center gap-1">
-          <Hourglass size={12} />
-          Not yet built by manufacturer
-        </p>
+        <button
+          onClick={handleMarkCut}
+          disabled={pending}
+          className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-accent text-white text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          <Scissors size={16} weight="fill" />
+          {pending ? "Marking\u2026" : "Mark as Cut"}
+        </button>
       )}
     </div>
   );
 }
 
-export function QCUnitDetail({ detail }: { detail: DetailType }) {
+export function CutterUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
   const { unit, rooms, windows } = detail;
 
+  const cutCount = windows.filter(
+    (w) => w.production?.status === "cut" || w.production?.status === "assembled" || w.production?.status === "qc_approved"
+  ).length;
   const total = windows.length;
+
+  const daysUntil = unit.installationDate
+    ? Math.floor(
+        (new Date(unit.installationDate).getTime() - new Date().setHours(0, 0, 0, 0)) /
+          (1000 * 60 * 60 * 24)
+      )
+    : null;
 
   return (
     <div className="px-4 pt-4 pb-6 space-y-5">
@@ -137,27 +150,44 @@ export function QCUnitDetail({ detail }: { detail: DetailType }) {
             Unit {unit.unitNumber}
           </h1>
           <p className="text-xs text-tertiary truncate">
-            {unit.buildingName} · {unit.clientName}
+            {unit.buildingName} &middot; {unit.clientName}
           </p>
         </div>
       </div>
 
-      {/* Progress */}
+      {/* Progress bar */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-secondary font-medium">QC Progress</span>
-          <span className="text-tertiary">
-            {unit.qcApprovedCount}/{total} approved · {unit.builtCount} built
-          </span>
+          <span className="text-secondary font-medium">Cutting Progress</span>
+          <span className="text-tertiary">{cutCount}/{total} cut</span>
         </div>
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
-            className="h-full bg-green-500 rounded-full transition-all"
-            style={{ width: total > 0 ? `${(unit.qcApprovedCount / total) * 100}%` : "0%" }}
+            className="h-full bg-accent rounded-full transition-all"
+            style={{ width: total > 0 ? `${(cutCount / total) * 100}%` : "0%" }}
           />
         </div>
         {unit.installationDate && (
-          <p className="text-xs text-tertiary">Install: {unit.installationDate}</p>
+          <p className="text-xs text-tertiary">
+            Install: {unit.installationDate}
+            {daysUntil !== null && (
+              <span
+                className={`ml-2 font-medium ${
+                  daysUntil < 0
+                    ? "text-red-600"
+                    : daysUntil <= 3
+                    ? "text-yellow-600"
+                    : "text-secondary"
+                }`}
+              >
+                {daysUntil < 0
+                  ? `${Math.abs(daysUntil)}d overdue`
+                  : daysUntil === 0
+                  ? "Today"
+                  : `${daysUntil}d away`}
+              </span>
+            )}
+          </p>
         )}
       </div>
 
@@ -171,7 +201,7 @@ export function QCUnitDetail({ detail }: { detail: DetailType }) {
               {room.name}
             </p>
             {roomWindows.map((win) => (
-              <QCWindowCard key={win.id} window={win} roomName={room.name} />
+              <WindowCard key={win.id} window={win} roomName={room.name} />
             ))}
           </div>
         );

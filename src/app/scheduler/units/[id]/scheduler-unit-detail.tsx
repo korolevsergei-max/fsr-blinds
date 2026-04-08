@@ -172,6 +172,20 @@ export function SchedulerUnitDetail({
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
 
+  // Derive status from live milestone data — guards against stale DB values
+  const effectiveStatus: UnitStatus =
+    milestones.totalWindows === 0
+      ? "not_started"
+      : milestones.allInstalled
+      ? "installed"
+      : milestones.allMeasured && milestones.allBracketed
+      ? "measured_and_bracketed"
+      : milestones.allMeasured
+      ? "measured"
+      : milestones.allBracketed
+      ? "bracketed"
+      : "not_started";
+
   const flags = computeUnitFlags(unit, today);
 
   const isPastDue = (dateStr: string | null | undefined) =>
@@ -218,7 +232,7 @@ export function SchedulerUnitDetail({
           className="flex flex-col gap-3"
         >
           <div className="flex items-center gap-2">
-            <StatusChip status={unit.status} />
+            <StatusChip status={effectiveStatus} />
           </div>
           {flags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

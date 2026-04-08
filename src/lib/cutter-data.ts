@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus } from "@/lib/types";
 
-export interface ManufacturerUnit {
+export interface CutterUnit {
   id: string;
   unitNumber: string;
   buildingName: string;
@@ -12,14 +12,14 @@ export interface ManufacturerUnit {
   manufacturingRiskFlag: RiskFlag;
 }
 
-export interface ManufacturerRoom {
+export interface CutterRoom {
   id: string;
   unitId: string;
   name: string;
   windowCount: number;
 }
 
-export interface ManufacturerWindow {
+export interface CutterWindow {
   id: string;
   roomId: string;
   label: string;
@@ -34,18 +34,37 @@ export interface ManufacturerWindow {
   production: WindowProductionStatus | null;
 }
 
-export interface ManufacturerDataset {
-  units: ManufacturerUnit[];
+export interface CutterDataset {
+  units: CutterUnit[];
 }
 
-export interface ManufacturerUnitDetail {
-  unit: ManufacturerUnit;
-  rooms: ManufacturerRoom[];
-  windows: ManufacturerWindow[];
+export interface CutterUnitDetail {
+  unit: CutterUnit;
+  rooms: CutterRoom[];
+  windows: CutterWindow[];
 }
 
-/** All units in 'measured' status with an installation date — the production queue. */
-export async function loadManufacturerDataset(): Promise<ManufacturerDataset> {
+function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus {
+  return {
+    id: p.id as string,
+    windowId: p.window_id as string,
+    unitId: p.unit_id as string,
+    status: p.status as ProductionStatus,
+    cutByCutterId: (p.cut_by_cutter_id as string) ?? null,
+    cutAt: (p.cut_at as string) ?? null,
+    cutNotes: (p.cut_notes as string) ?? "",
+    assembledByAssemblerId: (p.assembled_by_assembler_id as string) ?? null,
+    assembledAt: (p.assembled_at as string) ?? null,
+    assembledNotes: (p.assembled_notes as string) ?? "",
+    qcApprovedByAssemblerId: (p.qc_approved_by_assembler_id as string) ?? null,
+    qcApprovedAt: (p.qc_approved_at as string) ?? null,
+    qcNotes: (p.qc_notes as string) ?? "",
+    createdAt: p.created_at as string,
+  };
+}
+
+/** All units in 'measured' status with an installation date — the cutting queue. */
+export async function loadCutterDataset(): Promise<CutterDataset> {
   const supabase = await createClient();
 
   const { data: units, error } = await supabase
@@ -73,9 +92,9 @@ export async function loadManufacturerDataset(): Promise<ManufacturerDataset> {
 }
 
 /** Full detail for one unit: rooms, windows, and production statuses. */
-export async function loadManufacturerUnitDetail(
+export async function loadCutterUnitDetail(
   unitId: string
-): Promise<ManufacturerUnitDetail | null> {
+): Promise<CutterUnitDetail | null> {
   const supabase = await createClient();
 
   const [unitRes, roomsRes, windowsRes, productionRes] = await Promise.all([
@@ -106,7 +125,7 @@ export async function loadManufacturerUnitDetail(
   if (unitRes.error || !unitRes.data) return null;
 
   const u = unitRes.data;
-  const unit: ManufacturerUnit = {
+  const unit: CutterUnit = {
     id: u.id,
     unitNumber: u.unit_number,
     buildingName: u.building_name,
@@ -117,35 +136,22 @@ export async function loadManufacturerUnitDetail(
     manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
   };
 
-  const rooms: ManufacturerRoom[] = (roomsRes.data ?? []).map((r) => ({
+  const rooms: CutterRoom[] = (roomsRes.data ?? []).map((r) => ({
     id: r.id,
     unitId: r.unit_id,
     name: r.name,
     windowCount: r.window_count ?? 0,
   }));
 
-  // Filter windows to only those in rooms belonging to this unit
   const roomIds = new Set(rooms.map((r) => r.id));
   const productionMap = new Map<string, WindowProductionStatus>(
     (productionRes.data ?? []).map((p) => [
       p.window_id,
-      {
-        id: p.id,
-        windowId: p.window_id,
-        unitId: p.unit_id,
-        status: p.status as ProductionStatus,
-        builtByManufacturerId: p.built_by_manufacturer_id ?? null,
-        builtAt: p.built_at ?? null,
-        builtNotes: p.built_notes ?? "",
-        qcApprovedByQcId: p.qc_approved_by_qc_id ?? null,
-        qcApprovedAt: p.qc_approved_at ?? null,
-        qcNotes: p.qc_notes ?? "",
-        createdAt: p.created_at,
-      },
+      mapProductionStatus(p as unknown as Record<string, unknown>),
     ])
   );
 
-  const windows: ManufacturerWindow[] = (windowsRes.data ?? [])
+  const windows: CutterWindow[] = (windowsRes.data ?? [])
     .filter((w) => roomIds.has(w.room_id))
     .map((w) => ({
       id: w.id,

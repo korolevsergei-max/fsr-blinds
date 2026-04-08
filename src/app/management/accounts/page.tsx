@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getInstallerManufacturerAuthDrift } from "@/lib/account-sync";
+import { getInstallerCutterAuthDrift } from "@/lib/account-sync";
 import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-data";
 import { createClient } from "@/lib/supabase/server";
 import { AccountsManager } from "./accounts-manager";
-import type { QCPerson } from "@/lib/types";
+import type { Assembler } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +14,11 @@ export interface OwnerProfile {
   email: string;
 }
 
-async function loadQCPersons(): Promise<QCPerson[]> {
+async function loadAssemblers(): Promise<Assembler[]> {
   try {
     const supabase = await createClient();
     const { data } = await supabase
-      .from("qc_persons")
+      .from("assemblers")
       .select("id, name, email, phone, auth_user_id")
       .order("name");
     return (data ?? []).map((row) => ({
@@ -57,12 +57,12 @@ export default async function AccountsPage() {
     redirect("/management");
   }
 
-  const [data, authDrift, schedulerAccess, ownerProfiles, qcPersons] = await Promise.all([
+  const [data, authDrift, schedulerAccess, ownerProfiles, assemblers] = await Promise.all([
     loadFullDataset(),
-    getInstallerManufacturerAuthDrift(),
+    getInstallerCutterAuthDrift(),
     loadAllSchedulerBuildingAccess(),
     loadOwnerProfiles(),
-    loadQCPersons(),
+    loadAssemblers(),
   ]);
 
   return (
@@ -71,7 +71,7 @@ export default async function AccountsPage() {
       authDrift={authDrift}
       schedulerAccess={schedulerAccess}
       ownerProfiles={ownerProfiles}
-      qcPersons={qcPersons}
+      assemblers={assemblers}
       currentUserAuthId={user.id}
     />
   );

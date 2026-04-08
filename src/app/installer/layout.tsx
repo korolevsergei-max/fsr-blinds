@@ -15,11 +15,11 @@ export default async function InstallerLayout({
   if (user.role === "owner") {
     redirect("/management");
   }
-  if (user.role === "manufacturer") {
-    redirect("/manufacturer");
+  if (user.role === "cutter") {
+    redirect("/cutter");
   }
-  if (user.role === "qc") {
-    redirect("/qc");
+  if (user.role === "assembler") {
+    redirect("/assembler");
   }
   if (user.role !== "installer") {
     redirect("/login");

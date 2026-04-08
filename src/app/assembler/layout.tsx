@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { QCNav } from "./qc-nav";
+import { AssemblerNav } from "./assembler-nav";
 
-export default async function QCLayout({
+export default async function AssemblerLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -14,8 +14,8 @@ export default async function QCLayout({
   if (user.role === "owner") {
     redirect("/management");
   }
-  if (user.role === "manufacturer") {
-    redirect("/manufacturer");
+  if (user.role === "cutter") {
+    redirect("/cutter");
   }
   if (user.role === "installer") {
     redirect("/installer");
@@ -23,7 +23,7 @@ export default async function QCLayout({
   if (user.role === "scheduler") {
     redirect("/scheduler");
   }
-  if (user.role !== "qc") {
+  if (user.role !== "assembler") {
     redirect("/login");
   }
 
@@ -34,7 +34,7 @@ export default async function QCLayout({
           <main id="main-content">{children}</main>
         </div>
       </div>
-      <QCNav />
+      <AssemblerNav />
     </>
   );
 }

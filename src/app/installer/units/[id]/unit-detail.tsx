@@ -167,6 +167,21 @@ export function UnitDetail({
     );
   }
 
+  // Derive status from live milestone data — guards against stale DB values
+  // (e.g. a unit that still shows "measured" after all rooms/windows were removed)
+  const effectiveStatus: UnitStatus =
+    milestones.totalWindows === 0
+      ? "not_started"
+      : milestones.allInstalled
+      ? "installed"
+      : milestones.allMeasured && milestones.allBracketed
+      ? "measured_and_bracketed"
+      : milestones.allMeasured
+      ? "measured"
+      : milestones.allBracketed
+      ? "bracketed"
+      : "not_started";
+
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
   const escalations = getUnitEscalations(data, unit.id);
   const today = new Date();
@@ -212,7 +227,7 @@ export function UnitDetail({
             </p>
           </div>
           <div className="flex items-center gap-2 mt-3">
-            <StatusChip status={unit.status} />
+            <StatusChip status={effectiveStatus} />
           </div>
         </motion.div>
 

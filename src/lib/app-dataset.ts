@@ -2,7 +2,7 @@ import type {
   Building,
   Client,
   Installer,
-  Manufacturer,
+  Cutter,
   Scheduler,
   Room,
   ScheduleEntry,
@@ -18,7 +18,7 @@ export type AppDataset = {
   windows: Window[];
   installers: Installer[];
   schedule: ScheduleEntry[];
-  manufacturers: Manufacturer[];
+  cutters: Cutter[];
   schedulers: Scheduler[];
 };
 

@@ -1,41 +1,51 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle, Hourglass, CalendarBlank } from "@phosphor-icons/react";
-import type { QCUnit } from "@/lib/qc-data";
+import { ArrowLeft, CheckCircle, Wrench, Hourglass, CalendarBlank } from "@phosphor-icons/react";
+import type { AssemblerUnit } from "@/lib/assembler-data";
 
-function UnitRow({ unit }: { unit: QCUnit }) {
+function UnitRow({ unit }: { unit: AssemblerUnit }) {
   const router = useRouter();
-  const allBuilt = unit.builtCount >= unit.windowCount && unit.windowCount > 0;
-  const borderColor = allBuilt ? "border-green-200" : "border-border";
+  const allCut = unit.cutCount >= unit.windowCount && unit.windowCount > 0;
+  const hasAssembled = unit.assembledCount > unit.qcApprovedCount;
+  const borderColor = hasAssembled
+    ? "border-green-200"
+    : allCut
+    ? "border-blue-200"
+    : "border-border";
 
   return (
     <button
-      onClick={() => router.push(`/qc/units/${unit.id}`)}
+      onClick={() => router.push(`/assembler/units/${unit.id}`)}
       className={`w-full text-left rounded-xl border ${borderColor} bg-card px-4 py-3.5 space-y-1.5 active:opacity-70 transition-opacity hover:bg-muted/30`}
     >
       <div className="flex items-center justify-between">
         <span className="font-semibold text-sm text-primary">
           Unit {unit.unitNumber}
         </span>
-        {allBuilt ? (
+        {hasAssembled ? (
           <span className="text-xs font-semibold text-green-600 flex items-center gap-1">
             <CheckCircle size={13} weight="fill" />
             Ready for QC
           </span>
+        ) : allCut ? (
+          <span className="text-xs font-semibold text-blue-600 flex items-center gap-1">
+            <Wrench size={13} weight="fill" />
+            Ready to Assemble
+          </span>
         ) : (
           <span className="text-xs text-yellow-600 flex items-center gap-1">
             <Hourglass size={13} weight="fill" />
-            Partially built
+            Partially cut
           </span>
         )}
       </div>
       <p className="text-xs text-secondary">
-        {unit.buildingName} · {unit.clientName}
+        {unit.buildingName} &middot; {unit.clientName}
       </p>
       <div className="flex items-center justify-between pt-0.5">
         <span className="text-xs text-tertiary">
-          {unit.builtCount}/{unit.windowCount} built · {unit.qcApprovedCount} QC&apos;d
+          {unit.cutCount}/{unit.windowCount} cut &middot; {unit.assembledCount} assembled &middot; {unit.qcApprovedCount} QC&apos;d
         </span>
         {unit.installationDate && (
           <span className="text-xs text-tertiary flex items-center gap-1">
@@ -48,11 +58,21 @@ function UnitRow({ unit }: { unit: QCUnit }) {
   );
 }
 
-export function QCQueue({ units }: { units: QCUnit[] }) {
+export function AssemblerQueue({ units }: { units: AssemblerUnit[] }) {
   const router = useRouter();
 
-  const readyForQC = units.filter((u) => u.builtCount >= u.windowCount && u.windowCount > 0);
-  const partial = units.filter((u) => u.builtCount > 0 && u.builtCount < u.windowCount);
+  // Units with assembled windows needing QC
+  const readyForQC = units.filter(
+    (u) => u.assembledCount > u.qcApprovedCount && u.assembledCount > 0
+  );
+  // Units fully cut, ready to assemble
+  const readyToAssemble = units.filter(
+    (u) => u.cutCount >= u.windowCount && u.assembledCount < u.windowCount && u.windowCount > 0
+  );
+  // Partially cut units
+  const partiallyCut = units.filter(
+    (u) => u.cutCount > 0 && u.cutCount < u.windowCount
+  );
 
   return (
     <div className="px-4 pt-4 pb-6 space-y-6">
@@ -65,18 +85,18 @@ export function QCQueue({ units }: { units: QCUnit[] }) {
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-lg font-semibold text-primary">QC Queue</h1>
+          <h1 className="text-lg font-semibold text-primary">Assembly &amp; QC Queue</h1>
           <p className="text-xs text-tertiary">
-            {units.length} unit{units.length !== 1 ? "s" : ""} pending review
+            {units.length} unit{units.length !== 1 ? "s" : ""} in queue
           </p>
         </div>
       </div>
 
       {units.length === 0 ? (
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-10 text-center">
-          <p className="text-sm font-medium text-primary">Nothing to review</p>
+          <p className="text-sm font-medium text-primary">Nothing to assemble</p>
           <p className="text-xs text-tertiary mt-1">
-            Units appear here once the manufacturer marks windows as built.
+            Units appear here once the cutter marks windows as cut.
           </p>
         </div>
       ) : (
@@ -95,16 +115,30 @@ export function QCQueue({ units }: { units: QCUnit[] }) {
               ))}
             </div>
           )}
-          {partial.length > 0 && (
+          {readyToAssemble.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 px-1">
+                <Wrench size={14} weight="fill" className="text-blue-500" />
+                <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
+                  Ready to Assemble
+                </span>
+                <span className="ml-auto text-xs text-tertiary">{readyToAssemble.length}</span>
+              </div>
+              {readyToAssemble.map((u) => (
+                <UnitRow key={u.id} unit={u} />
+              ))}
+            </div>
+          )}
+          {partiallyCut.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 px-1">
                 <Hourglass size={14} weight="fill" className="text-yellow-500" />
                 <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
-                  Partially Built
+                  Partially Cut
                 </span>
-                <span className="ml-auto text-xs text-tertiary">{partial.length}</span>
+                <span className="ml-auto text-xs text-tertiary">{partiallyCut.length}</span>
               </div>
-              {partial.map((u) => (
+              {partiallyCut.map((u) => (
                 <UnitRow key={u.id} unit={u} />
               ))}
             </div>

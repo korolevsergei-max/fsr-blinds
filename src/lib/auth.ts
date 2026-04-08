@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
-export type UserRole = "owner" | "installer" | "manufacturer" | "client" | "scheduler" | "qc";
+export type UserRole = "owner" | "installer" | "cutter" | "client" | "scheduler" | "assembler";
 
 export interface AppUser {
   id: string;
@@ -122,18 +122,18 @@ export async function requireScheduler(): Promise<AppUser> {
   return user;
 }
 
-export async function requireManufacturer(): Promise<AppUser> {
+export async function requireCutter(): Promise<AppUser> {
   const user = await getCurrentUser();
-  if (!user || user.role !== "manufacturer") {
-    throw new Error("Unauthorized: manufacturer role required");
+  if (!user || user.role !== "cutter") {
+    throw new Error("Unauthorized: cutter role required");
   }
   return user;
 }
 
-export async function requireQC(): Promise<AppUser> {
+export async function requireAssembler(): Promise<AppUser> {
   const user = await getCurrentUser();
-  if (!user || user.role !== "qc") {
-    throw new Error("Unauthorized: qc role required");
+  if (!user || user.role !== "assembler") {
+    throw new Error("Unauthorized: assembler role required");
   }
   return user;
 }
@@ -158,24 +158,24 @@ export async function getLinkedSchedulerId(
   return data?.id ?? null;
 }
 
-export async function getLinkedManufacturerId(
+export async function getLinkedCutterId(
   authUserId: string
 ): Promise<string | null> {
   const supabase = await createClient();
   const { data } = await supabase
-    .from("manufacturers")
+    .from("cutters")
     .select("id")
     .eq("auth_user_id", authUserId)
     .single();
   return data?.id ?? null;
 }
 
-export async function getLinkedQCPersonId(
+export async function getLinkedAssemblerId(
   authUserId: string
 ): Promise<string | null> {
   const supabase = await createClient();
   const { data } = await supabase
-    .from("qc_persons")
+    .from("assemblers")
     .select("id")
     .eq("auth_user_id", authUserId)
     .single();

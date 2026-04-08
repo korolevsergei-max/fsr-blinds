@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ArrowLeft, WarningCircle, Hourglass, Clock, CalendarBlank } from "@phosphor-icons/react";
-import type { ManufacturerUnit } from "@/lib/manufacturer-data";
+import type { CutterUnit } from "@/lib/cutter-data";
 
 function daysUntilInstall(installationDate: string | null): number | null {
   if (!installationDate) return null;
@@ -56,7 +56,7 @@ function UrgencyBadge({ installationDate }: { installationDate: string | null })
   );
 }
 
-function UnitRow({ unit }: { unit: ManufacturerUnit }) {
+function UnitRow({ unit }: { unit: CutterUnit }) {
   const router = useRouter();
   const bucket = urgencyBucket(unit.installationDate);
 
@@ -69,7 +69,7 @@ function UnitRow({ unit }: { unit: ManufacturerUnit }) {
 
   return (
     <button
-      onClick={() => router.push(`/manufacturer/units/${unit.id}`)}
+      onClick={() => router.push(`/cutter/units/${unit.id}`)}
       className={`w-full text-left rounded-xl border ${borderColor} bg-card px-4 py-3.5 space-y-1.5 active:opacity-70 transition-opacity hover:bg-muted/30`}
     >
       <div className="flex items-center justify-between">
@@ -102,7 +102,7 @@ function Section({
 }: {
   title: string;
   icon: React.ReactNode;
-  units: ManufacturerUnit[];
+  units: CutterUnit[];
 }) {
   if (units.length === 0) return null;
   return (
@@ -121,7 +121,7 @@ function Section({
   );
 }
 
-export function ProductionQueue({ units }: { units: ManufacturerUnit[] }) {
+export function CuttingQueue({ units }: { units: CutterUnit[] }) {
   const router = useRouter();
 
   const overdue = units.filter((u) => urgencyBucket(u.installationDate) === "overdue");
@@ -140,9 +140,9 @@ export function ProductionQueue({ units }: { units: ManufacturerUnit[] }) {
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-lg font-semibold text-primary">Production Queue</h1>
+          <h1 className="text-lg font-semibold text-primary">Cutting Queue</h1>
           <p className="text-xs text-tertiary">
-            {units.length} unit{units.length !== 1 ? "s" : ""} to build
+            {units.length} unit{units.length !== 1 ? "s" : ""} to cut
           </p>
         </div>
       </div>
