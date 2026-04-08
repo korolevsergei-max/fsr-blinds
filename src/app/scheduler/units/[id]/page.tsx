@@ -1,30 +1,34 @@
-import { redirect } from "next/navigation";
-import { loadSchedulerDataset, loadUnitActivityLog } from "@/lib/server-data";
-import { getUnitMilestoneCoverage } from "@/lib/unit-milestones";
-import { recomputeUnitStatus } from "@/lib/unit-progress";
-import { createClient } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useAppDataset } from "@/lib/dataset-context";
+import { fetchUnitSupplementalData, EMPTY_MILESTONES, type UnitSupplementalData } from "@/app/actions/dataset-queries";
 import { SchedulerUnitDetail } from "./scheduler-unit-detail";
 
-export default async function SchedulerUnitPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  // Self-heal stale unit status in DB so list views also reflect accurate state
-  const supabase = await createClient();
-  await recomputeUnitStatus(supabase, id);
-  const [data, activityLog, milestones] = await Promise.all([
-    loadSchedulerDataset(),
-    loadUnitActivityLog(id),
-    getUnitMilestoneCoverage(id),
-  ]);
+export default function SchedulerUnitPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { data } = useAppDataset();
+  const [supplemental, setSupplemental] = useState<UnitSupplementalData | null>(null);
 
-  // Guard: if the unit isn't in the scoped dataset, it's out of scope.
   const unit = data.units.find((u) => u.id === id);
-  if (!unit) {
-    redirect("/scheduler/units");
-  }
 
-  return <SchedulerUnitDetail data={data} activityLog={activityLog} milestones={milestones} />;
+  useEffect(() => {
+    if (!unit) {
+      router.replace("/scheduler/units");
+      return;
+    }
+    fetchUnitSupplementalData(id).then(setSupplemental);
+  }, [id, unit, router]);
+
+  if (!unit) return null;
+
+  return (
+    <SchedulerUnitDetail
+      data={data}
+      activityLog={supplemental?.activityLog ?? []}
+      milestones={supplemental?.milestones ?? EMPTY_MILESTONES}
+    />
+  );
 }

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser, type AppUser } from "@/lib/auth";
-import { loadSchedulerDataset } from "@/lib/server-data";
+import { getCurrentUser, getLinkedSchedulerId, type AppUser } from "@/lib/auth";
+import { loadSchedulerDataset, getUnreadNotificationCount } from "@/lib/server-data";
 import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { SchedulerNav } from "./scheduler-nav";
 import SchedulerLoading from "./loading";
@@ -28,6 +28,16 @@ export default async function SchedulerLayout({
     redirect("/login");
   }
 
+  let unreadCount = 0;
+  try {
+    const schedulerId = await getLinkedSchedulerId(user.id);
+    if (schedulerId) {
+      unreadCount = await getUnreadNotificationCount("scheduler", schedulerId);
+    }
+  } catch {
+    /* notifications table may not exist yet */
+  }
+
   return (
     <>
       <div className="min-h-[100dvh] bg-background">
@@ -39,7 +49,7 @@ export default async function SchedulerLayout({
           </main>
         </div>
       </div>
-      <SchedulerNav />
+      <SchedulerNav unreadNotifications={unreadCount} />
     </>
   );
 }

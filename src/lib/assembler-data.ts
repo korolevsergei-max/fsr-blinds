@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus } from "@/lib/types";
+import type { RiskFlag, BlindType, WindowProductionStatus, ProductionStatus } from "@/lib/types";
 
 export interface AssemblerUnit {
   id: string;

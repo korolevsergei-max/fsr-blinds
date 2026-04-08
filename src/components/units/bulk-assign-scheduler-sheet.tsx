@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { CalendarCheck, CheckCircle, X } from "@phosphor-icons/react";
 import { assignUnitsToScheduler } from "@/app/actions/management-actions";
 import { Button } from "@/components/ui/button";

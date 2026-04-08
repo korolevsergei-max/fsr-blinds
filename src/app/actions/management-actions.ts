@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwner } from "@/lib/auth";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
+import { emitNotification } from "@/lib/emit-notification";
+import {
+  NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
+  NOTIF_COMPLETE_BY_DATE_CHANGED,
+} from "@/lib/notification-types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -381,6 +386,26 @@ export async function updateUnitCompleteByDate(
           to: nextDate,
         }
       );
+
+      // ─── Notify scheduler of this unit ───────────────────────────────────
+      const { data: assignment } = await supabase
+        .from("scheduler_unit_assignments")
+        .select("scheduler_id")
+        .eq("unit_id", unitId)
+        .maybeSingle();
+      if (assignment?.scheduler_id) {
+        await emitNotification(supabase, {
+          recipientRole: "scheduler",
+          recipientId: assignment.scheduler_id,
+          type: NOTIF_COMPLETE_BY_DATE_CHANGED,
+          title: "Complete-by date updated",
+          body: nextDate
+            ? `New deadline: ${nextDate}`
+            : "Complete-by date removed.",
+          relatedUnitId: unitId,
+        });
+      }
+      // ─────────────────────────────────────────────────────────────────────
     }
 
     revalidateApp();
@@ -524,6 +549,21 @@ export async function assignUnitsToScheduler(
         scheduler: schedulerName,
       });
     }
+
+    // ─── Notification to scheduler ───────────────────────────────────────────
+    const unitLabel =
+      unitIds.length === 1
+        ? "A unit has been added to your queue"
+        : `${unitIds.length} units added to your queue`;
+    await emitNotification(supabase, {
+      recipientRole: "scheduler",
+      recipientId: schedulerId,
+      type: NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
+      title: unitLabel,
+      body: `Assigned by ${displayName}`,
+      relatedUnitId: unitIds.length === 1 ? unitIds[0] : null,
+    });
+    // ─────────────────────────────────────────────────────────────────────────
 
     revalidateApp();
     return { ok: true };

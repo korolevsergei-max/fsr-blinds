@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
+import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -16,6 +17,7 @@ import { SectionLabel } from "@/components/ui/section-label";
 export function AssignUnit({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { afterMutate } = useDatasetMutation();
   const unit = data.units.find((u) => u.id === id);
   const assignees = useMemo(
     () => data.installers.filter((installer) => Boolean(installer.id)),
@@ -54,7 +56,15 @@ export function AssignUnit({ data }: { data: AppDataset }) {
         return;
       }
       setSaved(true);
-      router.refresh();
+      const installerName = data.installers.find((i) => i.id === selectedInstaller)?.name ?? null;
+      afterMutate((prev) => ({
+        ...prev,
+        units: prev.units.map((u) =>
+          u.id === unit.id
+            ? { ...u, assignedInstallerId: selectedInstaller || null, assignedInstallerName: installerName }
+            : u
+        ),
+      }));
       setTimeout(() => router.push(`/management/units/${unit.id}`), 900);
     });
   };

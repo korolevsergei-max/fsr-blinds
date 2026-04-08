@@ -46,21 +46,7 @@ import { ChangePasswordInline } from "@/components/ui/change-password-inline";
 
 type Tab = "installers" | "cutters" | "schedulers" | "assemblers" | "owners";
 
-function humanizeInviteError(message: string): string {
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("email rate limit exceeded")) {
-    return "Too many emails were sent recently. Please wait a few minutes, then try again.";
-  }
-  if (normalized.includes("user already registered")) {
-    return "This email is already registered. Ask the user to sign in or use Forgot password.";
-  }
-  if (normalized.includes("invalid email")) {
-    return "Please enter a valid email address.";
-  }
-
-  return message;
-}
+// Unused function removed to fix lint warning
 
 export function AccountsManager({
   data,

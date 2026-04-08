@@ -1,12 +1,9 @@
-import { loadUnitDetail } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { CreateRooms } from "./create-rooms";
 
-export default async function RoomsPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const data = await loadUnitDetail(id);
+export default function InstallerRoomsPage() {
+  const { data } = useAppDataset();
   return <CreateRooms data={data} />;
 }

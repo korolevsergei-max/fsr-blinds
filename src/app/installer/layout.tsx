@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getLinkedInstallerId, type AppUser } from "@/lib/auth";
-import { loadFullDataset, getUnreadNotificationCount } from "@/lib/server-data";
+import { loadInstallerDataset, getUnreadNotificationCount } from "@/lib/server-data";
 import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { BottomNav } from "@/components/ui/bottom-nav";
 import InstallerLoading from "./loading";
@@ -59,16 +59,15 @@ async function InstallerDataShell({
   user: AppUser;
   children: React.ReactNode;
 }) {
-  const [data, installerId] = await Promise.all([
-    loadFullDataset(),
-    getLinkedInstallerId(user.id),
-  ]);
+  const installerId = await getLinkedInstallerId(user.id);
+  const data = await loadInstallerDataset(installerId ?? "");
 
   return (
     <AppDatasetClientShell
       initialData={data}
       user={user}
       linkedEntityId={installerId}
+      portalDataLoader="installer"
     >
       {children}
     </AppDatasetClientShell>

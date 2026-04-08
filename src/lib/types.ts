@@ -231,6 +231,8 @@ export interface Notification {
   title: string;
   body: string;
   relatedWeekStart: string | null;
+  /** Unit id for deep-link navigation (e.g. /scheduler/units/[id]). */
+  relatedUnitId: string | null;
   createdAt: string;
   read: boolean;
 }

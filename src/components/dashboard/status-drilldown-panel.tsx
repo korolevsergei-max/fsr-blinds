@@ -40,8 +40,8 @@ export function StatusDrilldownPanel({
   unitHref,
   onClose,
 }: StatusDrilldownPanelProps) {
-  const [clientFilter, setClientFilter] = useState("all");
-  const [buildingFilter, setBuildingFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
 
   // Derive unique client options from the scoped units
   const clientOptions = useMemo(() => {
@@ -59,7 +59,7 @@ export function StatusDrilldownPanel({
   const buildingOptions = useMemo(() => {
     const seen = new Map<string, string>();
     units.forEach((u) => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return;
       if (!seen.has(u.buildingId)) seen.set(u.buildingId, u.buildingName);
     });
     return [
@@ -71,8 +71,8 @@ export function StatusDrilldownPanel({
   // Apply sub-filters to the status-scoped units
   const filteredUnits = useMemo(() => {
     return units.filter((u) => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       return true;
     });
   }, [units, clientFilter, buildingFilter]);
@@ -91,7 +91,7 @@ export function StatusDrilldownPanel({
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   }, [flaggedUnits]);
 
-  const hasSubFilter = clientFilter !== "all" || buildingFilter !== "all";
+  const hasSubFilter = clientFilter.length > 0 || buildingFilter.length > 0;
 
   return (
     <motion.div
@@ -128,19 +128,21 @@ export function StatusDrilldownPanel({
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {clientOptions.length > 2 && (
             <FilterDropdown
+              multiple
               label="Client"
-              value={clientFilter}
+              values={clientFilter}
               options={clientOptions}
               onChange={(v) => {
                 setClientFilter(v);
-                setBuildingFilter("all");
+                setBuildingFilter([]);
               }}
             />
           )}
           {buildingOptions.length > 2 && (
             <FilterDropdown
+              multiple
               label="Building"
-              value={buildingFilter}
+              values={buildingFilter}
               options={buildingOptions}
               onChange={setBuildingFilter}
             />
@@ -148,7 +150,7 @@ export function StatusDrilldownPanel({
           {hasSubFilter && (
             <button
               type="button"
-              onClick={() => { setClientFilter("all"); setBuildingFilter("all"); }}
+              onClick={() => { setClientFilter([]); setBuildingFilter([]); }}
               className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
             >
               <X size={10} weight="bold" /> Reset

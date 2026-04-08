@@ -8,6 +8,8 @@ import {
   getLinkedCutterId,
   getLinkedAssemblerId,
 } from "@/lib/auth";
+import { emitNotification } from "@/lib/emit-notification";
+import { NOTIF_MFG_BEHIND_SCHEDULE } from "@/lib/notification-types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -205,10 +207,36 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
         flag = "yellow";
       }
 
+      const { data: prevRow } = await supabase
+        .from("units")
+        .select("manufacturing_risk_flag")
+        .eq("id", unit.id)
+        .maybeSingle();
+      const prevFlag = prevRow?.manufacturing_risk_flag ?? "green";
+
       await supabase
         .from("units")
         .update({ manufacturing_risk_flag: flag })
         .eq("id", unit.id);
+
+      // Emit scheduler notification when risk escalates to yellow/red within 3 days of install
+      if ((flag === "yellow" || flag === "red") && flag !== prevFlag && daysUntil <= 3) {
+        const { data: assignment } = await supabase
+          .from("scheduler_unit_assignments")
+          .select("scheduler_id")
+          .eq("unit_id", unit.id)
+          .maybeSingle();
+        if (assignment?.scheduler_id) {
+          await emitNotification(supabase, {
+            recipientRole: "scheduler",
+            recipientId: assignment.scheduler_id,
+            type: NOTIF_MFG_BEHIND_SCHEDULE,
+            title: flag === "red" ? "🔴 Blinds at risk for install" : "🟡 Manufacturing behind schedule",
+            body: `Installation in ${daysUntil} day(s) — blinds not yet ${flag === "red" ? "QC approved" : "fully cut"}.`,
+            relatedUnitId: unit.id,
+          });
+        }
+      }
     }
   } catch {
     // Non-fatal — risk flags are best-effort

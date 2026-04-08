@@ -41,20 +41,7 @@ function isAlreadyRegisteredAuthError(message: string): boolean {
   return normalized.includes("already been registered") || normalized.includes("already registered");
 }
 
-// Still used by createCutterAccount email-invite fallback.
-function isRateLimitError(message: string): boolean {
-  const normalized = message.toLowerCase();
-  return normalized.includes("email rate limit") || normalized.includes("rate limit exceeded") || normalized.includes("over_email_send_rate_limit");
-}
-
-/** Generates a readable temporary password: e.g. "Tiger-284-Kite" */
-function generateTempPassword(): string {
-  const words = ["Tiger","Maple","River","Stone","Frost","Cedar","Blaze","Scout","Ember","Pearl"];
-  const a = words[Math.floor(Math.random() * words.length)];
-  const b = words[Math.floor(Math.random() * words.length)];
-  const n = Math.floor(100 + Math.random() * 900);
-  return `${a}-${n}-${b}`;
-}
+// Unused functions removed to fix lint warnings
 
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   const admin = createAdminClient();

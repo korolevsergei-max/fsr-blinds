@@ -2,16 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, Buildings, CalendarBlank, UsersFour } from "@phosphor-icons/react";
+import { ChartBar, Buildings, CalendarBlank, UsersFour, Bell } from "@phosphor-icons/react";
 
 const navItems = [
   { href: "/scheduler", label: "Dashboard", Icon: ChartBar },
   { href: "/scheduler/units", label: "Units", Icon: Buildings },
   { href: "/scheduler/schedule", label: "Schedule", Icon: CalendarBlank },
   { href: "/scheduler/installers", label: "Installers", Icon: UsersFour },
+  { href: "/scheduler/notifications", label: "Alerts", Icon: Bell },
 ];
 
-export function SchedulerNav() {
+export function SchedulerNav({
+  unreadNotifications = 0,
+}: {
+  unreadNotifications?: number;
+}) {
   const pathname = usePathname();
 
   return (
@@ -24,24 +29,33 @@ export function SchedulerNav() {
           const active =
             pathname === href ||
             (href !== "/scheduler" && pathname.startsWith(href));
+          const showBadge =
+            href === "/scheduler/notifications" && unreadNotifications > 0;
 
           return (
             <Link
               key={href}
               href={href}
               className={[
-                "flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
+                "relative flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
                 "rounded-[var(--radius-md)] transition-colors duration-150",
                 active ? "text-accent" : "text-tertiary hover:text-secondary",
               ].join(" ")}
             >
-              <div
-                className={[
-                  "flex items-center justify-center w-10 h-7 rounded-[var(--radius-sm)] transition-colors duration-150",
-                  active ? "bg-accent-light" : "",
-                ].join(" ")}
-              >
-                <Icon size={22} weight={active ? "fill" : "regular"} />
+              <div className="relative">
+                <div
+                  className={[
+                    "flex items-center justify-center w-10 h-7 rounded-[var(--radius-sm)] transition-colors duration-150",
+                    active ? "bg-accent-light" : "",
+                  ].join(" ")}
+                >
+                  <Icon size={22} weight={active ? "fill" : "regular"} />
+                </div>
+                {showBadge && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full bg-danger text-white text-[8px] font-bold leading-none">
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
+                )}
               </div>
               <span className="text-[10px] sm:text-[11px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
                 {label}

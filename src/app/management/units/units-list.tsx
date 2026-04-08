@@ -51,12 +51,12 @@ export function UnitsList({
   const { units, clients, buildings, installers } = data;
 
   const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
-  const [buildingFilter, setBuildingFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [installerFilter, setInstallerFilter] = useState("all");
-  const [schedulerFilter, setSchedulerFilter] = useState("all");
-  const [floorFilter, setFloorFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
+  const [schedulerFilter, setSchedulerFilter] = useState<string[]>([]);
+  const [floorFilter, setFloorFilter] = useState<string[]>([]);
   const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
   const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
@@ -100,7 +100,7 @@ export function UnitsList({
       selectedUnitsData.map((u) => u.assignedInstallerName).filter(Boolean)
     );
     const assignedSchedIds = new Set(
-      selectedUnitsData.map((u) => unitSchedulerByUnit[u.id]).filter(Boolean)
+      selectedUnitsData.map((u) => u.assignedSchedulerId || unitSchedulerByUnit[u.id]).filter(Boolean)
     );
 
     let installerLabel = "Unassigned";
@@ -134,7 +134,7 @@ export function UnitsList({
       }
       exitSelectMode();
       setShowDeleteConfirm(false);
-    } catch (err) {
+    } catch {
       alert("Failed to delete units.");
     } finally {
       setIsDeleting(false);
@@ -142,14 +142,14 @@ export function UnitsList({
   }
 
   const availableBuildings = useMemo(
-    () => clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter),
+    () => clientFilter.length === 0 ? buildings : buildings.filter((b) => clientFilter.includes(b.clientId)),
     [buildings, clientFilter]
   );
 
   const availableFloors = useMemo(() => {
     const possibleUnits = units.filter(u => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       return true;
     });
     const floors = new Set<string>();
@@ -161,8 +161,8 @@ export function UnitsList({
 
   const unitsForDateOptions = useMemo(() => {
     return units.filter((u) => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       return true;
     });
   }, [units, clientFilter, buildingFilter]);
@@ -194,21 +194,26 @@ export function UnitsList({
           !u.clientName.toLowerCase().includes(q)
         ) return false;
       }
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
-      if (statusFilter !== "all" && u.status !== statusFilter) return false;
-      if (installerFilter === "__unassigned_installer__") {
-        if (u.assignedInstallerId) return false;
-      } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
-        return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
+      if (statusFilter.length > 0 && !statusFilter.includes(u.status)) return false;
+      
+      if (installerFilter.length > 0) {
+        const wantsUnassigned = installerFilter.includes("__unassigned_installer__");
+        const matchUnassigned = wantsUnassigned && !u.assignedInstallerId;
+        const matchSpecific = u.assignedInstallerId && installerFilter.includes(u.assignedInstallerId);
+        if (!matchUnassigned && !matchSpecific) return false;
       }
-      const assignedSchedulerId = unitSchedulerByUnit[u.id];
-      if (schedulerFilter === "__unassigned_scheduler__") {
-        if (assignedSchedulerId) return false;
-      } else if (schedulerFilter !== "all" && assignedSchedulerId !== schedulerFilter) {
-        return false;
+      
+      const assignedSchedulerId = u.assignedSchedulerId || unitSchedulerByUnit[u.id];
+      if (schedulerFilter.length > 0) {
+        const wantsUnassigned = schedulerFilter.includes("__unassigned_scheduler__");
+        const matchUnassigned = wantsUnassigned && !assignedSchedulerId;
+        const matchSpecific = assignedSchedulerId && schedulerFilter.includes(assignedSchedulerId);
+        if (!matchUnassigned && !matchSpecific) return false;
       }
-      if (floorFilter !== "all" && getFloor(u.unitNumber) !== floorFilter) return false;
+      
+      if (floorFilter.length > 0 && !floorFilter.includes(getFloor(u.unitNumber))) return false;
       if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
       if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
       if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
@@ -255,12 +260,12 @@ export function UnitsList({
   }, [filtered, sortOrder]);
 
   const activeFilterCount = [
-    clientFilter !== "all",
-    buildingFilter !== "all",
-    statusFilter !== "all",
-    installerFilter !== "all",
-    schedulerFilter !== "all",
-    floorFilter !== "all",
+    clientFilter.length > 0,
+    buildingFilter.length > 0,
+    statusFilter.length > 0,
+    installerFilter.length > 0,
+    schedulerFilter.length > 0,
+    floorFilter.length > 0,
     dateAddedFilter !== "all",
     completeByFilter !== "all",
     sortOrder !== "none",
@@ -402,12 +407,12 @@ export function UnitsList({
                     </span>
                   )}
                 </div>
-                <FilterDropdown label="Client" value={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); setFloorFilter("all"); }} />
-                <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter("all"); }} />
-                <FilterDropdown label="Floor" value={floorFilter} options={floorOptions} onChange={setFloorFilter} />
-                <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
-                <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
-                <FilterDropdown label="Scheduler" value={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
+                <FilterDropdown multiple label="Client" values={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter([]); setFloorFilter([]); }} />
+                <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter([]); }} />
+                <FilterDropdown multiple label="Floor" values={floorFilter} options={floorOptions} onChange={setFloorFilter} />
+                <FilterDropdown multiple label="Status" values={statusFilter} options={statusOptions} onChange={setStatusFilter} />
+                <FilterDropdown multiple label="Installer" values={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
+                <FilterDropdown multiple label="Scheduler" values={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
                 <CreatedDateFilter
                   value={dateAddedFilter}
                   onChange={setDateAddedFilter}
@@ -430,12 +435,12 @@ export function UnitsList({
                   <button
                     type="button"
                     onClick={() => {
-                      setClientFilter("all");
-                      setBuildingFilter("all");
-                      setStatusFilter("all");
-                      setInstallerFilter("all");
-                      setSchedulerFilter("all");
-                      setFloorFilter("all");
+                      setClientFilter([]);
+                      setBuildingFilter([]);
+                      setStatusFilter([]);
+                      setInstallerFilter([]);
+                      setSchedulerFilter([]);
+                      setFloorFilter([]);
                       setDateAddedFilter("all");
                       setCompleteByFilter("all");
                       setIssueFilter("all");

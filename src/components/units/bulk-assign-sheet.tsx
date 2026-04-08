@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { CalendarBlank, CheckCircle, Users, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { bulkAssignUnits } from "@/app/actions/fsr-data";

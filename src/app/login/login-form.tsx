@@ -4,10 +4,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { homePathForRole } from "@/lib/role-routes";
+import { refreshDataset } from "@/app/actions/dataset-queries";
+import { setCachedData } from "@/lib/offline-cache";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ArrowRight, UserPlus } from "@phosphor-icons/react";
+
+const DATASET_CACHE_KEY = "app-dataset";
+
+function prefetchDatasetInBackground(role?: string) {
+  const kind =
+    role === "scheduler" ? "scheduler" : role === "installer" ? "installer" : "full";
+  refreshDataset(kind)
+    .then((data) => setCachedData(DATASET_CACHE_KEY, data))
+    .catch(() => {/* best-effort */});
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -88,6 +100,9 @@ export function LoginForm() {
           .select("role")
           .eq("id", user.id)
           .single();
+
+        // Warm IDB cache while router navigates — fire-and-forget
+        prefetchDatasetInBackground(profile?.role);
 
         router.push(homePathForRole(profile?.role));
       }

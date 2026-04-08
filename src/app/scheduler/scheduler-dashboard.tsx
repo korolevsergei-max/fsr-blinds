@@ -49,9 +49,9 @@ export function SchedulerDashboard({
   const today = new Date().toISOString().split("T")[0];
 
   // Scope filters
-  const [clientFilter, setClientFilter] = useState("all");
-  const [buildingFilter, setBuildingFilter] = useState("all");
-  const [installerFilter, setInstallerFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
+  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
   const [yearFilter, setYearFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState("all");
 
@@ -61,9 +61,9 @@ export function SchedulerDashboard({
 
   const availableBuildings = useMemo(
     () =>
-      clientFilter === "all"
+      clientFilter.length === 0
         ? buildings
-        : buildings.filter((b) => b.clientId === clientFilter),
+        : buildings.filter((b) => clientFilter.includes(b.clientId)),
     [buildings, clientFilter]
   );
 
@@ -71,12 +71,13 @@ export function SchedulerDashboard({
   const scopedUnits = useMemo(() => {
     const effectiveMonth = yearFilter === "all" ? "all" : monthFilter;
     return units.filter((u) => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
-      if (installerFilter === "__unassigned__") {
-        if (u.assignedInstallerId) return false;
-      } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
-        return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
+      if (installerFilter.length > 0) {
+        const wantsUnassigned = installerFilter.includes("__unassigned__");
+        const matchUnassigned = wantsUnassigned && !u.assignedInstallerId;
+        const matchSpecific = u.assignedInstallerId && installerFilter.includes(u.assignedInstallerId);
+        if (!matchUnassigned && !matchSpecific) return false;
       }
       if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
@@ -132,9 +133,9 @@ export function SchedulerDashboard({
   const showResults = selectedStatus !== null || selectedIssue !== null;
 
   const activeFilterCount = [
-    clientFilter !== "all",
-    buildingFilter !== "all",
-    installerFilter !== "all",
+    clientFilter.length > 0,
+    buildingFilter.length > 0,
+    installerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
@@ -196,23 +197,26 @@ export function SchedulerDashboard({
               )}
             </div>
             <FilterDropdown
+              multiple
               label="Client"
-              value={clientFilter}
+              values={clientFilter}
               options={clientOptions}
               onChange={(v) => {
                 setClientFilter(v);
-                setBuildingFilter("all");
+                setBuildingFilter([]);
               }}
             />
             <FilterDropdown
+              multiple
               label="Building"
-              value={buildingFilter}
+              values={buildingFilter}
               options={buildingOptions}
               onChange={setBuildingFilter}
             />
             <FilterDropdown
+              multiple
               label="Installer"
-              value={installerFilter}
+              values={installerFilter}
               options={installerOptions}
               onChange={setInstallerFilter}
             />
@@ -237,9 +241,9 @@ export function SchedulerDashboard({
               <button
                 type="button"
                 onClick={() => {
-                  setClientFilter("all");
-                  setBuildingFilter("all");
-                  setInstallerFilter("all");
+                  setClientFilter([]);
+                  setBuildingFilter([]);
+                  setInstallerFilter([]);
                   setYearFilter("all");
                   setMonthFilter("all");
                 }}

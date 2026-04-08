@@ -41,9 +41,91 @@ type MediaUploadRow = {
   created_at: string;
 };
 
+/**
+ * Transforms raw RPC / multi-query results into a typed AppDataset.
+ * Shared by both the fast RPC path and the legacy multi-query fallback.
+ */
+function buildDatasetFromRaw(raw: {
+  clients: ClientRow[];
+  buildings: BuildingRow[];
+  units: UnitRow[];
+  rooms: RoomRow[];
+  windows: WindowRow[];
+  installers: InstallerRow[];
+  schedule_entries: ScheduleRow[];
+  cutters: CutterRow[];
+  schedulers: SchedulerRow[];
+  scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
+}): AppDataset {
+  const schedulersData = raw.schedulers ?? [];
+  const schedulerMap = new Map(schedulersData.map((s) => [s.id, s.name]));
+  const assignmentMap = new Map(
+    (raw.scheduler_unit_assignments ?? []).map((a) => [
+      a.unit_id,
+      { id: a.scheduler_id, name: schedulerMap.get(a.scheduler_id) || "Unknown", assigned_at: a.assigned_at },
+    ])
+  );
+
+  const units = (raw.units ?? []).map((r) => {
+    const assignment = assignmentMap.get(r.id);
+    return mapUnit(
+      { ...r, assigned_at: assignment?.assigned_at },
+      assignment?.name,
+      assignment?.id
+    );
+  });
+  const schedule = normalizeScheduleEntries(units, (raw.schedule_entries ?? []).map(mapSchedule));
+
+  const installers = (raw.installers ?? []).map(mapInstaller);
+  const schedulers = schedulersData.map(mapScheduler);
+
+  // Allow Schedulers to act as Installers
+  const combinedInstallers = [
+    ...installers,
+    ...schedulers.map((sch) => ({
+      id: `sch-${sch.id}`,
+      name: `SC: ${sch.name}`,
+      email: sch.email,
+      phone: sch.phone,
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
+      authUserId: sch.authUserId,
+    })),
+  ];
+
+  return {
+    clients: (raw.clients ?? []).map(mapClient),
+    buildings: (raw.buildings ?? []).map(mapBuilding),
+    units,
+    rooms: (raw.rooms ?? []).map(mapRoom),
+    windows: (raw.windows ?? []).map(mapWindow),
+    installers: combinedInstallers,
+    schedule,
+    cutters: (raw.cutters ?? []).map(mapCutter),
+    schedulers,
+  };
+}
+
 export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const supabase = await createClient();
 
+  // Fast path: single RPC call (requires migration 20260408110000)
+  const { data: rpcData, error: rpcError } = await supabase.rpc("get_full_dataset");
+  if (!rpcError && rpcData) {
+    return buildDatasetFromRaw(rpcData as {
+      clients: ClientRow[];
+      buildings: BuildingRow[];
+      units: UnitRow[];
+      rooms: RoomRow[];
+      windows: WindowRow[];
+      installers: InstallerRow[];
+      schedule_entries: ScheduleRow[];
+      cutters: CutterRow[];
+      schedulers: SchedulerRow[];
+      scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
+    });
+  }
+
+  // Fallback: multiple parallel queries (works before RPC migration is applied)
   const [
     clientsRes,
     buildingsRes,
@@ -62,22 +144,13 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     supabase.from("schedule_entries").select("*").order("task_date"),
   ]);
 
-  // Optional tables — only exist after their migration is applied.
   const [cuttersRes, schedulersRes, assignmentsRes] = await Promise.all([
     supabase.from("cutters").select("*").order("name"),
     supabase.from("schedulers").select("*").order("name"),
     supabase.from("scheduler_unit_assignments").select("unit_id, scheduler_id, assigned_at"),
   ]);
 
-  const coreResponses = [
-    clientsRes,
-    buildingsRes,
-    unitsRes,
-    roomsRes,
-    windowsRes,
-    installersRes,
-    scheduleRes,
-  ];
+  const coreResponses = [clientsRes, buildingsRes, unitsRes, roomsRes, windowsRes, installersRes, scheduleRes];
   const firstError = coreResponses.find((r) => r.error)?.error;
   if (firstError) {
     const baseMessage = `Supabase: ${firstError.message}.`;
@@ -91,54 +164,18 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     );
   }
 
-  const schedulersData = (schedulersRes.data as SchedulerRow[]) ?? [];
-  const schedulerMap = new Map(schedulersData.map((s) => [s.id, s.name]));
-  const assignmentMap = new Map(
-    ((assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? []).map((a) => [
-      a.unit_id,
-      { id: a.scheduler_id, name: schedulerMap.get(a.scheduler_id) || "Unknown", assigned_at: a.assigned_at },
-    ])
-  );
-
-  const units = (unitsRes.data as UnitRow[]).map((r) => {
-    const assignment = assignmentMap.get(r.id);
-    return mapUnit(
-      { ...r, assigned_at: assignment?.assigned_at },
-      assignment?.name,
-      assignment?.id
-    );
+  return buildDatasetFromRaw({
+    clients: (clientsRes.data as ClientRow[]) ?? [],
+    buildings: (buildingsRes.data as BuildingRow[]) ?? [],
+    units: (unitsRes.data as UnitRow[]) ?? [],
+    rooms: (roomsRes.data as RoomRow[]) ?? [],
+    windows: (windowsRes.data as WindowRow[]) ?? [],
+    installers: (installersRes.data as InstallerRow[]) ?? [],
+    schedule_entries: (scheduleRes.data as ScheduleRow[]) ?? [],
+    cutters: cuttersRes.error ? [] : (cuttersRes.data as CutterRow[]) ?? [],
+    schedulers: schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[]) ?? [],
+    scheduler_unit_assignments: (assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? [],
   });
-  const schedule = normalizeScheduleEntries(units, (scheduleRes.data as ScheduleRow[]).map(mapSchedule));
-
-  const installers = (installersRes.data as InstallerRow[]).map(mapInstaller);
-  const schedulers = schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[])?.map(mapScheduler) ?? [];
-
-  // Allow Schedulers to act as Installers
-  const combinedInstallers = [
-    ...installers,
-    ...schedulers.map((sch) => ({
-      id: `sch-${sch.id}`, // Prefix with sch- to distinguish in backend
-      name: `SC: ${sch.name}`,
-      email: sch.email,
-      phone: sch.phone,
-      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
-      authUserId: sch.authUserId,
-    })),
-  ];
-
-  return {
-    clients: (clientsRes.data as ClientRow[]).map(mapClient),
-    buildings: (buildingsRes.data as BuildingRow[]).map(mapBuilding),
-    units,
-    rooms: (roomsRes.data as RoomRow[]).map(mapRoom),
-    windows: (windowsRes.data as WindowRow[]).map(mapWindow),
-    installers: combinedInstallers,
-    schedule,
-    cutters: cuttersRes.error
-      ? []
-      : (cuttersRes.data as CutterRow[])?.map(mapCutter) ?? [],
-    schedulers,
-  };
 });
 
 function emptyDataset(): AppDataset {
@@ -306,6 +343,69 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     rooms,
     windows,
     installers,
+    schedule,
+    cutters: [],
+    schedulers: [],
+  };
+}
+
+/**
+ * Loads a dataset scoped to the current installer: only units assigned to them,
+ * plus their buildings, clients, rooms, and windows.
+ * ~10x smaller payload than loadFullDataset() for active installers.
+ */
+export async function loadInstallerDataset(installerId: string): Promise<AppDataset> {
+  if (!installerId) return emptyDataset();
+
+  const supabase = await createClient();
+
+  const { data: unitData, error: unitError } = await supabase
+    .from("units")
+    .select("*")
+    .eq("assigned_installer_id", installerId)
+    .order("unit_number");
+
+  if (unitError || !unitData?.length) return emptyDataset();
+
+  const units = (unitData as UnitRow[]).map((r) => mapUnit(r));
+
+  const allowedBuildingIds = [...new Set(units.map((u) => u.buildingId))];
+  const allowedClientIds = [...new Set(units.map((u) => u.clientId))];
+  const allowedUnitIds = units.map((u) => u.id);
+
+  const [buildingRows, clientRows, roomRows, scheduleRows] = await Promise.all([
+    allowedBuildingIds.length > 0
+      ? supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name")
+      : Promise.resolve({ data: [] }),
+    allowedClientIds.length > 0
+      ? supabase.from("clients").select("*").in("id", allowedClientIds).order("name")
+      : Promise.resolve({ data: [] }),
+    allowedUnitIds.length > 0
+      ? supabase.from("rooms").select("*").in("unit_id", allowedUnitIds).order("name")
+      : Promise.resolve({ data: [] }),
+    allowedUnitIds.length > 0
+      ? supabase.from("schedule_entries").select("*").in("unit_id", allowedUnitIds).order("task_date")
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const rooms = ((roomRows.data as RoomRow[]) ?? []).map(mapRoom);
+  const allowedRoomIds = rooms.map((r) => r.id);
+  const windowRows = allowedRoomIds.length > 0
+    ? await supabase.from("windows").select("*").in("room_id", allowedRoomIds).order("label")
+    : { data: [] };
+
+  const schedule = normalizeScheduleEntries(
+    units,
+    ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
+  );
+
+  return {
+    clients: ((clientRows.data as ClientRow[]) ?? []).map(mapClient),
+    buildings: ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding),
+    units,
+    rooms,
+    windows: ((windowRows.data as WindowRow[]) ?? []).map(mapWindow),
+    installers: [],
     schedule,
     cutters: [],
     schedulers: [],
@@ -495,6 +595,7 @@ export async function loadNotifications(
     title: r.title,
     body: r.body,
     relatedWeekStart: r.related_week_start,
+    relatedUnitId: r.related_unit_id ?? null,
     createdAt: r.created_at,
     read: readSet.has(r.id),
   }));

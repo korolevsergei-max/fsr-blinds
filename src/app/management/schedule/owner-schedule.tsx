@@ -58,12 +58,12 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
   const [view, setView] = useState<ViewMode>("week");
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthOffset, setMonthOffset] = useState(0);
-  const [clientFilter, setClientFilter] = useState("all");
-  const [buildingFilter, setBuildingFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installFilter, setInstallFilter] = useState<DateRange>("all");
 
   const availableBuildings = useMemo(
-    () => (clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter)),
+    () => (clientFilter.length === 0 ? buildings : buildings.filter((b) => clientFilter.includes(b.clientId))),
     [buildings, clientFilter]
   );
 
@@ -72,8 +72,8 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
       const unit = units.find((u) => u.id === s.unitId);
       if (!unit) return false;
 
-      if (clientFilter !== "all" && unit.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && unit.buildingId !== buildingFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(unit.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(unit.buildingId)) return false;
       if (installFilter !== "all" && !isWithinRange(unit.installationDate ?? null, installFilter)) return false;
 
       return true;
@@ -91,8 +91,8 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
   }, [filteredSchedule]);
 
   const activeFilterCount = [
-    clientFilter !== "all",
-    buildingFilter !== "all",
+    clientFilter.length > 0,
+    buildingFilter.length > 0,
     installFilter !== "all",
   ].filter(Boolean).length;
 
@@ -157,17 +157,19 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
             )}
           </div>
           <FilterDropdown
+            multiple
             label="Client"
-            value={clientFilter}
+            values={clientFilter}
             options={clientOptions}
             onChange={(v) => {
               setClientFilter(v);
-              setBuildingFilter("all");
+              setBuildingFilter([]);
             }}
           />
           <FilterDropdown
+            multiple
             label="Building"
-            value={buildingFilter}
+            values={buildingFilter}
             options={buildingOptions}
             onChange={setBuildingFilter}
           />
@@ -181,8 +183,8 @@ export function OwnerSchedule({ data }: { data: AppDataset }) {
             <button
               type="button"
               onClick={() => {
-                setClientFilter("all");
-                setBuildingFilter("all");
+                setClientFilter([]);
+                setBuildingFilter([]);
                 setInstallFilter("all");
               }}
               className="flex-shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"

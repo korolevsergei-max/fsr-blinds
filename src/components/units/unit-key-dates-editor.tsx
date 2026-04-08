@@ -7,6 +7,7 @@ import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import type { AppDataset } from "@/lib/app-dataset";
+import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ type UnitKeyDatesEditorProps = {
 export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false }: UnitKeyDatesEditorProps) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { afterMutate } = useDatasetMutation();
   const unit = data.units.find((u) => u.id === id);
 
   const [measurementDate, setMeasurementDate] = useState(unit?.measurementDate ?? "");
@@ -61,7 +63,20 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
         }
       }
       setSaved(true);
-      router.refresh();
+      afterMutate((prev) => ({
+        ...prev,
+        units: prev.units.map((u) =>
+          u.id === unit.id
+            ? {
+                ...u,
+                measurementDate: measurementDate || null,
+                bracketingDate: bracketingDate || null,
+                installationDate: installationDate || null,
+                completeByDate: completeByDate || null,
+              }
+            : u
+        ),
+      }));
       setTimeout(() => router.push(detailHref), 900);
     });
   };

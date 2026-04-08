@@ -3,9 +3,12 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { AppDatasetProvider, useAppDataset } from "@/lib/dataset-context";
 import { useRealtimeSync } from "@/lib/use-realtime-sync";
+import { getCachedData, setCachedData } from "@/lib/offline-cache";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { AppUser } from "@/lib/auth";
 import { refreshDataset } from "@/app/actions/dataset-queries";
+
+const DATASET_CACHE_KEY = "app-dataset";
 
 /**
  * Client shell that wraps a portal's content with the shared dataset context.
@@ -24,7 +27,7 @@ export function AppDatasetClientShell({
   /** Linked entity ID for the portal (e.g. installerId). */
   linkedEntityId?: string | null;
   /** Which server action to call for full refresh. Defaults to refreshDataset (full). */
-  portalDataLoader?: "full" | "scheduler";
+  portalDataLoader?: "full" | "scheduler" | "installer";
   children: ReactNode;
 }) {
   const loaderKind = portalDataLoader ?? "full";
@@ -37,12 +40,27 @@ export function AppDatasetClientShell({
   );
 }
 
-/** Hooks into the dataset context to wire up Realtime and visibility refresh. */
-function RealtimeBridge({ loaderKind }: { loaderKind: "full" | "scheduler" }) {
-  const { patchData, setData } = useAppDataset();
+/** Hooks into the dataset context to wire up Realtime, visibility refresh, and IDB persistence. */
+function RealtimeBridge({ loaderKind }: { loaderKind: "full" | "scheduler" | "installer" }) {
+  const { data, patchData, setData } = useAppDataset();
 
   // Wire up Supabase Realtime subscriptions
   useRealtimeSync(patchData);
+
+  // On mount: seed from IDB if server provided empty data (offline / first-render fallback).
+  useEffect(() => {
+    if (data.units.length === 0 && data.clients.length === 0) {
+      getCachedData<typeof data>(DATASET_CACHE_KEY).then((cached) => {
+        if (cached) setData(cached);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist dataset to IDB whenever it changes (debounced via ref)
+  useEffect(() => {
+    setCachedData(DATASET_CACHE_KEY, data);
+  }, [data]);
 
   // Refresh when the tab returns from background after 60s+
   const setDataRef = useRef(setData);
@@ -59,8 +77,8 @@ function RealtimeBridge({ loaderKind }: { loaderKind: "full" | "scheduler" }) {
         hiddenAtRef.current &&
         Date.now() - hiddenAtRef.current > 60_000
       ) {
-        refreshDataset(loaderKind).then((data) => {
-          if (data) setDataRef.current(data);
+        refreshDataset(loaderKind).then((freshData) => {
+          if (freshData) setDataRef.current(freshData);
         });
       }
     }

@@ -16,6 +16,14 @@ import {
 } from "@/lib/types";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
+import { emitNotification } from "@/lib/emit-notification";
+import {
+  NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
+  NOTIF_INSTALLATION_DATE_SET,
+  NOTIF_DATES_CHANGED,
+  NOTIF_UNIT_ESCALATION,
+  NOTIF_UNIT_PROGRESS_UPDATE,
+} from "@/lib/notification-types";
 
 const BUCKET = "fsr-media";
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB hard safety cap
@@ -276,6 +284,18 @@ async function logUnitActivity(
   });
 }
 
+/** Looks up the scheduler_id responsible for a unit (from scheduler_unit_assignments). Returns null if unassigned. */
+async function getSchedulerForUnit(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("scheduler_unit_assignments")
+    .select("scheduler_id")
+    .eq("unit_id", unitId)
+    .maybeSingle();
+  return data?.scheduler_id ?? null;
+}
 
 
 export async function bulkAssignUnits(
@@ -482,6 +502,54 @@ export async function bulkAssignUnits(
         })
       )
     );
+
+    // ─── Notifications ────────────────────────────────────────────────────────
+    after(async () => {
+      // Notify the real installer (not a scheduler acting as installer)
+      if (installerId && !installerId.startsWith("sch-")) {
+        const { data: insRow } = await supabase
+          .from("installers")
+          .select("id")
+          .eq("id", installerId)
+          .maybeSingle();
+        if (insRow) {
+          const unitLabel =
+            scopedUnitIds.length === 1
+              ? `Unit added to your queue`
+              : `${scopedUnitIds.length} units added to your queue`;
+          await emitNotification(supabase, {
+            recipientRole: "installer",
+            recipientId: installerId,
+            type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
+            title: unitLabel,
+            body: `Assigned by ${owner.displayName}`,
+            relatedUnitId: scopedUnitIds.length === 1 ? scopedUnitIds[0] : null,
+          });
+        }
+      }
+
+      // Notify about installation date being newly set (per unit, only if it's new)
+      if (installationDate) {
+        for (const uid of scopedUnitIds) {
+          const { data: unitRow } = await supabase
+            .from("units")
+            .select("assigned_installer_id, installation_date")
+            .eq("id", uid)
+            .maybeSingle();
+          if (unitRow?.assigned_installer_id && unitRow.installation_date === installationDate) {
+            await emitNotification(supabase, {
+              recipientRole: "installer",
+              recipientId: unitRow.assigned_installer_id,
+              type: NOTIF_INSTALLATION_DATE_SET,
+              title: "Installation date set",
+              body: `Installation scheduled for ${installationDate}.`,
+              relatedUnitId: uid,
+            });
+          }
+        }
+      }
+    });
+    // ─────────────────────────────────────────────────────────────────────────
 
     revalidateApp();
     return { ok: true };
@@ -707,6 +775,43 @@ export async function updateUnitAssignment(
       ...(bracketingDate ? { bracketingDate } : {}),
       ...(installationDate ? { installationDate } : {}),
     });
+
+    // ─── Notifications ────────────────────────────────────────────────────────
+    after(async () => {
+      const resolvedInstallerId = installerId && !installerId.startsWith("sch-") ? installerId : null;
+
+      // Notify installer of assignment (single unit)
+      if (resolvedInstallerId && patch.assigned_installer_name) {
+        await emitNotification(supabase, {
+          recipientRole: "installer",
+          recipientId: resolvedInstallerId,
+          type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
+          title: "Unit added to your queue",
+          body: `Assigned by ${owner.displayName}`,
+          relatedUnitId: unitId,
+        });
+      }
+
+      // Notify installer of date changes
+      if (resolvedInstallerId && (measurementDate || bracketingDate || installationDate)) {
+        const hadInstallDate = Boolean(installationDate);
+        await emitNotification(supabase, {
+          recipientRole: "installer",
+          recipientId: resolvedInstallerId,
+          type: hadInstallDate ? NOTIF_INSTALLATION_DATE_SET : NOTIF_DATES_CHANGED,
+          title: hadInstallDate ? "Installation date set" : "Schedule dates updated",
+          body: [
+            measurementDate && `Measurement: ${measurementDate}`,
+            bracketingDate && `Bracketing: ${bracketingDate}`,
+            installationDate && `Installation: ${installationDate}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          relatedUnitId: unitId,
+        });
+      }
+    });
+    // ─────────────────────────────────────────────────────────────────────────
 
     revalidateApp();
     return { ok: true };
@@ -1188,7 +1293,7 @@ export async function createWindowWithPhoto(
     after(async () => {
       const { data: unit } = await supabase
         .from("units")
-        .select("assigned_installer_name")
+        .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
@@ -1211,7 +1316,54 @@ export async function createWindowWithPhoto(
       );
       await refreshRoomAggregates(supabase, roomId);
       await refreshUnitAggregates(supabase, unitId);
+      const prevStatus = unit?.status ?? "not_started";
       await recomputeUnitStatus(supabase, unitId);
+
+      // Escalation alert to scheduler when window has yellow/red flag
+      if (riskFlag === "yellow" || riskFlag === "red") {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          await emitNotification(supabase, {
+            recipientRole: "scheduler",
+            recipientId: schedulerId,
+            type: NOTIF_UNIT_ESCALATION,
+            title: `${riskFlag === "red" ? "🔴 Red" : "🟡 Yellow"} flag on window`,
+            body: `${label} flagged ${riskFlag} by installer.`,
+            relatedUnitId: unitId,
+          });
+        }
+      }
+
+      // Progress notification on status milestone change
+      const { data: updated } = await supabase
+        .from("units")
+        .select("status")
+        .eq("id", unitId)
+        .single();
+      const newStatus = updated?.status ?? prevStatus;
+      if (newStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          const progressTitles: Record<string, string> = {
+            measured: "All windows measured",
+            bracketed: "All windows bracketed",
+            measured_and_bracketed: "All windows measured & bracketed",
+            installed: "All windows installed",
+          };
+          const title = progressTitles[newStatus];
+          if (title) {
+            await emitNotification(supabase, {
+              recipientRole: "scheduler",
+              recipientId: schedulerId,
+              type: NOTIF_UNIT_PROGRESS_UPDATE,
+              title,
+              body: `Unit status updated to "${newStatus}".`,
+              relatedUnitId: unitId,
+            });
+          }
+        }
+      }
+
       revalidateUnit(unitId);
     });
     return { ok: true };
@@ -1378,7 +1530,7 @@ export async function updateWindowWithOptionalPhoto(
     after(async () => {
       const { data: unit } = await supabase
         .from("units")
-        .select("assigned_installer_name")
+        .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
@@ -1398,7 +1550,54 @@ export async function updateWindowWithOptionalPhoto(
       );
       await refreshRoomAggregates(supabase, roomId);
       await refreshUnitAggregates(supabase, unitId);
+      const prevStatus = unit?.status ?? "not_started";
       await recomputeUnitStatus(supabase, unitId);
+
+      // Escalation alert to scheduler when window flag is yellow/red
+      if (riskFlag === "yellow" || riskFlag === "red") {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          await emitNotification(supabase, {
+            recipientRole: "scheduler",
+            recipientId: schedulerId,
+            type: NOTIF_UNIT_ESCALATION,
+            title: `${riskFlag === "red" ? "🔴 Red" : "🟡 Yellow"} flag on window`,
+            body: `${label} flagged ${riskFlag} by installer.`,
+            relatedUnitId: unitId,
+          });
+        }
+      }
+
+      // Progress notification on status milestone change
+      const { data: updatedUnit } = await supabase
+        .from("units")
+        .select("status")
+        .eq("id", unitId)
+        .single();
+      const newStatus = updatedUnit?.status ?? prevStatus;
+      if (newStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          const progressTitles: Record<string, string> = {
+            measured: "All windows measured",
+            bracketed: "All windows bracketed",
+            measured_and_bracketed: "All windows measured & bracketed",
+            installed: "All windows installed",
+          };
+          const title = progressTitles[newStatus];
+          if (title) {
+            await emitNotification(supabase, {
+              recipientRole: "scheduler",
+              recipientId: schedulerId,
+              type: NOTIF_UNIT_PROGRESS_UPDATE,
+              title,
+              body: `Unit status updated to "${newStatus}".`,
+              relatedUnitId: unitId,
+            });
+          }
+        }
+      }
+
       revalidateUnit(unitId);
     });
     return { ok: true };
@@ -1515,7 +1714,7 @@ export async function uploadWindowPostBracketingPhoto(
     after(async () => {
       const { data: unit } = await supabase
         .from("units")
-        .select("assigned_installer_name")
+        .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
@@ -1527,7 +1726,32 @@ export async function uploadWindowPostBracketingPhoto(
         { roomId, windowId, windowLabel: capturedWindowLabel, riskFlag, hasPhoto: capturedHasPhoto }
       );
       await refreshUnitAggregates(supabase, unitId);
+      const prevStatus = unit?.status ?? "not_started";
       await recomputeUnitStatus(supabase, unitId);
+      const { data: updatedUnit } = await supabase.from("units").select("status").eq("id", unitId).single();
+      const newStatus = updatedUnit?.status ?? prevStatus;
+      if (newStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          const progressTitles: Record<string, string> = {
+            measured: "All windows measured",
+            bracketed: "All windows bracketed",
+            measured_and_bracketed: "All windows measured & bracketed",
+            installed: "All windows installed",
+          };
+          const title = progressTitles[newStatus];
+          if (title) {
+            await emitNotification(supabase, {
+              recipientRole: "scheduler",
+              recipientId: schedulerId,
+              type: NOTIF_UNIT_PROGRESS_UPDATE,
+              title,
+              body: `Unit status updated to "${newStatus}".`,
+              relatedUnitId: unitId,
+            });
+          }
+        }
+      }
       revalidateUnit(unitId);
     });
     return { ok: true };
@@ -1660,7 +1884,7 @@ export async function uploadWindowInstalledPhoto(
     after(async () => {
       const { data: unit } = await supabase
         .from("units")
-        .select("assigned_installer_name")
+        .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await refreshUnitAggregates(supabase, unitId);
@@ -1672,7 +1896,32 @@ export async function uploadWindowInstalledPhoto(
         capturedHasPhoto2 ? "installed_photo_added" : "installation_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel2, riskFlag, hasPhoto: capturedHasPhoto2 }
       );
+      const prevStatus = unit?.status ?? "not_started";
       await recomputeUnitStatus(supabase, unitId);
+      const { data: updatedUnit } = await supabase.from("units").select("status").eq("id", unitId).single();
+      const newStatus = updatedUnit?.status ?? prevStatus;
+      if (newStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        if (schedulerId) {
+          const progressTitles: Record<string, string> = {
+            measured: "All windows measured",
+            bracketed: "All windows bracketed",
+            measured_and_bracketed: "All windows measured & bracketed",
+            installed: "All windows installed",
+          };
+          const title = progressTitles[newStatus];
+          if (title) {
+            await emitNotification(supabase, {
+              recipientRole: "scheduler",
+              recipientId: schedulerId,
+              type: NOTIF_UNIT_PROGRESS_UPDATE,
+              title,
+              body: `Unit status updated to "${newStatus}".`,
+              relatedUnitId: unitId,
+            });
+          }
+        }
+      }
       revalidateUnit(unitId);
     });
     return { ok: true };
@@ -1698,6 +1947,39 @@ export async function markNotificationRead(
       },
       { onConflict: "notification_id,user_role,user_id" }
     );
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/installer/notifications");
+    revalidatePath("/scheduler/notifications");
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function markAllNotificationsRead(
+  userRole: string,
+  userId: string
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+    // Fetch all unread notification IDs for this recipient
+    const { data: notifs } = await supabase
+      .from("notifications")
+      .select("id")
+      .eq("recipient_role", userRole)
+      .eq("recipient_id", userId);
+    if (!notifs || notifs.length === 0) return { ok: true };
+
+    const rows = notifs.map((n: { id: string }) => ({
+      notification_id: n.id,
+      user_role: userRole,
+      user_id: userId,
+      read_at: new Date().toISOString(),
+    }));
+    const { error } = await supabase
+      .from("notification_reads")
+      .upsert(rows, { onConflict: "notification_id,user_role,user_id" });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/installer/notifications");
     revalidatePath("/scheduler/notifications");

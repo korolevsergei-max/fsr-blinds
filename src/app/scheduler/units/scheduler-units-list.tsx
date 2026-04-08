@@ -39,28 +39,28 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const today = new Date().toISOString().split("T")[0];
 
   const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
-  const [buildingFilter, setBuildingFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [installerFilter, setInstallerFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
   const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
   const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
   const [sortOrder, setSortOrder] = useState<string>("none");
-  const [flagFilter, setFlagFilter] = useState("all");
+  const [flagFilter, setFlagFilter] = useState<string[]>([]);
   const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);
 
   const availableBuildings = useMemo(
-    () => (clientFilter === "all" ? buildings : buildings.filter((b) => b.clientId === clientFilter)),
+    () => (clientFilter.length === 0 ? buildings : buildings.filter((b) => clientFilter.includes(b.clientId))),
     [buildings, clientFilter]
   );
 
   const unitsForDateOptions = useMemo(() => {
     return units.filter((u) => {
-      if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-      if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
+      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+      if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       return true;
     });
   }, [units, clientFilter, buildingFilter]);
@@ -99,13 +99,14 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
             return false;
           }
         }
-        if (clientFilter !== "all" && u.clientId !== clientFilter) return false;
-        if (buildingFilter !== "all" && u.buildingId !== buildingFilter) return false;
-        if (statusFilter !== "all" && u.status !== statusFilter) return false;
-        if (installerFilter === "__unassigned__") {
-          if (u.assignedInstallerId) return false;
-        } else if (installerFilter !== "all" && u.assignedInstallerId !== installerFilter) {
-          return false;
+        if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
+        if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
+        if (statusFilter.length > 0 && !statusFilter.includes(u.status)) return false;
+        if (installerFilter.length > 0) {
+          const wantsUnassigned = installerFilter.includes("__unassigned__");
+          const matchUnassigned = wantsUnassigned && !u.assignedInstallerId;
+          const matchSpecific = u.assignedInstallerId && installerFilter.includes(u.assignedInstallerId);
+          if (!matchUnassigned && !matchSpecific) return false;
         }
         if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.assignedAt || u.createdAt, dateAddedFilter)) return false;
         if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
@@ -115,7 +116,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
       })
       .map((u) => ({ ...u, flags: computeUnitFlags(u, today) }))
       .filter((u) => {
-        if (flagFilter !== "all" && !u.flags.includes(flagFilter as UnitFlag)) return false;
+        if (flagFilter.length > 0 && !flagFilter.some(f => u.flags.includes(f as UnitFlag))) return false;
         return true;
       });
   }, [
@@ -199,14 +200,14 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   ];
 
   const activeFilterCount = [
-    clientFilter !== "all",
-    buildingFilter !== "all",
-    statusFilter !== "all",
-    installerFilter !== "all",
+    clientFilter.length > 0,
+    buildingFilter.length > 0,
+    statusFilter.length > 0,
+    installerFilter.length > 0,
     dateAddedFilter !== "all",
     completeByFilter !== "all",
     sortOrder !== "none",
-    flagFilter !== "all",
+    flagFilter.length > 0,
     issueFilter !== "all",
   ].filter(Boolean).length;
 
@@ -305,14 +306,15 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 )}
               </div>
               <FilterDropdown
+                multiple
                 label="Client"
-                value={clientFilter}
+                values={clientFilter}
                 options={clientOptions}
-                onChange={(v) => { setClientFilter(v); setBuildingFilter("all"); }}
+                onChange={(v) => { setClientFilter(v); setBuildingFilter([]); }}
               />
-              <FilterDropdown label="Building" value={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
-              <FilterDropdown label="Status" value={statusFilter} options={statusOptions} onChange={setStatusFilter} />
-              <FilterDropdown label="Installer" value={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
+              <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
+              <FilterDropdown multiple label="Status" values={statusFilter} options={statusOptions} onChange={setStatusFilter} />
+              <FilterDropdown multiple label="Installer" values={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
               <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} distinctDates={distinctAddedDates} />
               <CreatedDateFilter
                 value={completeByFilter}
@@ -327,20 +329,20 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 onChange={(v) => setIssueFilter(v as typeof issueFilter)}
               />
               <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
-              <FilterDropdown label="Flag" value={flagFilter} options={flagOptions} onChange={setFlagFilter} />
+              <FilterDropdown multiple label="Flag" values={flagFilter} options={flagOptions} onChange={setFlagFilter} />
               {activeFilterCount > 0 && (
                 <button
                   type="button"
                   onClick={() => {
-                    setClientFilter("all");
-                    setBuildingFilter("all");
-                    setStatusFilter("all");
-                    setInstallerFilter("all");
+                    setClientFilter([]);
+                    setBuildingFilter([]);
+                    setStatusFilter([]);
+                    setInstallerFilter([]);
                     setDateAddedFilter("all");
                     setCompleteByFilter("all");
                     setIssueFilter("all");
                     setSortOrder("none");
-                    setFlagFilter("all");
+                    setFlagFilter([]);
                   }}
                   className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
                 >
