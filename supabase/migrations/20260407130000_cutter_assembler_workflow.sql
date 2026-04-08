@@ -5,7 +5,10 @@
 ALTER TABLE public.manufacturers RENAME TO cutters;
 
 -- Rename RLS policies
-ALTER POLICY "authenticated_all_manufacturers" ON public.cutters RENAME TO "authenticated_all_cutters";
+DROP POLICY IF EXISTS "owner_manage_manufacturers" ON public.cutters;
+DROP POLICY IF EXISTS "manufacturer_read_own" ON public.cutters;
+CREATE POLICY "authenticated_all_cutters" ON public.cutters
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- 2) Rename qc_persons table → assemblers
 ALTER TABLE public.qc_persons RENAME TO assemblers;
@@ -14,13 +17,14 @@ ALTER POLICY "authenticated_all_qc_persons" ON public.assemblers RENAME TO "auth
 
 -- 3) Update user_profiles role check
 ALTER TABLE public.user_profiles DROP CONSTRAINT IF EXISTS user_profiles_role_check;
+
+-- Migrate existing role values BEFORE adding new constraint
+UPDATE public.user_profiles SET role = 'cutter' WHERE role = 'manufacturer';
+UPDATE public.user_profiles SET role = 'assembler' WHERE role = 'qc';
+
 ALTER TABLE public.user_profiles
   ADD CONSTRAINT user_profiles_role_check
   CHECK (role IN ('owner', 'installer', 'cutter', 'client', 'scheduler', 'assembler'));
-
--- Migrate existing role values
-UPDATE public.user_profiles SET role = 'cutter' WHERE role = 'manufacturer';
-UPDATE public.user_profiles SET role = 'assembler' WHERE role = 'qc';
 
 -- 4) Alter window_production_status
 

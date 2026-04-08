@@ -1,9 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
-import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { InstallerSchedule } from "./installer-schedule";
 
-export default async function SchedulePage() {
-  const [data, user] = await Promise.all([loadFullDataset(), getCurrentUser()]);
-  const installerId = user ? await getLinkedInstallerId(user.id) : null;
-  return <InstallerSchedule data={data} installerId={installerId ?? "inst-1"} />;
+export default function SchedulePage() {
+  const { data, linkedEntityId } = useAppDataset();
+  return <InstallerSchedule data={data} installerId={linkedEntityId ?? "inst-1"} />;
 }

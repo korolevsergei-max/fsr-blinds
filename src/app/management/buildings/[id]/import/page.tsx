@@ -1,7 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { ImportUnits } from "./import-units";
 
-export default async function ImportPage() {
-  const data = await loadFullDataset();
+export default function ImportPage() {
+  const { data } = useAppDataset();
   return <ImportUnits data={data} />;
 }

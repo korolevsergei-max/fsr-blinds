@@ -1,6 +1,10 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, type AppUser } from "@/lib/auth";
+import { loadSchedulerDataset } from "@/lib/server-data";
+import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { SchedulerNav } from "./scheduler-nav";
+import SchedulerLoading from "./loading";
 
 export default async function SchedulerLayout({
   children,
@@ -28,10 +32,34 @@ export default async function SchedulerLayout({
     <>
       <div className="min-h-[100dvh] bg-background">
         <div className="mx-auto max-w-lg min-h-[100dvh] pb-24 bg-card shadow-[0_0_0_1px_var(--border)]">
-          <main id="main-content">{children}</main>
+          <main id="main-content">
+            <Suspense fallback={<SchedulerLoading />}>
+              <SchedulerDataShell user={user}>{children}</SchedulerDataShell>
+            </Suspense>
+          </main>
         </div>
       </div>
       <SchedulerNav />
     </>
+  );
+}
+
+async function SchedulerDataShell({
+  user,
+  children,
+}: {
+  user: AppUser;
+  children: React.ReactNode;
+}) {
+  const data = await loadSchedulerDataset();
+
+  return (
+    <AppDatasetClientShell
+      initialData={data}
+      user={user}
+      portalDataLoader="scheduler"
+    >
+      {children}
+    </AppDatasetClientShell>
   );
 }

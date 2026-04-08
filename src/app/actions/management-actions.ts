@@ -192,7 +192,7 @@ export async function bulkDeleteUnits(unitIds: string[]): Promise<ActionResult> 
 /**
  * Owner-only: removes every client row (CASCADE deletes buildings, units, rooms, windows,
  * schedule rows, media_uploads rows, activity log, scheduler access tied to those buildings/units).
- * Also clears in-app notifications. Does not remove installers, schedulers, manufacturers, or auth users.
+ * Also clears in-app notifications. Does not remove installers, schedulers, cutters, or auth users.
  * Supabase Storage files are not deleted — remove those in the dashboard if needed.
  */
 export async function purgeAllClientData(typedConfirmation: string): Promise<ActionResult> {

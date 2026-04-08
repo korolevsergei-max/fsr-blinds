@@ -997,7 +997,7 @@ function InviteSchedulerForm({ onDone }: { onDone: () => void }) {
 }
 
 function InviteCutterForm({ onDone }: { onDone: () => void }) {
-  const [contactName, setContactName] = useState("");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -1008,7 +1008,7 @@ function InviteCutterForm({ onDone }: { onDone: () => void }) {
   const [pending, startTransition] = useTransition();
 
   const handleSubmit = () => {
-    if (!contactName.trim() || !email.trim()) {
+    if (!name.trim() || !email.trim()) {
       setError("Name and email are required.");
       return;
     }
@@ -1018,7 +1018,8 @@ function InviteCutterForm({ onDone }: { onDone: () => void }) {
     }
     setError("");
     startTransition(async () => {
-      const result = await createCutterAccount(contactName, email, "", phone, password);
+      // Pass the name as both organization name and contact name for now
+      const result = await createCutterAccount(name.trim(), email.trim(), name.trim(), phone, password);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -1076,7 +1077,7 @@ function InviteCutterForm({ onDone }: { onDone: () => void }) {
         <p className="text-[12px] text-tertiary mt-0.5">Set their email and password — no email sent. Share credentials directly.</p>
       </div>
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
-      <Input label="Name" value={contactName} onChange={(e) => { setContactName(e.target.value); if (error) setError(""); }} placeholder="Reza Tehrani" autoFocus />
+      <Input label="Name" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(""); }} placeholder="Reza Tehrani" autoFocus />
       <Input label="Email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError(""); }} placeholder="info@blindsco.ca" />
       <Input label="Phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); if (error) setError(""); }} placeholder="+1 (416) 555-0000" />
       <div className="flex flex-col gap-1.5">

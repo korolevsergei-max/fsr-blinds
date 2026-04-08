@@ -1,7 +1,9 @@
-import { loadSchedulerDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { CreateRooms } from "./create-rooms";
 
-export default async function RoomsPage() {
-  const data = await loadSchedulerDataset();
+export default function RoomsPage() {
+  const { data } = useAppDataset();
   return <CreateRooms data={data} />;
 }

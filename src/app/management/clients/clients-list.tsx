@@ -129,7 +129,7 @@ export function ClientsList({ data }: { data: AppDataset }) {
           </div>
           <p className="text-[12px] text-secondary leading-relaxed">
             Remove all client-linked project data to start fresh. Accounts (installers, schedulers,
-            manufacturers) stay; clear orphaned storage objects in Supabase if you use uploads.
+            cutters) stay; clear orphaned storage objects in Supabase if you use uploads.
           </p>
           <Input
             label={`Type "${CONFIRM_PURGE_ALL_CLIENTS}" to enable reset`}

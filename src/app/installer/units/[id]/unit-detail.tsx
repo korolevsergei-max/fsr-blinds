@@ -26,7 +26,7 @@ const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
   scheduler: <CalendarCheck size={14} className="text-sky-500" />,
   installer: <Wrench size={14} className="text-teal-500" />,
-  manufacturer: <Buildings size={14} className="text-orange-500" />,
+  cutter: <Buildings size={14} className="text-orange-500" />,
   system: <Robot size={14} className="text-zinc-400" />,
 };
 
@@ -34,7 +34,7 @@ const ACTOR_COLORS: Record<string, string> = {
   owner: "bg-indigo-50 border-indigo-100",
   scheduler: "bg-sky-50 border-sky-100",
   installer: "bg-teal-50 border-teal-100",
-  manufacturer: "bg-orange-50 border-orange-100",
+  cutter: "bg-orange-50 border-orange-100",
   system: "bg-zinc-50 border-zinc-100",
 };
 

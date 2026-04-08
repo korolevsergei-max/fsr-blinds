@@ -1,8 +1,9 @@
-import { loadSchedulerDataset } from "@/lib/server-data";
-import { getCurrentUser } from "@/lib/auth";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { SchedulerDashboard } from "./scheduler-dashboard";
 
-export default async function SchedulerPage() {
-  const [data, user] = await Promise.all([loadSchedulerDataset(), getCurrentUser()]);
-  return <SchedulerDashboard data={data} userName={user?.displayName} />;
+export default function SchedulerPage() {
+  const { data, user } = useAppDataset();
+  return <SchedulerDashboard data={data} userName={user.displayName} />;
 }

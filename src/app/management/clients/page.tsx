@@ -1,7 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { ClientsList } from "./clients-list";
 
-export default async function ClientsPage() {
-  const data = await loadFullDataset();
+export default function ClientsPage() {
+  const { data } = useAppDataset();
   return <ClientsList data={data} />;
 }

@@ -1,21 +1,16 @@
-import { getCurrentUser } from "@/lib/auth";
-import { loadFullDataset, loadUnitSchedulerAssignmentMap } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { UnitsList } from "./units-list";
 
-export default async function UnitsPage() {
-  const [user, data, unitSchedulerByUnit] = await Promise.all([
-    getCurrentUser(),
-    loadFullDataset(),
-    loadUnitSchedulerAssignmentMap(),
-  ]);
-
-  if (!user) return null;
+export default function UnitsPage() {
+  const { data, user } = useAppDataset();
 
   return (
     <UnitsList
       data={data}
       schedulers={data.schedulers}
-      unitSchedulerByUnit={unitSchedulerByUnit}
+      unitSchedulerByUnit={data.unitSchedulerByUnit ?? {}}
       userRole={user.role}
     />
   );

@@ -1,8 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
-import { getCurrentUser } from "@/lib/auth";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { ManagementDashboard } from "./management-dashboard";
 
-export default async function ManagementPage() {
-  const [data, user] = await Promise.all([loadFullDataset(), getCurrentUser()]);
-  return <ManagementDashboard data={data} userName={user?.displayName} />;
+export default function ManagementPage() {
+  const { data, user } = useAppDataset();
+  return <ManagementDashboard data={data} userName={user.displayName} />;
 }

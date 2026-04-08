@@ -1,9 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
-import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { InstallerProfile } from "./installer-profile";
 
-export default async function ProfilePage() {
-  const [data, user] = await Promise.all([loadFullDataset(), getCurrentUser()]);
-  const installerId = user ? await getLinkedInstallerId(user.id) : null;
-  return <InstallerProfile data={data} installerId={installerId ?? "inst-1"} />;
+export default function ProfilePage() {
+  const { data, linkedEntityId } = useAppDataset();
+  return <InstallerProfile data={data} installerId={linkedEntityId ?? "inst-1"} />;
 }

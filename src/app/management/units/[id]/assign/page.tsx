@@ -1,7 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { AssignUnit } from "./assign-unit";
 
-export default async function AssignPage() {
-  const data = await loadFullDataset();
+export default function AssignPage() {
+  const { data } = useAppDataset();
   return <AssignUnit data={data} />;
 }

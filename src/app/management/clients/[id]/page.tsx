@@ -1,9 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
-import { getCurrentUser } from "@/lib/auth";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { ClientDetail } from "./client-detail";
 
-export default async function ClientDetailPage() {
-  const data = await loadFullDataset();
-  const user = await getCurrentUser();
-  return <ClientDetail data={data} userRole={user?.role} />;
+export default function ClientDetailPage() {
+  const { data, user } = useAppDataset();
+  return <ClientDetail data={data} userRole={user.role} />;
 }

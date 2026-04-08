@@ -1,7 +1,10 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
+import { getCurrentUser, getLinkedInstallerId, type AppUser } from "@/lib/auth";
+import { loadFullDataset, getUnreadNotificationCount } from "@/lib/server-data";
+import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { BottomNav } from "@/components/ui/bottom-nav";
-import { getUnreadNotificationCount } from "@/lib/server-data";
+import InstallerLoading from "./loading";
 
 export default async function InstallerLayout({
   children,
@@ -38,9 +41,36 @@ export default async function InstallerLayout({
   return (
     <div className="min-h-[100dvh] bg-background pb-20">
       <div className="mx-auto max-w-lg min-h-[100dvh] bg-card shadow-[0_0_0_1px_var(--border)]">
-        <main id="main-content">{children}</main>
+        <main id="main-content">
+          <Suspense fallback={<InstallerLoading />}>
+            <InstallerDataShell user={user}>{children}</InstallerDataShell>
+          </Suspense>
+        </main>
       </div>
       <BottomNav unreadNotifications={unreadCount} />
     </div>
+  );
+}
+
+async function InstallerDataShell({
+  user,
+  children,
+}: {
+  user: AppUser;
+  children: React.ReactNode;
+}) {
+  const [data, installerId] = await Promise.all([
+    loadFullDataset(),
+    getLinkedInstallerId(user.id),
+  ]);
+
+  return (
+    <AppDatasetClientShell
+      initialData={data}
+      user={user}
+      linkedEntityId={installerId}
+    >
+      {children}
+    </AppDatasetClientShell>
   );
 }

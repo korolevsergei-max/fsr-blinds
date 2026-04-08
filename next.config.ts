@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "12mb",
     },
+    viewTransition: true,
   },
   images: {
     remotePatterns: [

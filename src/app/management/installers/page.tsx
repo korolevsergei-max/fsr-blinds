@@ -1,7 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { InstallersList } from "./installers-list";
 
-export default async function InstallersPage() {
-  const data = await loadFullDataset();
+export default function InstallersPage() {
+  const { data } = useAppDataset();
   return <InstallersList data={data} />;
 }

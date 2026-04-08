@@ -1,7 +1,9 @@
-import { loadFullDataset } from "@/lib/server-data";
+"use client";
+
+import { useAppDataset } from "@/lib/dataset-context";
 import { SummaryView } from "./summary-view";
 
-export default async function SummaryPage() {
-  const data = await loadFullDataset();
+export default function SummaryPage() {
+  const { data } = useAppDataset();
   return <SummaryView data={data} />;
 }
