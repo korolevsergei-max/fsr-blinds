@@ -306,6 +306,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                   </span>
                 )}
               </div>
+              <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
               <FilterDropdown
                 multiple
                 label="Client"
@@ -329,7 +330,6 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 options={issueOptions}
                 onChange={(v) => setIssueFilter(v as typeof issueFilter)}
               />
-              <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
               <FilterDropdown multiple label="Flag" values={flagFilter} options={flagOptions} onChange={setFlagFilter} />
               {activeFilterCount > 0 && (
                 <button

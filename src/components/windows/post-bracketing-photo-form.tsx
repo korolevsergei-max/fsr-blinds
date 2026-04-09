@@ -110,46 +110,50 @@ export function PostBracketingPhotoForm({
     }
 
     startTransition(async () => {
-      let compressedPhoto: File | null = null;
-      if (photoFile) {
-        try {
+      try {
+        let compressedPhoto: File | null = null;
+        if (photoFile) {
           const validationError = validateUploadImage(photoFile);
           if (validationError) {
             setError(validationError);
             return;
           }
           setOptimizingPhoto(true);
-          compressedPhoto = await compressImageForUpload(photoFile);
-        } finally {
-          setOptimizingPhoto(false);
+          try {
+            compressedPhoto = await compressImageForUpload(photoFile);
+          } finally {
+            setOptimizingPhoto(false);
+          }
         }
-      }
-      const fd = new FormData();
-      fd.set("unitId", unit.id);
-      fd.set("roomId", room.id);
-      fd.set("windowId", windowItem.id);
-      if (compressedPhoto) {
-        fd.set("photo", compressedPhoto, compressedPhoto.name);
-      }
-      fd.set("riskFlag", riskFlag);
-      fd.set("notes", notes);
-
-      if (compressedPhoto) {
-        // Photo present — queue for background upload so navigation is instant
-        await enqueuePhoto(fd);
-      } else {
-        // No photo — call directly and wait before navigating.
-        // Android Chrome cancels in-flight fetch requests on navigation, so
-        // queuing and immediately navigating drops the save on Android.
-        const result = await uploadWindowPostBracketingPhoto(fd);
-        if (!result.ok) {
-          setError(result.error ?? "Failed to save. Please try again.");
-          return;
+        const fd = new FormData();
+        fd.set("unitId", unit.id);
+        fd.set("roomId", room.id);
+        fd.set("windowId", windowItem.id);
+        if (compressedPhoto) {
+          fd.set("photo", compressedPhoto, compressedPhoto.name);
         }
-      }
+        fd.set("riskFlag", riskFlag);
+        fd.set("notes", notes);
 
-      router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
-      router.refresh();
+        if (compressedPhoto) {
+          // Photo present — queue for background upload so navigation is instant
+          await enqueuePhoto(fd);
+        } else {
+          // No photo — call directly and wait before navigating.
+          // Android Chrome cancels in-flight fetch requests on navigation, so
+          // queuing and immediately navigating drops the save on Android.
+          const result = await uploadWindowPostBracketingPhoto(fd);
+          if (!result.ok) {
+            setError(result.error ?? "Failed to save. Please try again.");
+            return;
+          }
+        }
+
+        router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
+      } catch {
+        setError("Something went wrong. Please try again.");
+        setOptimizingPhoto(false);
+      }
     });
   };
 
