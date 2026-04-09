@@ -123,6 +123,16 @@ export async function getQueuedUploads(): Promise<QueuedUpload[]> {
   return getAllItems();
 }
 
+export async function clearFailed(): Promise<void> {
+  const items = await getAllItems();
+  for (const item of items) {
+    if (item.status === "failed") {
+      await deleteItem(item.id);
+    }
+  }
+  notifyListeners();
+}
+
 export async function retryFailed(): Promise<void> {
   const items = await getAllItems();
   for (const item of items) {
@@ -220,7 +230,22 @@ async function processQueue(): Promise<void> {
   }
 }
 
+// On startup: reset any items stuck in "uploading" (e.g. page closed mid-upload)
+// back to "queued" so they get retried.
+async function resetStuckUploads(): Promise<void> {
+  const items = await getAllItems();
+  for (const item of items) {
+    if (item.status === "uploading") {
+      item.status = "queued";
+      item.retries = 0;
+      await putItem(item);
+    }
+  }
+  notifyListeners();
+}
+
 // Restart queue processing when coming back online
 if (typeof window !== "undefined") {
+  resetStuckUploads().then(() => processQueue());
   window.addEventListener("online", () => processQueue());
 }

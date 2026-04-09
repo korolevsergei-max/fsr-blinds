@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { WifiSlash, CloudArrowUp, ArrowClockwise, Check } from "@phosphor-icons/react";
-import { subscribeToQueue, retryFailed, type QueuedUpload } from "@/lib/upload-queue";
+import { subscribeToQueue, retryFailed, clearFailed, type QueuedUpload } from "@/lib/upload-queue";
 
 function useOnlineStatus() {
   return useSyncExternalStore(
@@ -80,6 +80,12 @@ export function ConnectionStatus() {
             >
               <ArrowClockwise size={14} weight="bold" />
               Retry
+            </button>
+            <button
+              onClick={() => clearFailed()}
+              className="flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-xs font-bold hover:bg-white/30 transition-colors"
+            >
+              Clear
             </button>
           </div>
         )}
