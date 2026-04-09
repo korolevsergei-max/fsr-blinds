@@ -7,8 +7,8 @@ import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react"
 import { uploadWindowInstalledPhoto, deleteWindowMediaItem } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
-import type { RiskFlag, UnitStatus } from "@/lib/types";
-import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
+import type { RiskFlag } from "@/lib/types";
+
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
@@ -79,15 +79,15 @@ export function InstalledPhotoForm({
     return <div className="p-6 text-center text-muted">Window not found</div>;
   }
 
-  // Unit is measured but not yet bracketed — allow override with confirmation
+  // This window is measured but not yet bracketed — allow override with confirmation
   const isBracketingOverride =
     !existingInstalled &&
-    !canUploadInstallationPhotos(unit.status as UnitStatus) &&
-    unit.status === "measured";
+    windowItem.measured &&
+    !windowItem.bracketed;
 
   const installPhotosBlocked =
     !existingInstalled &&
-    !canUploadInstallationPhotos(unit.status as UnitStatus) &&
+    !(windowItem.measured && windowItem.bracketed) &&
     !isBracketingOverride;
 
   const onFileChange = (file: File | null) => {
