@@ -2003,3 +2003,103 @@ export async function markAllNotificationsRead(
     return { ok: false, error: msg };
   }
 }
+
+export async function uploadRoomFinishedPhotos(
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    const unitId = String(formData.get("unitId") ?? "");
+    const roomId = String(formData.get("roomId") ?? "");
+    const files = formData
+      .getAll("photos")
+      .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+
+    if (!unitId || !roomId) {
+      return { ok: false, error: "Missing unit or room" };
+    }
+    if (files.length === 0) {
+      return { ok: false, error: "Add at least one photo" };
+    }
+    if (files.length > 3) {
+      return { ok: false, error: "Maximum 3 photos allowed" };
+    }
+    for (const file of files) {
+      const validation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+      if (validation) return validation;
+    }
+
+    const supabase = await createClient();
+
+    const { data: room, error: roomError } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("id", roomId)
+      .eq("unit_id", unitId)
+      .single();
+
+    if (roomError || !room) {
+      return { ok: false, error: "Room not found" };
+    }
+
+    const uploadedPaths: string[] = [];
+    const mediaIds: string[] = [];
+
+    for (const [index, file] of files.entries()) {
+      const ext =
+        (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${unitId}/rooms/${roomId}/finished/${crypto.randomUUID()}.${ext}`;
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, buf, { contentType: file.type || "image/jpeg", upsert: false });
+
+      if (uploadError) {
+        if (mediaIds.length > 0) {
+          await supabase.from("media_uploads").delete().in("id", mediaIds);
+        }
+        if (uploadedPaths.length > 0) {
+          await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        }
+        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      }
+
+      uploadedPaths.push(path);
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+      const mediaId = `med-${crypto.randomUUID()}`;
+      const label =
+        files.length === 1
+          ? "Finished room"
+          : `Finished room (${index + 1}/${files.length})`;
+      const { error: mediaInsertError } = await supabase.from("media_uploads").insert({
+        id: mediaId,
+        storage_path: path,
+        public_url: publicUrl,
+        upload_kind: "room_finished_photo",
+        unit_id: unitId,
+        room_id: roomId,
+        label,
+        stage: "installed_pending_approval",
+        phase: "installation",
+      });
+
+      if (mediaInsertError) {
+        if (mediaIds.length > 0) {
+          await supabase.from("media_uploads").delete().in("id", mediaIds);
+        }
+        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        return { ok: false, error: mediaInsertError.message };
+      }
+
+      mediaIds.push(mediaId);
+    }
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}

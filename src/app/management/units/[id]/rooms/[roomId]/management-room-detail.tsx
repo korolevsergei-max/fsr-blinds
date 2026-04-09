@@ -5,6 +5,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
+import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
 
 export function ManagementRoomDetail({
   data,
@@ -29,7 +30,7 @@ export function ManagementRoomDetail({
         backHref={`/management/units/${unit.id}`}
       />
 
-      <div className="flex-1 px-5 py-5">
+      <div className="flex-1 px-5 py-5 flex flex-col gap-5">
         <RoomWindowsView
           data={data}
           mediaItems={mediaItems}
@@ -41,6 +42,17 @@ export function ManagementRoomDetail({
             routeBasePath: "/management/units",
           })}
         />
+        {mediaItems.some(
+          (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
+        ) && (
+          <RoomFinishedPhotos
+            unitId={id}
+            roomId={roomId}
+            existingPhotos={mediaItems.filter(
+              (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
+            )}
+          />
+        )}
       </div>
     </div>
   );

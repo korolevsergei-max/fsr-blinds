@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { deleteWindow } from "@/app/actions/fsr-data";
+import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
 
 export function RoomDetail({
   data,
@@ -65,7 +66,15 @@ export function RoomDetail({
       </div>
 
       {windowCount > 0 && (
-        <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent">
+        <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent flex flex-col gap-3">
+          <RoomFinishedPhotos
+            unitId={id}
+            roomId={roomId}
+            existingPhotos={mediaItems.filter(
+              (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
+            )}
+            canUpload
+          />
           <Link href={`/installer/units/${id}`}>
             <Button variant="secondary" fullWidth size="lg">
               Done with Room
