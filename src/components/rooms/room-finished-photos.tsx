@@ -131,11 +131,6 @@ export function RoomFinishedPhotos({
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2rem] border-t border-border bg-white shadow-2xl"
             >
-              {/* Handle */}
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="h-1 w-10 rounded-full bg-zinc-200" />
-              </div>
-
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-accent/8 text-accent">
@@ -156,7 +151,7 @@ export function RoomFinishedPhotos({
                 </button>
               </div>
 
-              <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[70dvh]">
+              <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[70dvh] pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
                 {canUpload && (
                   <PhotoSourcePicker
                     open={pickerOpen}
