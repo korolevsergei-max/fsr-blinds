@@ -162,7 +162,6 @@ export function RoomFinishedPhotos({
                     ref={fileRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     multiple
                     className="sr-only"
                     onChange={handleFileChange}
