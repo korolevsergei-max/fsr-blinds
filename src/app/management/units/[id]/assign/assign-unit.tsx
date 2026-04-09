@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Image from "next/image";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
@@ -17,11 +16,16 @@ import { SectionLabel } from "@/components/ui/section-label";
 export function AssignUnit({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const role = searchParams.get("role") === "scheduler" ? "scheduler" : "installer";
   const { afterMutate } = useDatasetMutation();
   const unit = data.units.find((u) => u.id === id);
   const assignees = useMemo(
-    () => data.installers.filter((installer) => Boolean(installer.id)),
-    [data.installers]
+    () => data.installers.filter((installer) =>
+      Boolean(installer.id) &&
+      (role === "scheduler" ? installer.id.startsWith("sch-") : !installer.id.startsWith("sch-"))
+    ),
+    [data.installers, role]
   );
 
   const [selectedInstaller, setSelectedInstaller] = useState(
@@ -57,13 +61,26 @@ export function AssignUnit({ data }: { data: AppDataset }) {
       }
       setSaved(true);
       const installerName = data.installers.find((i) => i.id === selectedInstaller)?.name ?? null;
+
       afterMutate((prev) => ({
         ...prev,
-        units: prev.units.map((u) =>
-          u.id === unit.id
-            ? { ...u, assignedInstallerId: selectedInstaller || null, assignedInstallerName: installerName }
-            : u
-        ),
+        units: prev.units.map((u) => {
+          if (u.id !== unit.id) return u;
+          if (role === "scheduler") {
+            const schId = selectedInstaller ? selectedInstaller.replace("sch-", "") : null;
+            const schName = installerName ? installerName.replace("SC: ", "") : null;
+            return {
+              ...u,
+              assignedSchedulerId: schId,
+              assignedSchedulerName: schName,
+            };
+          }
+          return {
+            ...u,
+            assignedInstallerId: selectedInstaller || null,
+            assignedInstallerName: installerName,
+          };
+        }),
       }));
       setTimeout(() => router.push(`/management/units/${unit.id}`), 900);
     });
@@ -72,7 +89,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
-        title="Assign installer"
+        title={role === "scheduler" ? "Assign scheduler" : "Assign installer"}
         subtitle={`${unit.unitNumber} \u2022 ${unit.buildingName}`}
         backHref={`/management/units/${unit.id}`}
       />
@@ -100,11 +117,13 @@ export function AssignUnit({ data }: { data: AppDataset }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <SectionLabel as="h2">Choose installer</SectionLabel>
+          <SectionLabel as="h2">{role === "scheduler" ? "Choose scheduler" : "Choose installer"}</SectionLabel>
           <div className="flex flex-col gap-2">
             {assignees.length === 0 && (
               <p className="py-4 text-center text-[13px] text-muted">
-                No installers are available yet. Add one before assigning this unit.
+                {role === "scheduler"
+                  ? "No schedulers are available yet."
+                  : "No installers are available yet. Add one before assigning this unit."}
               </p>
             )}
             {assignees.map((inst) => (
@@ -120,13 +139,8 @@ export function AssignUnit({ data }: { data: AppDataset }) {
               >
                 <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[12px] font-semibold text-zinc-700">
                   {inst.avatarUrl ? (
-                    <Image
-                      src={inst.avatarUrl}
-                      alt=""
-                      width={40}
-                      height={40}
-                      className="w-full h-full object-cover"
-                    />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={inst.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
                     inst.name.startsWith("SC: ")
                       ? "SC"

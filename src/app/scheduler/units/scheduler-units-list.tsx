@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -38,16 +39,16 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const { units, clients, buildings, installers } = data;
   const today = new Date().toISOString().split("T")[0];
 
-  const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
-  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
-  const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
-  const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
-  const [sortOrder, setSortOrder] = useState<string>("none");
-  const [flagFilter, setFlagFilter] = useState<string[]>([]);
-  const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
+  const [search, setSearch] = useSessionStorage("scheduler-search", "");
+  const [clientFilter, setClientFilter] = useSessionStorage<string[]>("scheduler-clientFilter", []);
+  const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-buildingFilter", []);
+  const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("scheduler-statusFilter", []);
+  const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-installerFilter", []);
+  const [dateAddedFilter, setDateAddedFilter] = useSessionStorage<AddedDateFilter>("scheduler-dateAddedFilter", "all");
+  const [completeByFilter, setCompleteByFilter] = useSessionStorage<AddedDateFilter>("scheduler-completeByFilter", "all");
+  const [sortOrder, setSortOrder] = useSessionStorage<string>("scheduler-sortOrder", "none");
+  const [flagFilter, setFlagFilter] = useSessionStorage<string[]>("scheduler-flagFilter", []);
+  const [issueFilter, setIssueFilter] = useSessionStorage<"all" | "has_issues" | "no_issues">("scheduler-issueFilter", "all");
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);

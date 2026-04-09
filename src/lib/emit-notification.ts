@@ -1,9 +1,10 @@
 /**
  * Server-only helper to insert a notification row.
- * Import only from server actions / server components.
+ * Uses the service-role admin client so it works reliably inside `after()` callbacks
+ * where the SSR cookie-based client may no longer have a valid session.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface EmitNotificationPayload {
   recipientRole: string;
@@ -19,14 +20,11 @@ export interface EmitNotificationPayload {
  * best-effort and must never cause a primary action to fail.
  */
 export async function emitNotification(
-  // Accept supabase client typed as any SupabaseClient to avoid importing
-  // the server-specific createClient at this call-site.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: SupabaseClient<any>,
   payload: EmitNotificationPayload
 ): Promise<void> {
   try {
     const { recipientRole, recipientId, type, title, body = "", relatedUnitId } = payload;
+    const supabase = createAdminClient();
     await supabase.from("notifications").insert({
       id: `notif-${crypto.randomUUID()}`,
       recipient_role: recipientRole,

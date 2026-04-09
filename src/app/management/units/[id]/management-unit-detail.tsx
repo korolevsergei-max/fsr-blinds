@@ -10,7 +10,6 @@ import {
   Door,
   Ruler,
   Camera,
-  PencilSimple,
   ClockCounterClockwise,
   Wrench,
   Buildings,
@@ -306,10 +305,16 @@ export function ManagementUnitDetail({
                 Key dates
               </Button>
             </Link>
-            <Link href={`/management/units/${unit.id}/assign`}>
+            <Link href={`/management/units/${unit.id}/assign?role=installer`}>
               <Button size="sm" variant="secondary">
-                <PencilSimple size={14} />
-                Assign
+                <Wrench size={14} />
+                Installer
+              </Button>
+            </Link>
+            <Link href={`/management/units/${unit.id}/assign?role=scheduler`}>
+              <Button size="sm" variant="secondary">
+                <CalendarBlank size={14} />
+                Scheduler
               </Button>
             </Link>
             {userRole === "owner" && (
@@ -353,17 +358,15 @@ export function ManagementUnitDetail({
                 </p>
               </div>
             </div>
-            {unit.assignedSchedulerName && (
-              <div className="flex items-center gap-3 px-4 py-3">
-                <UserCircle size={17} className="text-tertiary" />
-                <div>
-                  <p className="text-[11px] text-tertiary">Assigned scheduler</p>
-                  <p className="text-[13px] font-medium text-foreground">
-                    {unit.assignedSchedulerName}
-                  </p>
-                </div>
+            <div className="flex items-center gap-3 px-4 py-3">
+              <UserCircle size={17} className="text-tertiary" />
+              <div>
+                <p className="text-[11px] text-tertiary">Assigned scheduler</p>
+                <p className="text-[13px] font-medium text-foreground">
+                  {unit.assignedSchedulerName || "Unassigned"}
+                </p>
               </div>
-            )}
+            </div>
             <div className="flex items-center gap-3 px-4 py-3">
               <CalendarBlank size={17} className="text-tertiary" />
               <div>

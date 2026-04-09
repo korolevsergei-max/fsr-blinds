@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitMediaAndMilestones, EMPTY_MILESTONES } from "@/app/actions/dataset-queries";
+import { fetchUnitMediaAndMilestones } from "@/app/actions/dataset-queries";
+import { EMPTY_MILESTONES, type UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
-import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { UnitStatusEditor } from "@/components/units/unit-status-editor";
 
 export default function ManagementStatusPage() {

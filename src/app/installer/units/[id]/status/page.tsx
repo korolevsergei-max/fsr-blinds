@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitMilestones, EMPTY_MILESTONES } from "@/app/actions/dataset-queries";
-import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
+import { fetchUnitMilestones } from "@/app/actions/dataset-queries";
+import { EMPTY_MILESTONES, type UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
 import { StatusUpdate } from "./status-update";
 
 export default function InstallerStatusPage() {

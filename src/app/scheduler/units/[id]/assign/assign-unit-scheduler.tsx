@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -120,13 +119,8 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
               >
                 <div className="w-10 h-10 rounded-xl overflow-hidden bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[12px] font-semibold text-zinc-700">
                   {inst.avatarUrl ? (
-                    <Image
-                      src={inst.avatarUrl}
-                      alt=""
-                      width={40}
-                      height={40}
-                      className="w-full h-full object-cover"
-                    />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={inst.avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : inst.name.startsWith("SC: ") ? (
                     "SC"
                   ) : (

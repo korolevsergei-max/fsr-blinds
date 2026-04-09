@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -64,21 +65,7 @@ async function resolveInstalledCompletedAtFallback(
   return toInstalled?.created_at ?? null;
 }
 
-export type UnitMilestoneCoverage = {
-  totalWindows: number;
-  measuredCount: number;
-  bracketedCount: number;
-  installedCount: number;
-  allMeasured: boolean;
-  allBracketed: boolean;
-  allInstalled: boolean;
-  /** ISO timestamp of when the last required window was measured (or null). */
-  measuredCompletedAt: string | null;
-  /** ISO timestamp of when the last qualifying bracketed photo was uploaded (or null). */
-  bracketedCompletedAt: string | null;
-  /** ISO timestamp of when the last qualifying installed photo was uploaded (or null). */
-  installedCompletedAt: string | null;
-};
+export type { UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
 
 /**
  * Fetches window-level coverage and evidence-based completion timestamps for a unit.

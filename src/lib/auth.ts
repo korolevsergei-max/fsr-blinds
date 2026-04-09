@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
@@ -34,22 +33,11 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   if (!user) return null;
 
-  // Cache profile lookup for 60s — role/display_name rarely change.
-  const getCachedProfile = unstable_cache(
-    async (userId: string) => {
-      const client = await createClient();
-      const { data, error } = await client
-        .from("user_profiles")
-        .select("role, display_name, email")
-        .eq("id", userId)
-        .single();
-      return { data, error };
-    },
-    ["user-profile"],
-    { revalidate: 60 }
-  );
-
-  const { data: profile, error: profileError } = await getCachedProfile(user.id);
+  const { data: profile, error: profileError } = await supabase
+    .from("user_profiles")
+    .select("role, display_name, email")
+    .eq("id", user.id)
+    .single();
 
   // Profile exists — happy path
   if (profile) {

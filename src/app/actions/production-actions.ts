@@ -227,7 +227,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
           .eq("unit_id", unit.id)
           .maybeSingle();
         if (assignment?.scheduler_id) {
-          await emitNotification(supabase, {
+          await emitNotification({
             recipientRole: "scheduler",
             recipientId: assignment.scheduler_id,
             type: NOTIF_MFG_BEHIND_SCHEDULE,

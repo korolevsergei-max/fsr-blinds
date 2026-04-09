@@ -105,9 +105,10 @@ export function LoginForm() {
         prefetchDatasetInBackground(profile?.role);
 
         router.push(homePathForRole(profile?.role));
+        return;
       }
 
-      router.refresh();
+      setLoading(false);
     } catch {
       setError("Connection failed. Please try again.");
       setLoading(false);

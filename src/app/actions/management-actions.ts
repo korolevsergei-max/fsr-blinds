@@ -394,7 +394,7 @@ export async function updateUnitCompleteByDate(
         .eq("unit_id", unitId)
         .maybeSingle();
       if (assignment?.scheduler_id) {
-        await emitNotification(supabase, {
+        await emitNotification({
           recipientRole: "scheduler",
           recipientId: assignment.scheduler_id,
           type: NOTIF_COMPLETE_BY_DATE_CHANGED,
@@ -555,7 +555,7 @@ export async function assignUnitsToScheduler(
       unitIds.length === 1
         ? "A unit has been added to your queue"
         : `${unitIds.length} units added to your queue`;
-    await emitNotification(supabase, {
+    await emitNotification({
       recipientRole: "scheduler",
       recipientId: schedulerId,
       type: NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,

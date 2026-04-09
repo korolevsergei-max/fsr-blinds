@@ -38,8 +38,7 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
   const [editAddress, setEditAddress] = useState(building?.address ?? "");
   const [showForm, setShowForm] = useState(false);
   const [unitNumber, setUnitNumber] = useState("");
-  const [earliestBracketing, setEarliestBracketing] = useState("");
-  const [earliestInstallation, setEarliestInstallation] = useState("");
+
   const [completeByDate, setCompleteByDate] = useState(""); // kept for createUnit API compat
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -61,8 +60,8 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
         building.id,
         client.id,
         unitNumber,
-        earliestBracketing,
-        earliestInstallation,
+        "",
+        "",
         completeByDate || null
       );
       if (!result.ok) {
@@ -70,8 +69,7 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
         return;
       }
       setUnitNumber("");
-      setEarliestBracketing("");
-      setEarliestInstallation("");
+
       setCompleteByDate("");
       setShowForm(false);
       window.location.reload();
@@ -204,16 +202,10 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
               autoFocus
             />
             <DateInput
-              label="Earliest Bracketing Date"
-              value={earliestBracketing}
-              onChange={setEarliestBracketing}
-              helper="When can bracketing start?"
-            />
-            <DateInput
-              label="Earliest Installation Date"
-              value={earliestInstallation}
-              onChange={setEarliestInstallation}
-              helper="When can installation start?"
+              label="Complete By Date"
+              value={completeByDate}
+              onChange={setCompleteByDate}
+              helper="When must this unit be completed by?"
             />
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>

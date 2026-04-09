@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitSupplementalData, EMPTY_MILESTONES, type UnitSupplementalData } from "@/app/actions/dataset-queries";
+import { fetchUnitSupplementalData, type UnitSupplementalData } from "@/app/actions/dataset-queries";
+import { EMPTY_MILESTONES } from "@/lib/unit-milestone-types";
 import { SchedulerUnitDetail } from "./scheduler-unit-detail";
 
 export default function SchedulerUnitPage() {

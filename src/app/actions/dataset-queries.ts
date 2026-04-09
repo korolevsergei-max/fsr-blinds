@@ -33,18 +33,6 @@ export type UnitSupplementalData = {
   milestones: UnitMilestoneCoverage;
 };
 
-export const EMPTY_MILESTONES: UnitMilestoneCoverage = {
-  totalWindows: 0,
-  measuredCount: 0,
-  bracketedCount: 0,
-  installedCount: 0,
-  allMeasured: false,
-  allBracketed: false,
-  allInstalled: false,
-  measuredCompletedAt: null,
-  bracketedCompletedAt: null,
-  installedCompletedAt: null,
-};
 
 /**
  * Full supplemental data for unit detail pages (activity log + media + milestones).

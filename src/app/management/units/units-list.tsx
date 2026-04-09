@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -50,17 +51,17 @@ export function UnitsList({
 }) {
   const { units, clients, buildings, installers } = data;
 
-  const [search, setSearch] = useState("");
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
-  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
-  const [schedulerFilter, setSchedulerFilter] = useState<string[]>([]);
-  const [floorFilter, setFloorFilter] = useState<string[]>([]);
-  const [dateAddedFilter, setDateAddedFilter] = useState<AddedDateFilter>("all");
-  const [completeByFilter, setCompleteByFilter] = useState<AddedDateFilter>("all");
-  const [sortOrder, setSortOrder] = useState<string>("none");
-  const [issueFilter, setIssueFilter] = useState<"all" | "has_issues" | "no_issues">("all");
+  const [search, setSearch] = useSessionStorage("management-search", "");
+  const [clientFilter, setClientFilter] = useSessionStorage<string[]>("management-clientFilter", []);
+  const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("management-buildingFilter", []);
+  const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("management-statusFilter", []);
+  const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("management-installerFilter", []);
+  const [schedulerFilter, setSchedulerFilter] = useSessionStorage<string[]>("management-schedulerFilter", []);
+  const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("management-floorFilter", []);
+  const [dateAddedFilter, setDateAddedFilter] = useSessionStorage<AddedDateFilter>("management-dateAddedFilter", "all");
+  const [completeByFilter, setCompleteByFilter] = useSessionStorage<AddedDateFilter>("management-completeByFilter", "all");
+  const [sortOrder, setSortOrder] = useSessionStorage<string>("management-sortOrder", "none");
+  const [issueFilter, setIssueFilter] = useSessionStorage<"all" | "has_issues" | "no_issues">("management-issueFilter", "all");
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -491,6 +492,8 @@ export function UnitsList({
         )}
         {sortedFiltered.map((unit, i) => {
           const isSelected = selectedIds.has(unit.id);
+          const schedulerId = unit.assignedSchedulerId || unitSchedulerByUnit[unit.id];
+          const schedulerName = unit.assignedSchedulerName || (schedulerId ? schedulers.find((s) => s.id === schedulerId)?.name : null);
           return (
             <motion.div
               key={unit.id}
@@ -532,12 +535,20 @@ export function UnitsList({
                           </span>
                         )}
                       </div>
-                    {unit.assignedInstallerName && (
-                      <span className="flex items-center gap-1 text-[12px] text-secondary">
-                        <UserCircle size={14} />
-                        {unit.assignedInstallerName}
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      {unit.assignedInstallerName && (
+                        <span className="flex items-center gap-1 text-[12px] text-secondary">
+                          <UserCircle size={14} />
+                          {unit.assignedInstallerName}
+                        </span>
+                      )}
+                      {schedulerName && (
+                        <span className="flex items-center gap-1 text-[12px] text-secondary">
+                          <CalendarCheck size={14} />
+                          SC: {schedulerName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               ) : (
@@ -572,12 +583,20 @@ export function UnitsList({
                           </span>
                         )}
                       </div>
-                      {unit.assignedInstallerName && (
-                        <span className="flex items-center gap-1 text-[12px] text-secondary">
-                          <UserCircle size={14} />
-                          {unit.assignedInstallerName}
-                        </span>
-                      )}
+                      <div className="flex flex-col items-end gap-1">
+                        {unit.assignedInstallerName && (
+                          <span className="flex items-center gap-1 text-[12px] text-secondary">
+                            <UserCircle size={14} />
+                            {unit.assignedInstallerName}
+                          </span>
+                        )}
+                        {schedulerName && (
+                          <span className="flex items-center gap-1 text-[12px] text-secondary">
+                            <CalendarCheck size={14} />
+                            SC: {schedulerName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Link>

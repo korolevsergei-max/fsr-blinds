@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import { getSchedulerScopedUnitIds, isSchedulerScopedUnit } from "@/lib/scheduler-scope";
@@ -338,11 +339,9 @@ export async function bulkAssignUnits(
         };
       }
       instName = installerName;
-      patch.assigned_installer_name = instName;
 
       if (installerId.startsWith("sch-")) {
         const schedulerId = installerId.replace("sch-", "");
-        patch.assigned_installer_id = null; // Schedulers don't go in the installers FK column
 
         // Ensure the units are assigned to this scheduler for management access
         const assignments = scopedUnitIds.map((uid) => ({
@@ -358,6 +357,7 @@ export async function bulkAssignUnits(
 
         if (assError) return { ok: false, error: assError.message };
       } else {
+        patch.assigned_installer_name = instName;
         patch.assigned_installer_id = installerId;
         const coordErr = await syncCoordinatorAssignmentForInstaller(
           supabase,
@@ -505,9 +505,10 @@ export async function bulkAssignUnits(
 
     // ─── Notifications ────────────────────────────────────────────────────────
     after(async () => {
+      const db = createAdminClient();
       // Notify the real installer (not a scheduler acting as installer)
       if (installerId && !installerId.startsWith("sch-")) {
-        const { data: insRow } = await supabase
+        const { data: insRow } = await db
           .from("installers")
           .select("id")
           .eq("id", installerId)
@@ -517,7 +518,7 @@ export async function bulkAssignUnits(
             scopedUnitIds.length === 1
               ? `Unit added to your queue`
               : `${scopedUnitIds.length} units added to your queue`;
-          await emitNotification(supabase, {
+          await emitNotification({
             recipientRole: "installer",
             recipientId: installerId,
             type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
@@ -531,13 +532,13 @@ export async function bulkAssignUnits(
       // Notify about installation date being newly set (per unit, only if it's new)
       if (installationDate) {
         for (const uid of scopedUnitIds) {
-          const { data: unitRow } = await supabase
+          const { data: unitRow } = await db
             .from("units")
             .select("assigned_installer_id, installation_date")
             .eq("id", uid)
             .maybeSingle();
           if (unitRow?.assigned_installer_id && unitRow.installation_date === installationDate) {
-            await emitNotification(supabase, {
+            await emitNotification({
               recipientRole: "installer",
               recipientId: unitRow.assigned_installer_id,
               type: NOTIF_INSTALLATION_DATE_SET,
@@ -607,11 +608,9 @@ export async function updateUnitAssignment(
           error: "Selected installer no longer exists. Choose a valid installer and try again.",
         };
       }
-      patch.assigned_installer_name = installerName;
 
       if (installerId.startsWith("sch-")) {
         const schedulerId = installerId.replace("sch-", "");
-        patch.assigned_installer_id = null; // FK constraint
 
         const { error: assError } = await supabase
           .from("scheduler_unit_assignments")
@@ -627,6 +626,7 @@ export async function updateUnitAssignment(
 
         if (assError) return { ok: false, error: assError.message };
       } else {
+        patch.assigned_installer_name = installerName;
         patch.assigned_installer_id = installerId;
         const coordErr = await syncCoordinatorAssignmentForInstaller(supabase, [unitId], installerId);
         if (coordErr) return coordErr;
@@ -782,7 +782,7 @@ export async function updateUnitAssignment(
 
       // Notify installer of assignment (single unit)
       if (resolvedInstallerId && patch.assigned_installer_name) {
-        await emitNotification(supabase, {
+        await emitNotification({
           recipientRole: "installer",
           recipientId: resolvedInstallerId,
           type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
@@ -795,7 +795,7 @@ export async function updateUnitAssignment(
       // Notify installer of date changes
       if (resolvedInstallerId && (measurementDate || bracketingDate || installationDate)) {
         const hadInstallDate = Boolean(installationDate);
-        await emitNotification(supabase, {
+        await emitNotification({
           recipientRole: "installer",
           recipientId: resolvedInstallerId,
           type: hadInstallDate ? NOTIF_INSTALLATION_DATE_SET : NOTIF_DATES_CHANGED,
@@ -1100,13 +1100,14 @@ export async function deleteWindow(
 
     const capturedWinRow = winRow;
     after(async () => {
-      const { data: unitRow } = await supabase
+      const db = createAdminClient();
+      const { data: unitRow } = await db
         .from("units")
         .select("assigned_installer_name")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
-        supabase,
+        db,
         unitId,
         "installer",
         unitRow?.assigned_installer_name ?? "Installer",
@@ -1118,8 +1119,8 @@ export async function deleteWindow(
           roomId: capturedWinRow?.room_id,
         }
       );
-      await refreshUnitAggregates(supabase, unitId);
-      await recomputeUnitStatus(supabase, unitId);
+      await refreshUnitAggregates(db, unitId);
+      await recomputeUnitStatus(db, unitId);
       revalidateUnit(unitId);
     });
     return { ok: true };
@@ -1291,13 +1292,14 @@ export async function createWindowWithPhoto(
     }
 
     after(async () => {
-      const { data: unit } = await supabase
+      const db = createAdminClient();
+      const { data: unit } = await db
         .from("units")
         .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
-        supabase,
+        db,
         unitId,
         "installer",
         unit?.assigned_installer_name ?? "Installer",
@@ -1314,16 +1316,16 @@ export async function createWindowWithPhoto(
           hasPhoto: !!publicUrl,
         }
       );
-      await refreshRoomAggregates(supabase, roomId);
-      await refreshUnitAggregates(supabase, unitId);
+      await refreshRoomAggregates(db, roomId);
+      await refreshUnitAggregates(db, unitId);
       const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(supabase, unitId);
+      await recomputeUnitStatus(db, unitId);
 
       // Escalation alert to scheduler when window has yellow/red flag
       if (riskFlag === "yellow" || riskFlag === "red") {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          await emitNotification(supabase, {
+          await emitNotification({
             recipientRole: "scheduler",
             recipientId: schedulerId,
             type: NOTIF_UNIT_ESCALATION,
@@ -1335,14 +1337,14 @@ export async function createWindowWithPhoto(
       }
 
       // Progress notification on status milestone change
-      const { data: updated } = await supabase
+      const { data: updated } = await db
         .from("units")
         .select("status")
         .eq("id", unitId)
         .single();
       const newStatus = updated?.status ?? prevStatus;
       if (newStatus !== prevStatus) {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
             measured: "All windows measured",
@@ -1352,7 +1354,7 @@ export async function createWindowWithPhoto(
           };
           const title = progressTitles[newStatus];
           if (title) {
-            await emitNotification(supabase, {
+            await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
@@ -1528,13 +1530,14 @@ export async function updateWindowWithOptionalPhoto(
     }
 
     after(async () => {
-      const { data: unit } = await supabase
+      const db = createAdminClient();
+      const { data: unit } = await db
         .from("units")
         .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
-        supabase,
+        db,
         unitId,
         "installer",
         unit?.assigned_installer_name ?? "Installer",
@@ -1548,16 +1551,16 @@ export async function updateWindowWithOptionalPhoto(
           replacedPhoto: Boolean(publicUrl),
         }
       );
-      await refreshRoomAggregates(supabase, roomId);
-      await refreshUnitAggregates(supabase, unitId);
+      await refreshRoomAggregates(db, roomId);
+      await refreshUnitAggregates(db, unitId);
       const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(supabase, unitId);
+      await recomputeUnitStatus(db, unitId);
 
       // Escalation alert to scheduler when window flag is yellow/red
       if (riskFlag === "yellow" || riskFlag === "red") {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          await emitNotification(supabase, {
+          await emitNotification({
             recipientRole: "scheduler",
             recipientId: schedulerId,
             type: NOTIF_UNIT_ESCALATION,
@@ -1569,14 +1572,14 @@ export async function updateWindowWithOptionalPhoto(
       }
 
       // Progress notification on status milestone change
-      const { data: updatedUnit } = await supabase
+      const { data: updatedUnit } = await db
         .from("units")
         .select("status")
         .eq("id", unitId)
         .single();
       const newStatus = updatedUnit?.status ?? prevStatus;
       if (newStatus !== prevStatus) {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
             measured: "All windows measured",
@@ -1586,7 +1589,7 @@ export async function updateWindowWithOptionalPhoto(
           };
           const title = progressTitles[newStatus];
           if (title) {
-            await emitNotification(supabase, {
+            await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
@@ -1712,26 +1715,27 @@ export async function uploadWindowPostBracketingPhoto(
     const capturedWindowLabel = windowRow.label;
     const capturedHasPhoto = hasPhoto;
     after(async () => {
-      const { data: unit } = await supabase
+      const db = createAdminClient();
+      const { data: unit } = await db
         .from("units")
         .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
       await logUnitActivity(
-        supabase,
+        db,
         unitId,
         "installer",
         unit?.assigned_installer_name ?? "Installer",
         capturedHasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel, riskFlag, hasPhoto: capturedHasPhoto }
       );
-      await refreshUnitAggregates(supabase, unitId);
+      await refreshUnitAggregates(db, unitId);
       const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(supabase, unitId);
-      const { data: updatedUnit } = await supabase.from("units").select("status").eq("id", unitId).single();
+      await recomputeUnitStatus(db, unitId);
+      const { data: updatedUnit } = await db.from("units").select("status").eq("id", unitId).single();
       const newStatus = updatedUnit?.status ?? prevStatus;
       if (newStatus !== prevStatus) {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
             measured: "All windows measured",
@@ -1741,7 +1745,7 @@ export async function uploadWindowPostBracketingPhoto(
           };
           const title = progressTitles[newStatus];
           if (title) {
-            await emitNotification(supabase, {
+            await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
@@ -1882,14 +1886,15 @@ export async function uploadWindowInstalledPhoto(
     const capturedWindowLabel2 = windowRow.label;
     const capturedHasPhoto2 = hasPhoto;
     after(async () => {
-      const { data: unit } = await supabase
+      const db = createAdminClient();
+      const { data: unit } = await db
         .from("units")
         .select("assigned_installer_name, status")
         .eq("id", unitId)
         .single();
-      await refreshUnitAggregates(supabase, unitId);
+      await refreshUnitAggregates(db, unitId);
       await logUnitActivity(
-        supabase,
+        db,
         unitId,
         "installer",
         unit?.assigned_installer_name ?? "Installer",
@@ -1897,11 +1902,11 @@ export async function uploadWindowInstalledPhoto(
         { roomId, windowId, windowLabel: capturedWindowLabel2, riskFlag, hasPhoto: capturedHasPhoto2 }
       );
       const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(supabase, unitId);
-      const { data: updatedUnit } = await supabase.from("units").select("status").eq("id", unitId).single();
+      await recomputeUnitStatus(db, unitId);
+      const { data: updatedUnit } = await db.from("units").select("status").eq("id", unitId).single();
       const newStatus = updatedUnit?.status ?? prevStatus;
       if (newStatus !== prevStatus) {
-        const schedulerId = await getSchedulerForUnit(supabase, unitId);
+        const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
             measured: "All windows measured",
@@ -1911,7 +1916,7 @@ export async function uploadWindowInstalledPhoto(
           };
           const title = progressTitles[newStatus];
           if (title) {
-            await emitNotification(supabase, {
+            await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
