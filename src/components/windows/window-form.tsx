@@ -24,6 +24,7 @@ import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -81,7 +82,7 @@ export function WindowForm({
   const searchParams = useSearchParams();
   const datasetCtx = useAppDatasetMaybe();
   const editId = searchParams.get("edit");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
   const unit = data.units.find((u) => u.id === id);
   const room = data.rooms.find((r) => r.id === roomId);
@@ -352,12 +353,10 @@ export function WindowForm({
           />
         )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+        <PhotoSourcePicker
+          open={photoPickerOpen}
+          onClose={() => setPhotoPickerOpen(false)}
+          onChange={(files) => onFileChange(files?.[0] ?? null)}
         />
 
         {formError && (
@@ -525,7 +524,7 @@ export function WindowForm({
           {photoPreview ? (
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setPhotoPickerOpen(true)}
               className="relative w-full rounded-2xl overflow-hidden border border-border text-left"
             >
               <Image
@@ -561,7 +560,7 @@ export function WindowForm({
           ) : (
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setPhotoPickerOpen(true)}
               className={`w-full h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors active:scale-[0.99] ${
                 errors.photo
                   ? "border-red-300 bg-red-50"

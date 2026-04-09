@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { WifiSlash, CloudArrowUp, ArrowClockwise, Check } from "@phosphor-icons/react";
 import { subscribeToQueue, retryFailed, clearFailed, type QueuedUpload } from "@/lib/upload-queue";
+import "@/lib/register-upload-actions";
 
 function useOnlineStatus() {
   return useSyncExternalStore(

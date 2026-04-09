@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, CheckCircle, Images, Plus, Spinner, X } from "@phosphor-icons/react";
 import { uploadRoomFinishedPhotos } from "@/app/actions/fsr-data";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
+import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 
 const MAX_PHOTOS = 3;
 
@@ -24,7 +25,7 @@ export function RoomFinishedPhotos({
   canUpload = false,
 }: RoomFinishedPhotosProps) {
   const [open, setOpen] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   // Locally track newly uploaded photos so the grid updates immediately without a full page reload
   const [localPhotos, setLocalPhotos] = useState<UnitStageMediaItem[]>([]);
   const [error, setError] = useState("");
@@ -34,10 +35,9 @@ export function RoomFinishedPhotos({
   const allPhotos = [...existingPhotos, ...localPhotos];
   const remaining = MAX_PHOTOS - allPhotos.length;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (files: FileList | null) => {
     setError("");
-    const selected = Array.from(e.target.files ?? []);
-    e.target.value = "";
+    const selected = Array.from(files ?? []);
     if (selected.length === 0) return;
 
     const available = MAX_PHOTOS - allPhotos.length;
@@ -158,12 +158,10 @@ export function RoomFinishedPhotos({
 
               <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[70dvh]">
                 {canUpload && (
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
+                  <PhotoSourcePicker
+                    open={pickerOpen}
                     multiple
-                    className="sr-only"
+                    onClose={() => setPickerOpen(false)}
                     onChange={handleFileChange}
                   />
                 )}
@@ -205,7 +203,7 @@ export function RoomFinishedPhotos({
                   {canUpload && remaining > 0 && !uploading && (
                     <button
                       type="button"
-                      onClick={() => fileRef.current?.click()}
+                      onClick={() => setPickerOpen(true)}
                       className="aspect-square flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-accent/40 hover:text-accent active:scale-[0.97] transition-colors"
                     >
                       <Plus size={20} weight="bold" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
@@ -14,6 +14,7 @@ import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { useQueuedUpload } from "@/lib/use-queued-upload";
+import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 
 export function PostBracketingPhotoForm({
   data,
@@ -30,7 +31,7 @@ export function PostBracketingPhotoForm({
     windowId: string;
   }>();
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
   const unit = data.units.find((u) => u.id === id);
   const room = data.rooms.find((r) => r.id === roomId);
@@ -160,12 +161,10 @@ export function PostBracketingPhotoForm({
           routeBasePath={routeBasePath}
         />
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+        <PhotoSourcePicker
+          open={photoPickerOpen}
+          onClose={() => setPhotoPickerOpen(false)}
+          onChange={(files) => onFileChange(files?.[0] ?? null)}
         />
 
         <div className="rounded-2xl border border-border bg-surface px-4 py-3 text-[11px] text-zinc-500 leading-relaxed">
@@ -195,7 +194,7 @@ export function PostBracketingPhotoForm({
           {photoPreview ? (
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setPhotoPickerOpen(true)}
               className="relative w-full overflow-hidden rounded-2xl border border-border text-left"
             >
               <div className={`relative w-full bg-surface overflow-hidden ${
@@ -223,7 +222,7 @@ export function PostBracketingPhotoForm({
           ) : (
             <button
               type="button"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => setPhotoPickerOpen(true)}
               className="flex h-44 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 transition-all active:scale-[0.98] hover:bg-zinc-100/50"
             >
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-white border border-zinc-200 shadow-sm">

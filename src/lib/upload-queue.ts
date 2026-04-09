@@ -147,7 +147,7 @@ export async function retryFailed(): Promise<void> {
   processQueue();
 }
 
-// Action registry — photo forms register their server actions here
+// Action registry — server actions registered here so they survive page reloads
 const actionRegistry = new Map<string, (fd: FormData) => Promise<{ ok: boolean; error?: string }>>();
 
 export function registerUploadAction(
@@ -157,7 +157,31 @@ export function registerUploadAction(
   actionRegistry.set(name, action);
 }
 
-const MAX_RETRIES = 5;
+const MAX_RETRIES = 3;
+// How long to wait for the action to be registered (e.g. component mounting after page reload)
+const ACTION_WAIT_MS = 8000;
+// Hard timeout on each upload attempt so a hung network request doesn't block forever
+const UPLOAD_TIMEOUT_MS = 60000;
+
+function waitForAction(name: string): Promise<((fd: FormData) => Promise<{ ok: boolean; error?: string }>) | null> {
+  return new Promise((resolve) => {
+    const action = actionRegistry.get(name);
+    if (action) { resolve(action); return; }
+    const deadline = Date.now() + ACTION_WAIT_MS;
+    const poll = setInterval(() => {
+      const a = actionRegistry.get(name);
+      if (a) { clearInterval(poll); resolve(a); return; }
+      if (Date.now() > deadline) { clearInterval(poll); resolve(null); }
+    }, 200);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 
 async function processQueue(): Promise<void> {
   if (processingActive) return;
@@ -173,10 +197,17 @@ async function processQueue(): Promise<void> {
       await putItem(next);
       notifyListeners();
 
-      const action = actionRegistry.get(next.actionName);
+      // Wait for the action to be registered (handles page reload / component mount delay)
+      const action = await waitForAction(next.actionName);
       if (!action) {
-        next.status = "failed";
-        next.errorMessage = `Unknown action: ${next.actionName}`;
+        next.retries += 1;
+        if (next.retries >= MAX_RETRIES) {
+          next.status = "failed";
+          next.errorMessage = "Upload action unavailable — please retry manually";
+        } else {
+          next.status = "queued";
+          next.errorMessage = "Action not ready, will retry";
+        }
         await putItem(next);
         notifyListeners();
         continue;
@@ -192,7 +223,12 @@ async function processQueue(): Promise<void> {
       }
 
       try {
-        const result = await action(fd);
+        const result = await withTimeout(
+          action(fd),
+          UPLOAD_TIMEOUT_MS,
+          { ok: false as const, error: "Upload timed out, will retry" }
+        );
+
         if (result.ok) {
           await deleteItem(next.id);
           notifyListeners();
@@ -207,22 +243,20 @@ async function processQueue(): Promise<void> {
           }
           await putItem(next);
           notifyListeners();
-          // Wait before retrying
-          await new Promise((r) => setTimeout(r, Math.min(2000 * Math.pow(2, next.retries), 30000)));
+          await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
         }
       } catch {
         next.retries += 1;
         if (next.retries >= MAX_RETRIES) {
           next.status = "failed";
-          next.errorMessage = "Network error — will retry when online";
+          next.errorMessage = "Network error — please retry";
         } else {
           next.status = "queued";
-          next.errorMessage = "Network error";
+          next.errorMessage = "Network error, retrying";
         }
         await putItem(next);
         notifyListeners();
-        // Wait with exponential backoff
-        await new Promise((r) => setTimeout(r, Math.min(3000 * Math.pow(2, next.retries), 60000)));
+        await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
       }
     }
   } finally {
@@ -230,8 +264,7 @@ async function processQueue(): Promise<void> {
   }
 }
 
-// On startup: reset any items stuck in "uploading" (e.g. page closed mid-upload)
-// back to "queued" so they get retried.
+// Reset items stuck as "uploading" (page closed/suspended mid-upload) back to "queued"
 async function resetStuckUploads(): Promise<void> {
   const items = await getAllItems();
   for (const item of items) {
@@ -244,8 +277,19 @@ async function resetStuckUploads(): Promise<void> {
   notifyListeners();
 }
 
-// Restart queue processing when coming back online
 if (typeof window !== "undefined") {
+  // On startup: reset stuck uploads then process
   resetStuckUploads().then(() => processQueue());
+
+  // Resume after coming back online
   window.addEventListener("online", () => processQueue());
+
+  // Android: when tab comes back to foreground after camera/gallery picker,
+  // reset any stuck-uploading items and restart the queue
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      processingActive = false; // force-unlock in case async loop was suspended
+      resetStuckUploads().then(() => processQueue());
+    }
+  });
 }
