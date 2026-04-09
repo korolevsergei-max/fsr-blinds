@@ -30,7 +30,7 @@ export function WindowStageNav({
   const items = [
     {
       key: "before" as const,
-      label: "Before",
+      label: "Measurement",
       done: isMeasured,
       href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/new?edit=${windowId}`,
     },
