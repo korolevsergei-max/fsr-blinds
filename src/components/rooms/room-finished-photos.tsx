@@ -118,7 +118,7 @@ export function RoomFinishedPhotos({
         {open && (
           <>
             <motion.div
-              className="fixed inset-0 z-40 bg-zinc-950/45"
+              className="fixed inset-0 z-[55] bg-zinc-950/45"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -129,7 +129,7 @@ export function RoomFinishedPhotos({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: "100%" }}
               transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2rem] border-t border-border bg-white shadow-2xl"
+              className="fixed inset-x-0 bottom-0 z-[60] flex flex-col rounded-t-[2rem] border-t border-border bg-white shadow-2xl"
             >
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
