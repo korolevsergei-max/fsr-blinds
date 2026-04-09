@@ -63,7 +63,7 @@ export function RoomDetail({
       </div>
 
       {windowCount > 0 && (
-        <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent flex flex-col gap-3">
+        <div className="sticky bottom-20 px-5 pb-4 pt-3 bg-gradient-to-t from-white via-white to-transparent flex flex-col gap-2">
           <RoomFinishedPhotos
             unitId={id}
             roomId={roomId}

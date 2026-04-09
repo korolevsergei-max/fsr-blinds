@@ -42,17 +42,13 @@ export function ManagementRoomDetail({
             routeBasePath: "/management/units",
           })}
         />
-        {mediaItems.some(
-          (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
-        ) && (
-          <RoomFinishedPhotos
-            unitId={id}
-            roomId={roomId}
-            existingPhotos={mediaItems.filter(
-              (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
-            )}
-          />
-        )}
+        <RoomFinishedPhotos
+          unitId={id}
+          roomId={roomId}
+          existingPhotos={mediaItems.filter(
+            (m) => m.uploadKind === "room_finished_photo" && m.roomId === roomId
+          )}
+        />
       </div>
     </div>
   );
