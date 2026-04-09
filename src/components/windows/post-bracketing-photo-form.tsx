@@ -111,6 +111,7 @@ export function PostBracketingPhotoForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
+        router.refresh();
       } else {
         setError(result.error ?? "Failed to delete photo.");
       }

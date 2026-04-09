@@ -234,6 +234,7 @@ export function WindowForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
+        router.refresh();
       } else {
         setFormError(result.error ?? "Failed to delete photo.");
       }

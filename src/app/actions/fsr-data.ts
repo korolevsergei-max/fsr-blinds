@@ -1300,6 +1300,8 @@ export async function createWindowWithPhoto(
       }
     }
 
+    // Bust the cache immediately so the next navigation shows fresh data.
+    revalidateUnit(unitId);
     after(async () => {
       const db = createAdminClient();
       const { data: unit } = await db
@@ -1538,6 +1540,8 @@ export async function updateWindowWithOptionalPhoto(
       });
     }
 
+    // Bust the cache immediately so the next navigation shows fresh data.
+    revalidateUnit(unitId);
     after(async () => {
       const db = createAdminClient();
       const { data: unit } = await db
@@ -1723,6 +1727,8 @@ export async function uploadWindowPostBracketingPhoto(
 
     const capturedWindowLabel = windowRow.label;
     const capturedHasPhoto = hasPhoto;
+    // Bust the cache immediately so the next navigation shows fresh data.
+    revalidateUnit(unitId);
     after(async () => {
       const db = createAdminClient();
       const { data: unit } = await db
@@ -1898,6 +1904,8 @@ export async function uploadWindowInstalledPhoto(
 
     const capturedWindowLabel2 = windowRow.label;
     const capturedHasPhoto2 = hasPhoto;
+    // Bust the cache immediately so the next navigation shows fresh data.
+    revalidateUnit(unitId);
     after(async () => {
       const db = createAdminClient();
       const { data: unit } = await db
@@ -2149,11 +2157,13 @@ export async function deleteWindowMediaItem(
       .update({ [windowField]: false })
       .eq("id", windowId);
 
-    // Recompute unit status
-    const db = createAdminClient();
-    await refreshUnitAggregates(db, media.unit_id);
-    await recomputeUnitStatus(db, media.unit_id);
-    revalidateUnit(media.unit_id);
+    const capturedUnitId = media.unit_id;
+    after(async () => {
+      const db = createAdminClient();
+      await refreshUnitAggregates(db, capturedUnitId);
+      await recomputeUnitStatus(db, capturedUnitId);
+      revalidateUnit(capturedUnitId);
+    });
 
     return { ok: true };
   } catch (e) {
@@ -2193,10 +2203,12 @@ export async function deleteWindowMeasurementPhoto(
       .update({ photo_url: null, measured: false })
       .eq("id", windowId);
 
-    const db = createAdminClient();
-    await refreshUnitAggregates(db, unitId);
-    await recomputeUnitStatus(db, unitId);
-    revalidateUnit(unitId);
+    after(async () => {
+      const db = createAdminClient();
+      await refreshUnitAggregates(db, unitId);
+      await recomputeUnitStatus(db, unitId);
+      revalidateUnit(unitId);
+    });
 
     return { ok: true };
   } catch (e) {
