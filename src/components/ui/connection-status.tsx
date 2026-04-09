@@ -63,9 +63,18 @@ export function ConnectionStatus() {
           <div className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 text-sm font-medium shadow-lg">
             <CloudArrowUp size={18} weight="bold" className="animate-pulse" />
             <span className="flex-1">
-              {uploading > 0
-                ? `Uploading photo${pending > 1 ? ` (${pending} queued)` : ""}…`
-                : `${pending} photo${pending > 1 ? "s" : ""} waiting to upload`}
+              {(() => {
+                const activeItems = queue.filter((i) => i.status === "uploading" || i.status === "queued");
+                const hasPhotos = activeItems.some((i) => i.fileData !== null);
+                if (uploading > 0) {
+                  return hasPhotos
+                    ? `Uploading photo${pending > 1 ? ` (${pending} queued)` : ""}…`
+                    : "Saving…";
+                }
+                return hasPhotos
+                  ? `${pending} photo${pending > 1 ? "s" : ""} waiting to upload`
+                  : `${pending} save${pending > 1 ? "s" : ""} pending`;
+              })()}
             </span>
           </div>
         )}

@@ -134,8 +134,20 @@ export function PostBracketingPhotoForm({
       fd.set("riskFlag", riskFlag);
       fd.set("notes", notes);
 
-      // Queue upload for background processing — navigates immediately
-      await enqueuePhoto(fd);
+      if (compressedPhoto) {
+        // Photo present — queue for background upload so navigation is instant
+        await enqueuePhoto(fd);
+      } else {
+        // No photo — call directly and wait before navigating.
+        // Android Chrome cancels in-flight fetch requests on navigation, so
+        // queuing and immediately navigating drops the save on Android.
+        const result = await uploadWindowPostBracketingPhoto(fd);
+        if (!result.ok) {
+          setError(result.error ?? "Failed to save. Please try again.");
+          return;
+        }
+      }
+
       router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       router.refresh();
     });

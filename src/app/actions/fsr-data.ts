@@ -1784,6 +1784,7 @@ export async function uploadWindowInstalledPhoto(
     const notes = String(formData.get("notes") ?? "");
     const riskFlag = String(formData.get("riskFlag") ?? "green") as RiskFlag;
     const photo = formData.get("photo");
+    const overrideBracketing = formData.get("overrideBracketing") === "true";
 
     if (!unitId || !roomId || !windowId) {
       return { ok: false, error: "Missing unit, room, or window." };
@@ -1835,7 +1836,9 @@ export async function uploadWindowInstalledPhoto(
     if (unitStatusError || !unitRow) {
       return { ok: false, error: "Unit not found." };
     }
-    if (!canUploadInstallationPhotos(unitRow.status as UnitStatus)) {
+    // Allow override when installer confirms they did bracketing + installation together
+    const overrideAllowed = overrideBracketing && unitRow.status === "measured";
+    if (!canUploadInstallationPhotos(unitRow.status as UnitStatus) && !overrideAllowed) {
       return {
         ok: false,
         error:
@@ -1848,6 +1851,7 @@ export async function uploadWindowInstalledPhoto(
       .update({
         risk_flag: riskFlag,
         notes: notes.trim(),
+        ...(overrideAllowed ? { bracketed: true } : {}),
         installed: true,
       })
       .eq("id", windowId);

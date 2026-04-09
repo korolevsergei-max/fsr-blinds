@@ -57,6 +57,7 @@ export function InstalledPhotoForm({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const [confirmOverrideOpen, setConfirmOverrideOpen] = useState(false);
   const enqueuePhoto = useQueuedUpload("uploadWindowInstalledPhoto", uploadWindowInstalledPhoto);
 
   useEffect(() => {
@@ -78,9 +79,16 @@ export function InstalledPhotoForm({
     return <div className="p-6 text-center text-muted">Window not found</div>;
   }
 
+  // Unit is measured but not yet bracketed — allow override with confirmation
+  const isBracketingOverride =
+    !existingInstalled &&
+    !canUploadInstallationPhotos(unit.status as UnitStatus) &&
+    unit.status === "measured";
+
   const installPhotosBlocked =
     !existingInstalled &&
-    !canUploadInstallationPhotos(unit.status as UnitStatus);
+    !canUploadInstallationPhotos(unit.status as UnitStatus) &&
+    !isBracketingOverride;
 
   const onFileChange = (file: File | null) => {
     setError("");
@@ -121,6 +129,16 @@ export function InstalledPhotoForm({
       return;
     }
 
+    // If this is a bracketing override, show confirmation first
+    if (isBracketingOverride) {
+      setConfirmOverrideOpen(true);
+      return;
+    }
+
+    doSubmit(false);
+  };
+
+  const doSubmit = (overrideBracketing: boolean) => {
     startTransition(async () => {
       let compressedPhoto: File | null = null;
       if (photoFile) {
@@ -145,9 +163,23 @@ export function InstalledPhotoForm({
       }
       fd.set("riskFlag", riskFlag);
       fd.set("notes", notes);
+      if (overrideBracketing) {
+        fd.set("overrideBracketing", "true");
+      }
 
-      // Queue upload for background processing — navigates immediately
-      await enqueuePhoto(fd);
+      if (compressedPhoto) {
+        // Photo present — queue for background upload so navigation is instant
+        await enqueuePhoto(fd);
+      } else {
+        // No photo — call directly and wait before navigating.
+        // Android Chrome cancels in-flight fetch requests on navigation.
+        const result = await uploadWindowInstalledPhoto(fd);
+        if (!result.ok) {
+          setError(result.error ?? "Failed to save. Please try again.");
+          return;
+        }
+      }
+
       router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       router.refresh();
     });
@@ -191,6 +223,13 @@ export function InstalledPhotoForm({
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-zinc-700 leading-snug">
             <p className="font-bold text-amber-900 mb-1">Pre-requisites Pending</p>
             Measurements and bracketing must be completed for all windows in this unit before marking installation as complete.
+          </div>
+        )}
+
+        {isBracketingOverride && (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-zinc-700 leading-snug">
+            <p className="font-bold text-blue-900 mb-1">Bracketing Incomplete</p>
+            You can still mark installation as complete — you&apos;ll be asked to confirm that bracketing was also done.
           </div>
         )}
 
@@ -301,6 +340,46 @@ export function InstalledPhotoForm({
           )}
         </div>
       </form>
+
+      {/* Bracketing override confirmation dialog */}
+      {confirmOverrideOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[55] bg-zinc-950/45"
+            onClick={() => setConfirmOverrideOpen(false)}
+          />
+          <div className="fixed inset-x-4 top-1/2 z-[60] -translate-y-1/2 rounded-3xl border border-border bg-white shadow-2xl max-w-lg mx-auto p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-base font-bold text-foreground">Confirm Bracketing &amp; Installation</p>
+              <p className="mt-1.5 text-sm text-zinc-500 leading-relaxed">
+                Are you confirming that you completed <span className="font-semibold text-foreground">bracketing and installation</span> for this window at the same time?
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                fullWidth
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => {
+                  setConfirmOverrideOpen(false);
+                  doSubmit(true);
+                }}
+              >
+                <CheckCircle size={20} weight="bold" />
+                Yes, Mark Both as Complete
+              </Button>
+              <button
+                type="button"
+                onClick={() => setConfirmOverrideOpen(false)}
+                className="w-full rounded-2xl border border-border py-3 text-sm font-semibold text-zinc-500 hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
