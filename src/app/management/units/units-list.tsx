@@ -408,6 +408,7 @@ export function UnitsList({
                     </span>
                   )}
                 </div>
+                <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
                 <FilterDropdown multiple label="Client" values={clientFilter} options={clientOptions} onChange={(v) => { setClientFilter(v); setBuildingFilter([]); setFloorFilter([]); }} />
                 <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter([]); }} />
                 <FilterDropdown multiple label="Floor" values={floorFilter} options={floorOptions} onChange={setFloorFilter} />
@@ -431,7 +432,6 @@ export function UnitsList({
                   options={issueOptions}
                   onChange={(v) => setIssueFilter(v as typeof issueFilter)}
                 />
-                <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
                 {activeFilterCount > 0 && (
                   <button
                     type="button"

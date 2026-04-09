@@ -125,11 +125,11 @@ export function RoomFinishedPhotos({
               onClick={() => setOpen(false)}
             />
             <motion.div
-              initial={{ opacity: 0, y: "100%" }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: "100%" }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 bottom-0 z-[60] flex flex-col rounded-t-[2rem] border-t border-border bg-white shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-4 top-1/2 z-[60] flex flex-col -translate-y-1/2 rounded-3xl border border-border bg-white shadow-2xl max-w-lg mx-auto"
             >
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
@@ -151,7 +151,7 @@ export function RoomFinishedPhotos({
                 </button>
               </div>
 
-              <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[70dvh] pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+              <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[60dvh]">
                 {canUpload && (
                   <PhotoSourcePicker
                     open={pickerOpen}
