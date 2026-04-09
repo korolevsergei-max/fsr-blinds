@@ -356,7 +356,6 @@ export function WindowForm({
           ref={fileRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="sr-only"
           onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
         />
