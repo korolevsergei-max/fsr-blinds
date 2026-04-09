@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle, Wrench, Hourglass, CalendarBlank } from "@phosphor-icons/react";
 import type { AssemblerUnit } from "@/lib/assembler-data";
+
+type Filter = "all" | "partial" | "ready" | "qc";
 
 function UnitRow({ unit }: { unit: AssemblerUnit }) {
   const router = useRouter();
@@ -60,6 +63,7 @@ function UnitRow({ unit }: { unit: AssemblerUnit }) {
 
 export function AssemblerQueue({ units }: { units: AssemblerUnit[] }) {
   const router = useRouter();
+  const [filter, setFilter] = useState<Filter>("all");
 
   // Units with assembled windows needing QC
   const readyForQC = units.filter(
@@ -74,8 +78,19 @@ export function AssemblerQueue({ units }: { units: AssemblerUnit[] }) {
     (u) => u.cutCount > 0 && u.cutCount < u.windowCount
   );
 
+  const tabs: { key: Filter; label: string; count: number; color: string }[] = [
+    { key: "all", label: "All", count: units.length, color: "text-secondary" },
+    { key: "partial", label: "Partial Cut", count: partiallyCut.length, color: "text-yellow-600" },
+    { key: "ready", label: "To Assemble", count: readyToAssemble.length, color: "text-blue-600" },
+    { key: "qc", label: "QC", count: readyForQC.length, color: "text-green-600" },
+  ];
+
+  const visibleReadyForQC = filter === "all" || filter === "qc" ? readyForQC : [];
+  const visibleReadyToAssemble = filter === "all" || filter === "ready" ? readyToAssemble : [];
+  const visiblePartiallyCut = filter === "all" || filter === "partial" ? partiallyCut : [];
+
   return (
-    <div className="px-4 pt-4 pb-6 space-y-6">
+    <div className="px-4 pt-4 pb-6 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
@@ -92,6 +107,28 @@ export function AssemblerQueue({ units }: { units: AssemblerUnit[] }) {
         </div>
       </div>
 
+      {/* Filter tabs */}
+      {units.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                filter === tab.key
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-card text-secondary border-border hover:border-zinc-300"
+              }`}
+            >
+              {tab.label}
+              <span className={`font-bold ${filter === tab.key ? "text-background/70" : tab.color}`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {units.length === 0 ? (
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-10 text-center">
           <p className="text-sm font-medium text-primary">Nothing to assemble</p>
@@ -100,50 +137,53 @@ export function AssemblerQueue({ units }: { units: AssemblerUnit[] }) {
           </p>
         </div>
       ) : (
-        <>
-          {readyForQC.length > 0 && (
+        <div className="space-y-6">
+          {visibleReadyForQC.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 px-1">
                 <CheckCircle size={14} weight="fill" className="text-green-500" />
                 <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
                   Ready for QC
                 </span>
-                <span className="ml-auto text-xs text-tertiary">{readyForQC.length}</span>
+                <span className="ml-auto text-xs text-tertiary">{visibleReadyForQC.length}</span>
               </div>
-              {readyForQC.map((u) => (
+              {visibleReadyForQC.map((u) => (
                 <UnitRow key={u.id} unit={u} />
               ))}
             </div>
           )}
-          {readyToAssemble.length > 0 && (
+          {visibleReadyToAssemble.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 px-1">
                 <Wrench size={14} weight="fill" className="text-blue-500" />
                 <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
                   Ready to Assemble
                 </span>
-                <span className="ml-auto text-xs text-tertiary">{readyToAssemble.length}</span>
+                <span className="ml-auto text-xs text-tertiary">{visibleReadyToAssemble.length}</span>
               </div>
-              {readyToAssemble.map((u) => (
+              {visibleReadyToAssemble.map((u) => (
                 <UnitRow key={u.id} unit={u} />
               ))}
             </div>
           )}
-          {partiallyCut.length > 0 && (
+          {visiblePartiallyCut.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 px-1">
                 <Hourglass size={14} weight="fill" className="text-yellow-500" />
                 <span className="text-xs font-semibold text-secondary uppercase tracking-wider">
                   Partially Cut
                 </span>
-                <span className="ml-auto text-xs text-tertiary">{partiallyCut.length}</span>
+                <span className="ml-auto text-xs text-tertiary">{visiblePartiallyCut.length}</span>
               </div>
-              {partiallyCut.map((u) => (
+              {visiblePartiallyCut.map((u) => (
                 <UnitRow key={u.id} unit={u} />
               ))}
             </div>
           )}
-        </>
+          {visibleReadyForQC.length === 0 && visibleReadyToAssemble.length === 0 && visiblePartiallyCut.length === 0 && (
+            <p className="text-center text-sm text-tertiary py-6">No units in this category.</p>
+          )}
+        </div>
       )}
     </div>
   );

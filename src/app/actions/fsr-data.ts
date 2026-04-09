@@ -938,13 +938,15 @@ export async function uploadUnitStagePhotos(
   }
 }
 
+type CreatedRoom = { id: string; unitId: string; name: string; windowCount: number; completedWindows: number };
+
 export async function createRoomsForUnit(
   unitId: string,
   names: string[]
-): Promise<ActionResult> {
+): Promise<ActionResult & { rooms?: CreatedRoom[] }> {
   try {
     if (names.length === 0) {
-      return { ok: true };
+      return { ok: true, rooms: [] };
     }
     const supabase = await createClient();
     const rows = names.map((name) => ({
@@ -954,13 +956,20 @@ export async function createRoomsForUnit(
       window_count: 0,
       completed_windows: 0,
     }));
-    const { error } = await supabase.from("rooms").insert(rows);
+    const { data: inserted, error } = await supabase.from("rooms").insert(rows).select();
     if (error) {
       return { ok: false, error: error.message };
     }
     await refreshUnitAggregates(supabase, unitId);
     revalidateUnit(unitId);
-    return { ok: true };
+    const rooms: CreatedRoom[] = (inserted ?? []).map((r: { id: string; unit_id: string; name: string; window_count: number; completed_windows: number }) => ({
+      id: r.id,
+      unitId: r.unit_id,
+      name: r.name,
+      windowCount: r.window_count,
+      completedWindows: r.completed_windows,
+    }));
+    return { ok: true, rooms };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };

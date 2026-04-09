@@ -71,11 +71,11 @@ export async function loadAssemblerDataset(): Promise<{ units: AssemblerUnit[] }
 
   if (!prodRows || prodRows.length === 0) return { units: [] };
 
-  // Find unit IDs that have at least one 'cut' or 'assembled' window
+  // Find unit IDs that have at least one window in any production state (keep units visible through QC)
   const unitIdsReady = [
     ...new Set(
       prodRows
-        .filter((r) => r.status === "cut" || r.status === "assembled")
+        .filter((r) => r.status === "cut" || r.status === "assembled" || r.status === "qc_approved")
         .map((r) => r.unit_id)
     ),
   ];

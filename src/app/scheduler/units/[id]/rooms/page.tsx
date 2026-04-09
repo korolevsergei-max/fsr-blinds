@@ -4,6 +4,6 @@ import { useAppDataset } from "@/lib/dataset-context";
 import { CreateRooms } from "./create-rooms";
 
 export default function RoomsPage() {
-  const { data } = useAppDataset();
-  return <CreateRooms data={data} />;
+  const { data, patchData } = useAppDataset();
+  return <CreateRooms data={data} patchData={patchData} />;
 }

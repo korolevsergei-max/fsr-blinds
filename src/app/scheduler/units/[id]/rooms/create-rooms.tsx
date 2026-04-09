@@ -17,7 +17,13 @@ interface LocalRoom {
   name: string;
 }
 
-export function CreateRooms({ data }: { data: AppDataset }) {
+export function CreateRooms({
+  data,
+  patchData,
+}: {
+  data: AppDataset;
+  patchData: (updater: (prev: AppDataset) => AppDataset) => void;
+}) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -95,8 +101,12 @@ export function CreateRooms({ data }: { data: AppDataset }) {
         setSaveError(result.error);
         return;
       }
+      // Optimistically update context — no refresh needed
+      patchData((prev) => ({
+        ...prev,
+        rooms: prev.rooms.map((r) => r.id === roomId ? { ...r, name: nextName } : r),
+      }));
       cancelEdit();
-      router.refresh();
     });
   };
 
@@ -139,13 +149,13 @@ export function CreateRooms({ data }: { data: AppDataset }) {
       if (editingExistingRoomId === roomId) {
         cancelEdit();
       }
-      router.refresh();
+      // Optimistically remove from context — no refresh needed
+      patchData((prev) => ({
+        ...prev,
+        rooms: prev.rooms.filter((r) => r.id !== roomId),
+      }));
     });
   };
-
-  if (!unit) {
-    return <div className="p-6 text-center text-muted">Unit not found</div>;
-  }
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
@@ -416,9 +426,16 @@ export function CreateRooms({ data }: { data: AppDataset }) {
                   setSaveError(result.error);
                   return;
                 }
+                // Optimistically add the saved rooms to context so they show immediately on navigation
+                if (result.rooms && result.rooms.length > 0) {
+                  const savedRooms = result.rooms;
+                  patchData((prev) => ({
+                    ...prev,
+                    rooms: [...prev.rooms, ...savedRooms],
+                  }));
+                }
               }
               router.push(`/scheduler/units/${unit.id}`);
-              router.refresh();
             });
           }}
         >
