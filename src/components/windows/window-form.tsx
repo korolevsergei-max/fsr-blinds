@@ -169,6 +169,14 @@ export function WindowForm({
   const validate = () => {
     const e: Record<string, string> = {};
     if (!label.trim()) e.label = "Window label is required";
+    else {
+      const duplicate = data.windows.find(
+        (w) => w.roomId === roomId &&
+          w.label.trim().toLowerCase() === label.trim().toLowerCase() &&
+          w.id !== existingWindow?.id
+      );
+      if (duplicate) e.label = "A window with this name already exists in this room";
+    }
     if (!chainSide) e.chainSide = "Chain side is required";
     if (!width || parseFloat(width) <= 0) e.width = "Valid width required";
     if (!height || parseFloat(height) <= 0) e.height = "Valid height required";
@@ -307,7 +315,7 @@ export function WindowForm({
 
       if (addAnotherRef.current) {
         addAnotherRef.current = false;
-        router.push(`${routeBasePath}/${id}/rooms/${roomId}/windows/new`);
+        router.push(`${routeBasePath}/${id}/rooms/${roomId}/windows/new?t=${Date.now()}`);
       } else {
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       }
@@ -614,7 +622,7 @@ export function WindowForm({
               formRef.current?.requestSubmit();
             }}
           >
-            {pending && addAnotherRef.current ? "Saving…" : "+ Add Another Window"}
+            {pending && addAnotherRef.current ? "Saving…" : "Save & Add Another Window"}
           </Button>
 
           {existingWindow && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useAppDataset } from "@/lib/dataset-context";
 import { fetchUnitSupplementalData } from "@/app/actions/dataset-queries";
 import { WindowForm } from "@/components/windows/window-form";
@@ -9,6 +9,8 @@ import type { UnitActivityLog } from "@/lib/types";
 
 export default function SchedulerNewWindowPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const formKey = searchParams.get("t") ?? "default";
   const { data } = useAppDataset();
   const [activityLog, setActivityLog] = useState<UnitActivityLog[]>([]);
 
@@ -18,7 +20,7 @@ export default function SchedulerNewWindowPage() {
 
   return (
     <Suspense fallback={<div className="p-6 text-center text-muted text-sm">Loading form…</div>}>
-      <WindowForm data={data} activityLog={activityLog} routeBasePath="/scheduler/units" />
+      <WindowForm key={formKey} data={data} activityLog={activityLog} routeBasePath="/scheduler/units" />
     </Suspense>
   );
 }
