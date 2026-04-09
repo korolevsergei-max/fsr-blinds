@@ -162,8 +162,8 @@ export function RoomFinishedPhotos({
               </div>
 
               <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto max-h-[70dvh]">
-                {/* Saved photos */}
-                {hasExisting && (
+                {/* Photo grid — saved + pending + add tile */}
+                {(hasExisting || hasPending || canUpload) && (
                   <div className="grid grid-cols-3 gap-2">
                     {existingPhotos.map((photo) => (
                       <a
@@ -182,12 +182,7 @@ export function RoomFinishedPhotos({
                         />
                       </a>
                     ))}
-                  </div>
-                )}
 
-                {/* Pending previews */}
-                {hasPending && (
-                  <div className="grid grid-cols-3 gap-2">
                     {pendingFiles.map((_, index) => (
                       <div
                         key={previewUrls[index]}
@@ -209,14 +204,25 @@ export function RoomFinishedPhotos({
                         </button>
                       </div>
                     ))}
-                  </div>
-                )}
 
-                {/* Empty state */}
-                {!hasExisting && !hasPending && (
-                  <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 py-10">
-                    <Camera size={26} className="text-zinc-300" />
-                    <p className="text-sm text-zinc-400">No room photos yet</p>
+                    {canUpload && remaining > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        disabled={isPending || optimizing}
+                        className="aspect-square flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 hover:border-accent/40 hover:text-accent disabled:opacity-50 active:scale-[0.97] transition-colors"
+                      >
+                        <Plus size={20} weight="bold" />
+                        <span className="text-[10px] font-semibold">Add</span>
+                      </button>
+                    )}
+
+                    {!hasExisting && !hasPending && !canUpload && (
+                      <div className="col-span-3 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 py-10">
+                        <Camera size={26} className="text-zinc-300" />
+                        <p className="text-sm text-zinc-400">No room photos yet</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -245,32 +251,16 @@ export function RoomFinishedPhotos({
                       onChange={handleFileChange}
                     />
 
-                    <div className="flex gap-2 pb-2">
-                      {remaining > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => fileRef.current?.click()}
-                          disabled={isPending || optimizing}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border bg-surface py-3 text-sm font-semibold text-foreground disabled:opacity-50 active:scale-[0.97]"
-                        >
-                          <Plus size={14} weight="bold" />
-                          {hasExisting || hasPending ? "Add More" : "Add Photos"}
-                          {(hasExisting || hasPending) && remaining < MAX_PHOTOS && (
-                            <span className="text-xs font-normal text-zinc-400">({remaining} left)</span>
-                          )}
-                        </button>
-                      )}
-                      {hasPending && (
-                        <button
-                          type="button"
-                          onClick={handleSave}
-                          disabled={isPending || optimizing}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-accent py-3 text-sm font-semibold text-white disabled:opacity-50 active:scale-[0.97]"
-                        >
-                          {optimizing ? "Optimizing…" : isPending ? "Saving…" : "Save Photos"}
-                        </button>
-                      )}
-                    </div>
+                    {hasPending && (
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isPending || optimizing}
+                        className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-accent py-3 text-sm font-semibold text-white disabled:opacity-50 active:scale-[0.97]"
+                      >
+                        {optimizing ? "Optimizing…" : isPending ? "Saving…" : "Save Photos"}
+                      </button>
+                    )}
                   </>
                 )}
               </div>
