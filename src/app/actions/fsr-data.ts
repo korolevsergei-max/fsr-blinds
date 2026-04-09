@@ -2107,3 +2107,57 @@ export async function uploadRoomFinishedPhotos(
     return { ok: false, error: msg };
   }
 }
+
+/**
+ * Delete a window media item (installed or bracketing photo) and reset the
+ * corresponding window stage flag so the installer can re-upload.
+ */
+export async function deleteWindowMediaItem(
+  mediaId: string,
+  windowId: string,
+  stage: "bracketed_measured" | "installed_pending_approval"
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    // Fetch the media record to get the storage path and unit
+    const { data: media, error: fetchErr } = await supabase
+      .from("media_uploads")
+      .select("storage_path, unit_id")
+      .eq("id", mediaId)
+      .single();
+    if (fetchErr || !media) {
+      return { ok: false, error: "Media item not found." };
+    }
+
+    // Delete from storage
+    if (media.storage_path) {
+      await supabase.storage.from(BUCKET).remove([media.storage_path]);
+    }
+
+    // Delete from DB
+    const { error: delErr } = await supabase
+      .from("media_uploads")
+      .delete()
+      .eq("id", mediaId);
+    if (delErr) return { ok: false, error: delErr.message };
+
+    // Reset the window stage flag so installer can re-upload
+    const windowField = stage === "bracketed_measured" ? "bracketed" : "installed";
+    await supabase
+      .from("windows")
+      .update({ [windowField]: false })
+      .eq("id", windowId);
+
+    // Recompute unit status
+    const db = createAdminClient();
+    await refreshUnitAggregates(db, media.unit_id);
+    await recomputeUnitStatus(db, media.unit_id);
+    revalidateUnit(media.unit_id);
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}

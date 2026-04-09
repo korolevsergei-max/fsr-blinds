@@ -3,8 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
-import { uploadWindowInstalledPhoto } from "@/app/actions/fsr-data";
+import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react";
+import { uploadWindowInstalledPhoto, deleteWindowMediaItem } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { RiskFlag, UnitStatus } from "@/lib/types";
@@ -48,29 +48,31 @@ export function InstalledPhotoForm({
   const [photoPreview, setPhotoPreview] = useState<string | null>(
     existingInstalled?.publicUrl ?? null
   );
-  const [photoOrientation, setPhotoOrientation] = useState<
-    "portrait" | "landscape" | "square"
-  >("landscape");
+  const [photoOrientation, setPhotoOrientation] = useState<"portrait" | "landscape" | "square">("landscape");
   const [riskFlag, setRiskFlag] = useState<RiskFlag>(windowItem?.riskFlag ?? "green");
   const [notes, setNotes] = useState(windowItem?.notes ?? "");
   const [notesError, setNotesError] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [confirmOverrideOpen, setConfirmOverrideOpen] = useState(false);
   const enqueuePhoto = useQueuedUpload("uploadWindowInstalledPhoto", uploadWindowInstalledPhoto);
+
+  // mediaItems loads asynchronously — sync preview once it arrives
+  useEffect(() => {
+    if (existingInstalled?.publicUrl && !photoFile) {
+      setPhotoPreview(existingInstalled.publicUrl);
+    }
+  }, [existingInstalled?.publicUrl, photoFile]);
 
   useEffect(() => {
     if (!photoPreview) return;
     const probe = new window.Image();
     probe.onload = () => {
-      if (probe.naturalHeight > probe.naturalWidth) {
-        setPhotoOrientation("portrait");
-      } else if (probe.naturalHeight < probe.naturalWidth) {
-        setPhotoOrientation("landscape");
-      } else {
-        setPhotoOrientation("square");
-      }
+      if (probe.naturalHeight > probe.naturalWidth) setPhotoOrientation("portrait");
+      else if (probe.naturalHeight < probe.naturalWidth) setPhotoOrientation("landscape");
+      else setPhotoOrientation("square");
     };
     probe.src = photoPreview;
   }, [photoPreview]);
@@ -94,10 +96,7 @@ export function InstalledPhotoForm({
     setError("");
     if (file) {
       const validationError = validateUploadImage(file);
-      if (validationError) {
-        setError(validationError);
-        return;
-      }
+      if (validationError) { setError(validationError); return; }
     }
     setPhotoFile(file);
     setPhotoPreview((current) => {
@@ -106,20 +105,37 @@ export function InstalledPhotoForm({
     });
   };
 
+  const onDeletePhoto = async () => {
+    if (!existingInstalled) return;
+    setDeleting(true);
+    try {
+      const result = await deleteWindowMediaItem(
+        existingInstalled.id,
+        windowItem.id,
+        "installed_pending_approval"
+      );
+      if (result.ok) {
+        setPhotoPreview(null);
+        setPhotoFile(null);
+      } else {
+        setError(result.error ?? "Failed to delete photo.");
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const onSubmit = (ev: React.FormEvent) => {
     ev.preventDefault();
     setError("");
     setNotesError("");
 
     if (installPhotosBlocked) {
-      setError(
-        "Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded."
-      );
+      setError("Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded.");
       return;
     }
 
     const isGreen = riskFlag === "green";
-
     if (!isGreen && !photoFile && !existingInstalled) {
       setError("Installed photo is required for yellow or red risk.");
       return;
@@ -144,10 +160,7 @@ export function InstalledPhotoForm({
         let compressedPhoto: File | null = null;
         if (photoFile) {
           const validationError = validateUploadImage(photoFile);
-          if (validationError) {
-            setError(validationError);
-            return;
-          }
+          if (validationError) { setError(validationError); return; }
           setOptimizingPhoto(true);
           try {
             compressedPhoto = await compressImageForUpload(photoFile);
@@ -159,14 +172,10 @@ export function InstalledPhotoForm({
         fd.set("unitId", unit.id);
         fd.set("roomId", room.id);
         fd.set("windowId", windowItem.id);
-        if (compressedPhoto) {
-          fd.set("photo", compressedPhoto, compressedPhoto.name);
-        }
+        if (compressedPhoto) fd.set("photo", compressedPhoto, compressedPhoto.name);
         fd.set("riskFlag", riskFlag);
         fd.set("notes", notes);
-        if (overrideBracketing) {
-          fd.set("overrideBracketing", "true");
-        }
+        if (overrideBracketing) fd.set("overrideBracketing", "true");
 
         if (compressedPhoto) {
           // Photo present — queue for background upload so navigation is instant
@@ -220,7 +229,7 @@ export function InstalledPhotoForm({
             <UploadSimple size={14} weight="bold" />
             Installation Step
           </p>
-          Confirm that the blind is installed correctly. A photo is {riskFlag === "green" ? <span className="font-bold text-emerald-600">optional</span> : <span className="font-bold text-amber-600 underline">required</span>} for this window based on its status. 
+          Confirm that the blind is installed correctly. A photo is {riskFlag === "green" ? <span className="font-bold text-emerald-600">optional</span> : <span className="font-bold text-amber-600 underline">required</span>} for this window based on its status.
         </div>
 
         {installPhotosBlocked && (
@@ -249,39 +258,52 @@ export function InstalledPhotoForm({
             {riskFlag !== "green" && <span className="ml-1 text-red-500">*</span>}
           </h2>
           <p className="text-[11px] text-zinc-400 mb-3">
-            {riskFlag === "green" 
-              ? "Optional for green status windows." 
+            {riskFlag === "green"
+              ? "Optional for green status windows."
               : "Required for yellow or red risk indicators."}
           </p>
           {photoPreview ? (
-            <button
-              type="button"
-              disabled={installPhotosBlocked}
-              onClick={() => setPhotoPickerOpen(true)}
-              className="relative w-full overflow-hidden rounded-2xl border border-border text-left disabled:opacity-50"
-            >
-              <div className={`relative w-full bg-surface overflow-hidden ${
-                photoOrientation === "portrait"
-                  ? "h-[70dvh]"
-                  : photoOrientation === "square"
-                    ? "aspect-square"
-                    : "aspect-[16/9]"
-              }`}>
-                <Image
-                  src={photoPreview}
-                  alt="Installed preview"
-                  fill
-                  unoptimized
-                  className="object-contain"
-                />
-              </div>
-              <div className="absolute right-3 top-3">
-                <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
-                  <CheckCircle size={14} weight="fill" />
-                  {photoFile ? "New photo" : "Saved - tap to replace"}
-                </span>
-              </div>
-            </button>
+            <div className="relative w-full overflow-hidden rounded-2xl border border-border">
+              <button
+                type="button"
+                disabled={installPhotosBlocked}
+                onClick={() => setPhotoPickerOpen(true)}
+                className="relative w-full text-left disabled:opacity-50"
+              >
+                <div className={`relative w-full bg-surface overflow-hidden ${
+                  photoOrientation === "portrait"
+                    ? "h-[70dvh]"
+                    : photoOrientation === "square"
+                      ? "aspect-square"
+                      : "aspect-[16/9]"
+                }`}>
+                  <Image
+                    src={photoPreview}
+                    alt="Installed preview"
+                    fill
+                    unoptimized
+                    className="object-contain"
+                  />
+                </div>
+                <div className="absolute left-3 top-3">
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
+                    <CheckCircle size={14} weight="fill" />
+                    {photoFile ? "New photo" : "Saved — tap to replace"}
+                  </span>
+                </div>
+              </button>
+              {existingInstalled && !photoFile && (
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={onDeletePhoto}
+                  className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg disabled:opacity-60"
+                >
+                  <Trash size={13} weight="bold" />
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+              )}
+            </div>
           ) : (
             <button
               type="button"
@@ -314,10 +336,10 @@ export function InstalledPhotoForm({
         </div>
 
         <div className="pb-24 pt-4">
-          <Button 
-            type="submit" 
-            fullWidth 
-            size="lg" 
+          <Button
+            type="submit"
+            fullWidth
+            size="lg"
             disabled={pending || optimizingPhoto || installPhotosBlocked}
             className={!photoFile && !existingInstalled && !installPhotosBlocked ? "bg-emerald-600 hover:bg-emerald-700 shadow-md" : ""}
           >

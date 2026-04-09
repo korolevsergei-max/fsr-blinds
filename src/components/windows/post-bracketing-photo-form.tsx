@@ -3,8 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
-import { Camera, CheckCircle, UploadSimple } from "@phosphor-icons/react";
-import { uploadWindowPostBracketingPhoto } from "@/app/actions/fsr-data";
+import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react";
+import { uploadWindowPostBracketingPhoto, deleteWindowMediaItem } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { RiskFlag } from "@/lib/types";
@@ -56,7 +56,15 @@ export function PostBracketingPhotoForm({
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const enqueuePhoto = useQueuedUpload("uploadWindowPostBracketingPhoto", uploadWindowPostBracketingPhoto);
+
+  // mediaItems loads asynchronously — sync preview once it arrives
+  useEffect(() => {
+    if (existingPostBracketing?.publicUrl && !photoFile) {
+      setPhotoPreview(existingPostBracketing.publicUrl);
+    }
+  }, [existingPostBracketing?.publicUrl, photoFile]);
 
   useEffect(() => {
     if (!photoPreview) return;
@@ -91,6 +99,26 @@ export function PostBracketingPhotoForm({
       if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
       return file ? URL.createObjectURL(file) : null;
     });
+  };
+
+  const onDeletePhoto = async () => {
+    if (!existingPostBracketing) return;
+    setDeleting(true);
+    try {
+      const result = await deleteWindowMediaItem(
+        existingPostBracketing.id,
+        windowItem.id,
+        "bracketed_measured"
+      );
+      if (result.ok) {
+        setPhotoPreview(null);
+        setPhotoFile(null);
+      } else {
+        setError(result.error ?? "Failed to delete photo.");
+      }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const onSubmit = (ev: React.FormEvent) => {
@@ -208,33 +236,46 @@ export function PostBracketingPhotoForm({
               : "Required for yellow or red risk indicators."}
           </p>
           {photoPreview ? (
-            <button
-              type="button"
-              onClick={() => setPhotoPickerOpen(true)}
-              className="relative w-full overflow-hidden rounded-2xl border border-border text-left"
-            >
-              <div className={`relative w-full bg-surface overflow-hidden ${
-                photoOrientation === "portrait"
-                  ? "h-[70dvh]"
-                  : photoOrientation === "square"
-                    ? "aspect-square"
-                    : "aspect-[16/9]"
-              }`}>
-                <Image
-                  src={photoPreview}
-                  alt="Post-bracketing preview"
-                  fill
-                  unoptimized
-                  className="object-contain"
-                />
-              </div>
-              <div className="absolute right-3 top-3">
-                <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
-                  <CheckCircle size={14} weight="fill" />
-                  {photoFile ? "New photo" : "Saved - tap to replace"}
-                </span>
-              </div>
-            </button>
+            <div className="relative w-full overflow-hidden rounded-2xl border border-border">
+              <button
+                type="button"
+                onClick={() => setPhotoPickerOpen(true)}
+                className="relative w-full text-left"
+              >
+                <div className={`relative w-full bg-surface overflow-hidden ${
+                  photoOrientation === "portrait"
+                    ? "h-[70dvh]"
+                    : photoOrientation === "square"
+                      ? "aspect-square"
+                      : "aspect-[16/9]"
+                }`}>
+                  <Image
+                    src={photoPreview}
+                    alt="Post-bracketing preview"
+                    fill
+                    unoptimized
+                    className="object-contain"
+                  />
+                </div>
+                <div className="absolute left-3 top-3">
+                  <span className="flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
+                    <CheckCircle size={14} weight="fill" />
+                    {photoFile ? "New photo" : "Saved — tap to replace"}
+                  </span>
+                </div>
+              </button>
+              {existingPostBracketing && !photoFile && (
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={onDeletePhoto}
+                  className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg disabled:opacity-60"
+                >
+                  <Trash size={13} weight="bold" />
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+              )}
+            </div>
           ) : (
             <button
               type="button"
