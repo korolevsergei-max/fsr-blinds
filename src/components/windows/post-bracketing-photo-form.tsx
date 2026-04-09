@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
-import { useQueuedUpload } from "@/lib/use-queued-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 
 export function PostBracketingPhotoForm({
@@ -57,7 +56,6 @@ export function PostBracketingPhotoForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const enqueuePhoto = useQueuedUpload("uploadWindowPostBracketingPhoto", uploadWindowPostBracketingPhoto);
 
   // mediaItems loads asynchronously — sync preview once it arrives
   useEffect(() => {
@@ -163,18 +161,12 @@ export function PostBracketingPhotoForm({
         fd.set("riskFlag", riskFlag);
         fd.set("notes", notes);
 
-        if (compressedPhoto) {
-          // Photo present — queue for background upload so navigation is instant
-          await enqueuePhoto(fd);
-        } else {
-          // No photo — call directly and wait before navigating.
-          // Android Chrome cancels in-flight fetch requests on navigation, so
-          // queuing and immediately navigating drops the save on Android.
-          const result = await uploadWindowPostBracketingPhoto(fd);
-          if (!result.ok) {
-            setError(result.error ?? "Failed to save. Please try again.");
-            return;
-          }
+        // Always call directly — the queue approach fails on Android because
+        // Chrome cancels/corrupts requests when coming back from the camera picker.
+        const result = await uploadWindowPostBracketingPhoto(fd);
+        if (!result.ok) {
+          setError(result.error ?? "Failed to save. Please try again.");
+          return;
         }
 
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);

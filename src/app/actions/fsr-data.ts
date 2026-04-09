@@ -2161,3 +2161,46 @@ export async function deleteWindowMediaItem(
     return { ok: false, error: msg };
   }
 }
+
+/**
+ * Delete a window measurement photo, clearing photo_url and resetting measured flag.
+ */
+export async function deleteWindowMeasurementPhoto(
+  windowId: string,
+  unitId: string
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    // Find the measurement media record for this window
+    const { data: media } = await supabase
+      .from("media_uploads")
+      .select("id, storage_path")
+      .eq("window_id", windowId)
+      .eq("stage", "scheduled_bracketing")
+      .maybeSingle();
+
+    if (media?.storage_path) {
+      await supabase.storage.from(BUCKET).remove([media.storage_path]);
+    }
+    if (media?.id) {
+      await supabase.from("media_uploads").delete().eq("id", media.id);
+    }
+
+    // Clear photo_url and reset measured flag on the window
+    await supabase
+      .from("windows")
+      .update({ photo_url: null, measured: false })
+      .eq("id", windowId);
+
+    const db = createAdminClient();
+    await refreshUnitAggregates(db, unitId);
+    await recomputeUnitStatus(db, unitId);
+    revalidateUnit(unitId);
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}

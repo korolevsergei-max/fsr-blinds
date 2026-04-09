@@ -8,11 +8,13 @@ import {
   Camera,
   CheckCircle,
   ClockCounterClockwise,
+  Trash,
   UploadSimple,
 } from "@phosphor-icons/react";
 import {
   createWindowWithPhoto,
   deleteWindow,
+  deleteWindowMeasurementPhoto,
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -140,6 +142,7 @@ export function WindowForm({
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const addAnotherRef = useRef(false);
@@ -221,6 +224,22 @@ export function WindowForm({
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return f ? URL.createObjectURL(f) : existingWindow?.photoUrl ?? null;
     });
+  };
+
+  const onDeletePhoto = async () => {
+    if (!existingWindow || !unit) return;
+    setDeleting(true);
+    try {
+      const result = await deleteWindowMeasurementPhoto(existingWindow.id, unit.id);
+      if (result.ok) {
+        setPhotoPreview(null);
+        setPhotoFile(null);
+      } else {
+        setFormError(result.error ?? "Failed to delete photo.");
+      }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleSubmit = (ev: React.FormEvent) => {
@@ -522,41 +541,54 @@ export function WindowForm({
               : "Required for yellow or red risk indicators."}
           </p>
           {photoPreview ? (
-            <button
-              type="button"
-              onClick={() => setPhotoPickerOpen(true)}
-              className="relative w-full rounded-2xl overflow-hidden border border-border text-left"
-            >
-              <Image
-                src={photoPreview}
-                alt="Window measurement"
-                width={800}
-                height={600} unoptimized 
-                onLoad={(e) => {
-                  const img = e.currentTarget;
-                  if (img.naturalHeight > img.naturalWidth) {
-                    setPhotoOrientation("portrait");
-                  } else if (img.naturalHeight < img.naturalWidth) {
-                    setPhotoOrientation("landscape");
-                  } else {
-                    setPhotoOrientation("square");
-                  }
-                }}
-                className={`w-full bg-surface h-auto ${
-                  photoOrientation === "portrait"
-                    ? "max-h-[70dvh] object-contain"
-                    : photoOrientation === "square"
-                      ? "aspect-square object-cover"
-                      : "aspect-[16/9] object-cover"
-                }`}
-              />
-              <div className="absolute top-3 right-3">
-                <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent text-white text-xs font-semibold">
-                  <CheckCircle size={14} weight="fill" />
-                  {photoFile ? "New photo" : "Saved — tap to replace"}
-                </span>
-              </div>
-            </button>
+            <div className="relative w-full rounded-2xl overflow-hidden border border-border">
+              <button
+                type="button"
+                onClick={() => setPhotoPickerOpen(true)}
+                className="relative w-full text-left"
+              >
+                <Image
+                  src={photoPreview}
+                  alt="Window measurement"
+                  width={800}
+                  height={600} unoptimized
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    if (img.naturalHeight > img.naturalWidth) {
+                      setPhotoOrientation("portrait");
+                    } else if (img.naturalHeight < img.naturalWidth) {
+                      setPhotoOrientation("landscape");
+                    } else {
+                      setPhotoOrientation("square");
+                    }
+                  }}
+                  className={`w-full bg-surface h-auto ${
+                    photoOrientation === "portrait"
+                      ? "max-h-[70dvh] object-contain"
+                      : photoOrientation === "square"
+                        ? "aspect-square object-cover"
+                        : "aspect-[16/9] object-cover"
+                  }`}
+                />
+                <div className="absolute top-3 left-3">
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent text-white text-xs font-semibold">
+                    <CheckCircle size={14} weight="fill" />
+                    {photoFile ? "New photo" : "Saved — tap to replace"}
+                  </span>
+                </div>
+              </button>
+              {existingWindow?.photoUrl && !photoFile && (
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={onDeletePhoto}
+                  className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-lg disabled:opacity-60"
+                >
+                  <Trash size={13} weight="bold" />
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
+              )}
+            </div>
           ) : (
             <button
               type="button"
