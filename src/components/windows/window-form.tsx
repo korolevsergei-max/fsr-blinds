@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -78,6 +79,7 @@ export function WindowForm({
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const datasetCtx = useAppDatasetMaybe();
   const editId = searchParams.get("edit");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -259,13 +261,56 @@ export function WindowForm({
         setFormError(result.error);
         return;
       }
+
+      // Optimistically update in-memory dataset so the room page shows the
+      // change immediately without waiting for a server re-render.
+      if (datasetCtx && result.windowId) {
+        const wId = result.windowId;
+        const wRoomId = result.roomId ?? roomId;
+        const newPhotoUrl = result.photoUrl ?? null;
+        const parsedWidth = parseFloat(width) || null;
+        const parsedHeight = parseFloat(height) || null;
+        const parsedDepth = depth.trim() ? parseFloat(depth) || null : null;
+        const parsedBw = blindWidth.trim() ? parseFloat(blindWidth) || null : null;
+        const parsedBh = blindHeight.trim() ? parseFloat(blindHeight) || null : null;
+        const parsedBd = blindDepth.trim() ? parseFloat(blindDepth) || null : null;
+
+        datasetCtx.patchData((prev) => {
+          const windowData = {
+            id: wId,
+            roomId: wRoomId,
+            label: label.trim(),
+            blindType,
+            chainSide: chainSide ?? null,
+            riskFlag,
+            width: parsedWidth,
+            height: parsedHeight,
+            depth: parsedDepth,
+            blindWidth: parsedBw,
+            blindHeight: parsedBh,
+            blindDepth: parsedBd,
+            notes: notes.trim(),
+            photoUrl: newPhotoUrl ?? existingWindow?.photoUrl ?? null,
+            measured: true,
+            bracketed: existingWindow?.bracketed ?? false,
+            installed: existingWindow?.installed ?? false,
+          };
+          if (existingWindow) {
+            return {
+              ...prev,
+              windows: prev.windows.map((w) => w.id === wId ? windowData : w),
+            };
+          }
+          return { ...prev, windows: [...prev.windows, windowData] };
+        });
+      }
+
       if (addAnotherRef.current) {
         addAnotherRef.current = false;
         router.push(`${routeBasePath}/${id}/rooms/${roomId}/windows/new`);
       } else {
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       }
-      router.refresh();
     });
   };
 

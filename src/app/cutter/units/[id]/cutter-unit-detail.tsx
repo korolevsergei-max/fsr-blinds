@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -18,15 +18,14 @@ function formatDim(val: number | null): string {
   return `${val}"`;
 }
 
-function WindowCard({ window, roomName }: { window: CutterWindow; roomName: string }) {
+function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; roomName: string; onCut: (id: string) => void }) {
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
-  const production = window.production;
+  const production = win.production;
   const status = production?.status ?? "pending";
 
-  const w = window.blindWidth ?? window.width;
-  const h = window.blindHeight ?? window.height;
-  const d = window.blindDepth ?? window.depth;
+  const w = win.blindWidth ?? win.width;
+  const h = win.blindHeight ?? win.height;
+  const d = win.blindDepth ?? win.depth;
 
   const statusColors: Record<string, string> = {
     pending: "bg-gray-100 text-gray-500 border-gray-200",
@@ -35,29 +34,26 @@ function WindowCard({ window, roomName }: { window: CutterWindow; roomName: stri
     qc_approved: "bg-green-50 text-green-600 border-green-200",
   };
 
-  const blindTypeLabel =
-    window.blindType === "blackout" ? "Blackout" : "Screen";
+  const blindTypeLabel = win.blindType === "blackout" ? "Blackout" : "Screen";
 
   function handleMarkCut() {
+    // Optimistic: update UI immediately
+    onCut(win.id);
+    // Fire DB write in background
     startTransition(async () => {
-      await markWindowCut(window.id);
-      router.refresh();
+      await markWindowCut(win.id);
     });
   }
 
   return (
-    <div
-      className={`rounded-xl border px-4 py-3.5 space-y-2 ${statusColors[status] ?? statusColors.pending}`}
-    >
+    <div className={`rounded-xl border px-4 py-3.5 space-y-2 ${statusColors[status] ?? statusColors.pending}`}>
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-sm text-primary">{window.label}</p>
+          <p className="font-semibold text-sm text-primary">{win.label}</p>
           <p className="text-xs text-tertiary">{roomName}</p>
         </div>
-        <span
-          className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status] ?? statusColors.pending}`}
-        >
+        <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status] ?? statusColors.pending}`}>
           {PRODUCTION_STATUS_LABELS[status]}
         </span>
       </div>
@@ -75,10 +71,10 @@ function WindowCard({ window, roomName }: { window: CutterWindow; roomName: stri
       </div>
 
       {/* Notes */}
-      {window.notes && (
+      {win.notes && (
         <p className="text-xs text-secondary flex items-start gap-1.5">
           <Warning size={12} className="mt-0.5 shrink-0 text-yellow-500" />
-          {window.notes}
+          {win.notes}
         </p>
       )}
 
@@ -112,7 +108,7 @@ function WindowCard({ window, roomName }: { window: CutterWindow; roomName: stri
           className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-accent text-white text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
         >
           <Scissors size={16} weight="fill" />
-          {pending ? "Marking\u2026" : "Mark as Cut"}
+          {pending ? "Saving\u2026" : "Mark as Cut"}
         </button>
       )}
     </div>
@@ -121,7 +117,20 @@ function WindowCard({ window, roomName }: { window: CutterWindow; roomName: stri
 
 export function CutterUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
-  const { unit, rooms, windows } = detail;
+  const { unit, rooms } = detail;
+
+  // Local optimistic window state — starts from server data, updates instantly on tap
+  const [windows, setWindows] = useState(detail.windows);
+
+  const handleCut = (windowId: string) => {
+    setWindows((prev) =>
+      prev.map((w) =>
+        w.id === windowId
+          ? { ...w, production: { ...(w.production ?? { id: "", windowId, unitId: unit.id, cutByCutterId: null, cutNotes: "", assembledByAssemblerId: null, assembledAt: null, assembledNotes: "", qcApprovedByAssemblerId: null, qcApprovedAt: null, qcNotes: "", createdAt: new Date().toISOString() }), status: "cut" as const, cutAt: new Date().toISOString() } }
+          : w
+      )
+    );
+  };
 
   const cutCount = windows.filter(
     (w) => w.production?.status === "cut" || w.production?.status === "assembled" || w.production?.status === "qc_approved"
@@ -171,20 +180,8 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
           <p className="text-xs text-tertiary">
             Install: {unit.installationDate}
             {daysUntil !== null && (
-              <span
-                className={`ml-2 font-medium ${
-                  daysUntil < 0
-                    ? "text-red-600"
-                    : daysUntil <= 3
-                    ? "text-yellow-600"
-                    : "text-secondary"
-                }`}
-              >
-                {daysUntil < 0
-                  ? `${Math.abs(daysUntil)}d overdue`
-                  : daysUntil === 0
-                  ? "Today"
-                  : `${daysUntil}d away`}
+              <span className={`ml-2 font-medium ${daysUntil < 0 ? "text-red-600" : daysUntil <= 3 ? "text-yellow-600" : "text-secondary"}`}>
+                {daysUntil < 0 ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? "Today" : `${daysUntil}d away`}
               </span>
             )}
           </p>
@@ -201,7 +198,7 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
               {room.name}
             </p>
             {roomWindows.map((win) => (
-              <WindowCard key={win.id} window={win} roomName={room.name} />
+              <WindowCard key={win.id} window={win} roomName={room.name} onCut={handleCut} />
             ))}
           </div>
         );

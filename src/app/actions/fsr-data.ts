@@ -1141,7 +1141,7 @@ export async function deleteWindow(
 
 export async function createWindowWithPhoto(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResult & { windowId?: string; roomId?: string; photoUrl?: string | null }> {
   try {
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
@@ -1377,7 +1377,7 @@ export async function createWindowWithPhoto(
 
       revalidateUnit(unitId);
     });
-    return { ok: true };
+    return { ok: true, windowId, roomId, photoUrl: publicUrl };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -1386,7 +1386,7 @@ export async function createWindowWithPhoto(
 
 export async function updateWindowWithOptionalPhoto(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResult & { windowId?: string; roomId?: string; photoUrl?: string | null }> {
   try {
     const windowId = String(formData.get("windowId") ?? "");
     const unitId = String(formData.get("unitId") ?? "");
@@ -1612,7 +1612,7 @@ export async function updateWindowWithOptionalPhoto(
 
       revalidateUnit(unitId);
     });
-    return { ok: true };
+    return { ok: true, windowId, roomId, photoUrl: publicUrl ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
