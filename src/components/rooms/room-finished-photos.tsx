@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, CheckCircle, Images, Plus, Spinner, X } from "@phosphor-icons/react";
-import { uploadRoomFinishedPhotos } from "@/app/actions/fsr-data";
+import { uploadRoomFinishedPhotos, deleteRoomFinishedPhoto } from "@/app/actions/fsr-data";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
@@ -28,11 +28,13 @@ export function RoomFinishedPhotos({
   const [pickerOpen, setPickerOpen] = useState(false);
   // Locally track newly uploaded photos so the grid updates immediately without a full page reload
   const [localPhotos, setLocalPhotos] = useState<UnitStageMediaItem[]>([]);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [, startTransition] = useTransition();
 
-  const allPhotos = [...existingPhotos, ...localPhotos];
+  const allPhotos = [...existingPhotos, ...localPhotos].filter((p) => !deletedIds.has(p.id));
   const remaining = MAX_PHOTOS - allPhotos.length;
 
   const handleFileChange = (files: FileList | null) => {
@@ -92,6 +94,26 @@ export function RoomFinishedPhotos({
         ]);
       } finally {
         setUploading(false);
+      }
+    });
+  };
+
+  const handleDelete = (photo: UnitStageMediaItem) => {
+    if (photo.id.startsWith("local-")) {
+      setLocalPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      return;
+    }
+    setDeletingId(photo.id);
+    startTransition(async () => {
+      try {
+        const result = await deleteRoomFinishedPhoto(photo.id, unitId);
+        if (!result.ok) {
+          setError(result.error);
+        } else {
+          setDeletedIds((prev) => new Set([...prev, photo.id]));
+        }
+      } finally {
+        setDeletingId(null);
       }
     });
   };
@@ -164,26 +186,42 @@ export function RoomFinishedPhotos({
                 {/* Photo grid */}
                 <div className="grid grid-cols-3 gap-2">
                   {allPhotos.map((photo) => (
-                    <a
+                    <div
                       key={photo.id}
-                      href={photo.publicUrl}
-                      target="_blank"
-                      rel="noreferrer"
                       className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-zinc-100"
                     >
-                      <Image
-                        src={photo.publicUrl}
-                        alt={photo.label ?? "Room photo"}
-                        fill
-                        unoptimized
-                        className="object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-                      />
+                      <a
+                        href={photo.publicUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block absolute inset-0"
+                      >
+                        <Image
+                          src={photo.publicUrl}
+                          alt={photo.label ?? "Room photo"}
+                          fill
+                          unoptimized
+                          className="object-cover transition-transform duration-200 group-hover:scale-[1.03]"
+                        />
+                      </a>
                       {photo.id.startsWith("local-") && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/20">
+                        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/20 pointer-events-none">
                           <CheckCircle size={20} weight="fill" className="text-white" />
                         </div>
                       )}
-                    </a>
+                      {canUpload && (
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(photo)}
+                          disabled={deletingId === photo.id}
+                          className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-950/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 disabled:opacity-50"
+                        >
+                          {deletingId === photo.id
+                            ? <Spinner size={12} className="animate-spin" />
+                            : <X size={12} weight="bold" />}
+                        </button>
+                      )}
+                    </div>
                   ))}
 
                   {/* Uploading spinner tile */}

@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react";
-import { uploadWindowInstalledPhoto, deleteWindowMediaItem } from "@/app/actions/fsr-data";
+import { uploadWindowInstalledPhoto, deleteWindowMediaItem, undoWindowStage } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { RiskFlag } from "@/lib/types";
@@ -15,6 +15,7 @@ import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 export function InstalledPhotoForm({
   data,
@@ -55,7 +56,9 @@ export function InstalledPhotoForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [confirmOverrideOpen, setConfirmOverrideOpen] = useState(false);
+  const datasetCtx = useAppDatasetMaybe();
 
   // mediaItems loads asynchronously — sync preview once it arrives
   useEffect(() => {
@@ -329,7 +332,7 @@ export function InstalledPhotoForm({
           />
         </div>
 
-        <div className="pb-24 pt-4">
+        <div className="pb-24 pt-4 flex flex-col gap-3">
           <Button
             type="submit"
             fullWidth
@@ -357,6 +360,35 @@ export function InstalledPhotoForm({
             <p className="text-center text-[11px] text-zinc-400 mt-3 italic">
               You can complete this stage without a photo for green status windows.
             </p>
+          )}
+          {windowItem.installed && (
+            <button
+              type="button"
+              disabled={pending || undoing}
+              onClick={async () => {
+                if (!window.confirm("Undo Installed? Measured and Bracketed will remain complete.")) return;
+                setUndoing(true);
+                try {
+                  const result = await undoWindowStage(windowItem.id, "installed");
+                  if (result.ok) {
+                    datasetCtx?.patchData((prev) => ({
+                      ...prev,
+                      windows: prev.windows.map((w) =>
+                        w.id === windowItem.id ? { ...w, installed: false } : w
+                      ),
+                    }));
+                    router.refresh();
+                  } else {
+                    alert(`Failed to undo: ${result.error}`);
+                  }
+                } finally {
+                  setUndoing(false);
+                }
+              }}
+              className="w-full rounded-2xl border border-border py-3 text-sm font-semibold text-zinc-500 hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {undoing ? "Undoing…" : "Undo Installed"}
+            </button>
           )}
         </div>
       </form>

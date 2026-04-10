@@ -1820,7 +1820,7 @@ export async function uploadWindowInstalledPhoto(
     const supabase = await createClient();
     const [roomResult, windowResult, unitResult] = await Promise.all([
       supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
-      supabase.from("windows").select("id, room_id, label").eq("id", windowId).single(),
+      supabase.from("windows").select("id, room_id, label, measured, bracketed, installed").eq("id", windowId).single(),
       supabase.from("units").select("status").eq("id", unitId).single(),
     ]);
     if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
@@ -1836,7 +1836,9 @@ export async function uploadWindowInstalledPhoto(
     }
     // Allow override when installer confirms they did bracketing + installation together
     const overrideAllowed = overrideBracketing && unitRow.status === "measured";
-    if (!canUploadInstallationPhotos(unitRow.status as UnitStatus) && !overrideAllowed) {
+    // This window is individually measured+bracketed — allow even if other windows in the unit aren't done yet
+    const thisWindowReady = windowRow.measured && windowRow.bracketed;
+    if (!canUploadInstallationPhotos(unitRow.status as UnitStatus) && !overrideAllowed && !thisWindowReady) {
       return {
         ok: false,
         error:
@@ -2206,6 +2208,8 @@ export async function undoWindowStage(
     if (updateErr) return { ok: false, error: updateErr.message };
 
     const capturedUnitId = room.unit_id;
+    // Bust cache immediately so router.refresh() on the client sees fresh data.
+    revalidateUnit(capturedUnitId);
     after(async () => {
       const db = createAdminClient();
       await refreshUnitAggregates(db, capturedUnitId);
@@ -2220,9 +2224,6 @@ export async function undoWindowStage(
   }
 }
 
-/**
- * Delete a window measurement photo, clearing photo_url and resetting measured flag.
- */
 /**
  * Delete a room finished photo from storage and the media_uploads table.
  */

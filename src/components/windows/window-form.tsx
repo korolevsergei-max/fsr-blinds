@@ -15,6 +15,7 @@ import {
   createWindowWithPhoto,
   deleteWindow,
   deleteWindowMeasurementPhoto,
+  undoWindowStage,
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -143,6 +144,7 @@ export function WindowForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const addAnotherRef = useRef(false);
@@ -655,6 +657,42 @@ export function WindowForm({
           >
             {pending && addAnotherRef.current ? "Saving…" : "Save & Add Another Window"}
           </Button>
+
+          {existingWindow?.measured && (
+            <Button
+              type="button"
+              fullWidth
+              size="lg"
+              variant="secondary"
+              disabled={pending || optimizingPhoto || undoing}
+              onClick={async () => {
+                const willAlsoRemoveInstalled = existingWindow.installed;
+                const msg = willAlsoRemoveInstalled
+                  ? "Undo Measured? This will also remove the Installed stage."
+                  : "Undo Measured? This will mark the window as not yet measured.";
+                if (!window.confirm(msg)) return;
+                setUndoing(true);
+                try {
+                  const result = await undoWindowStage(existingWindow.id, "measured");
+                  if (result.ok) {
+                    datasetCtx?.patchData((prev) => ({
+                      ...prev,
+                      windows: prev.windows.map((w) =>
+                        w.id === existingWindow.id ? { ...w, measured: false, installed: false } : w
+                      ),
+                    }));
+                    router.refresh();
+                  } else {
+                    alert(`Failed to undo: ${result.error}`);
+                  }
+                } finally {
+                  setUndoing(false);
+                }
+              }}
+            >
+              {undoing ? "Undoing…" : "Undo Measured"}
+            </Button>
+          )}
 
           {existingWindow && (
             <Button
