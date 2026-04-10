@@ -1,16 +1,16 @@
 import { getCurrentUser } from "@/lib/auth";
-import { loadCutterDataset } from "@/lib/cutter-data";
+import { loadManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { computeAndUpdateManufacturingRisk } from "@/app/actions/production-actions";
-import { CutterDashboard } from "./cutter-dashboard";
+import { ManufacturingRoleDashboard } from "@/components/manufacturing/manufacturing-role-dashboard";
 
 export default async function CutterPage() {
   // Refresh risk flags on every dashboard load
   await computeAndUpdateManufacturingRisk();
 
   const [data, user] = await Promise.all([
-    loadCutterDataset(),
+    loadManufacturingRoleSchedule("cutter"),
     getCurrentUser(),
   ]);
 
-  return <CutterDashboard data={data} userName={user?.displayName} />;
+  return <ManufacturingRoleDashboard role="cutter" schedule={data} userName={user?.displayName} />;
 }

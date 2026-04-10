@@ -59,6 +59,12 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
     qcApprovedByAssemblerId: (p.qc_approved_by_assembler_id as string) ?? null,
     qcApprovedAt: (p.qc_approved_at as string) ?? null,
     qcNotes: (p.qc_notes as string) ?? "",
+    issueStatus: (p.issue_status as "none" | "open" | "resolved") ?? "none",
+    issueReason: (p.issue_reason as string) ?? "",
+    issueNotes: (p.issue_notes as string) ?? "",
+    issueReportedByRole: (p.issue_reported_by_role as string) ?? null,
+    issueReportedAt: (p.issue_reported_at as string) ?? null,
+    issueResolvedAt: (p.issue_resolved_at as string) ?? null,
     createdAt: p.created_at as string,
   };
 }

@@ -6,9 +6,9 @@ import {
   ChartBar,
   AddressBook,
   Buildings,
-  UsersFour,
   CalendarBlank,
   ChartLineUp,
+  Gear,
 } from "@phosphor-icons/react";
 
 const baseNavItems = [
@@ -19,16 +19,16 @@ const baseNavItems = [
   { href: "/management/reports", label: "Reports", Icon: ChartLineUp },
 ];
 
-const accountsNavItem = {
-  href: "/management/accounts",
-  label: "Accounts",
-  Icon: UsersFour,
+const settingsNavItem = {
+  href: "/management/settings",
+  label: "Settings",
+  Icon: Gear,
 };
 
 export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
   const pathname = usePathname();
   const navItems = showAccounts
-    ? [...baseNavItems, accountsNavItem]
+    ? [...baseNavItems, settingsNavItem]
     : baseNavItems;
 
   return (
@@ -46,7 +46,7 @@ export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
             <Link
               key={href}
               href={href}
-              prefetch={href === "/management/accounts" ? false : undefined}
+              prefetch={href === "/management/settings" ? false : undefined}
               className={[
                 "flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
                 "rounded-[var(--radius-md)] transition-colors duration-150",

@@ -1,15 +1,15 @@
 import { getCurrentUser } from "@/lib/auth";
-import { loadAssemblerDataset } from "@/lib/assembler-data";
+import { loadManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { computeAndUpdateManufacturingRisk } from "@/app/actions/production-actions";
-import { AssemblerDashboard } from "./assembler-dashboard";
+import { ManufacturingRoleDashboard } from "@/components/manufacturing/manufacturing-role-dashboard";
 
 export default async function AssemblerPage() {
   await computeAndUpdateManufacturingRisk();
 
   const [data, user] = await Promise.all([
-    loadAssemblerDataset(),
+    loadManufacturingRoleSchedule("assembler"),
     getCurrentUser(),
   ]);
 
-  return <AssemblerDashboard data={data} userName={user?.displayName} />;
+  return <ManufacturingRoleDashboard role="assembler" schedule={data} userName={user?.displayName} />;
 }

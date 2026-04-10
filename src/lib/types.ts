@@ -49,6 +49,8 @@ export type RiskFlag = "green" | "yellow" | "red" | "complete";
 
 export type ProductionStatus = "pending" | "cut" | "assembled" | "qc_approved";
 
+export type ManufacturingIssueStatus = "none" | "open" | "resolved";
+
 export const PRODUCTION_STATUS_LABELS: Record<ProductionStatus, string> = {
   pending: "Pending",
   cut: "Cut",
@@ -70,7 +72,43 @@ export interface WindowProductionStatus {
   qcApprovedByAssemblerId: string | null;
   qcApprovedAt: string | null;
   qcNotes: string;
+  issueStatus: ManufacturingIssueStatus;
+  issueReason: string;
+  issueNotes: string;
+  issueReportedByRole: string | null;
+  issueReportedAt: string | null;
+  issueResolvedAt: string | null;
   createdAt: string;
+}
+
+export interface ManufacturingSettings {
+  id: string;
+  cutterDailyCapacity: number;
+  assemblerDailyCapacity: number;
+  applyOntarioHolidays: boolean;
+}
+
+export interface ManufacturingCalendarOverride {
+  id: string;
+  workDate: string;
+  isWorking: boolean;
+  label: string;
+}
+
+export interface WindowManufacturingSchedule {
+  id: string;
+  windowId: string;
+  unitId: string;
+  targetReadyDate: string | null;
+  scheduledCutDate: string | null;
+  scheduledAssemblyDate: string | null;
+  manualPriority: number;
+  isScheduleLocked: boolean;
+  lockReason: string;
+  lastRescheduleReason: string;
+  overCapacityOverride: boolean;
+  movedByUserId: string | null;
+  movedAt: string | null;
 }
 
 export const RISK_LABELS: Record<RiskFlag, string> = {

@@ -10,6 +10,8 @@ import {
 } from "@/lib/auth";
 import { emitNotification } from "@/lib/emit-notification";
 import { NOTIF_MFG_BEHIND_SCHEDULE } from "@/lib/notification-types";
+import { loadManufacturingSettings, reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
+import { addWorkingDays } from "@/lib/manufacturing-calendar";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -67,6 +69,7 @@ export async function markWindowCut(
 
     if (error) return { ok: false, error: error.message };
 
+    await reflowManufacturingSchedules("mark_cut");
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -103,6 +106,7 @@ export async function markWindowAssembled(
 
     if (error) return { ok: false, error: error.message };
 
+    await reflowManufacturingSchedules("mark_assembled");
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -139,6 +143,7 @@ export async function markWindowQCApproved(
 
     if (error) return { ok: false, error: error.message };
 
+    await reflowManufacturingSchedules("mark_qc");
     revalidateAll();
     return { ok: true };
   } catch (e) {
@@ -159,12 +164,14 @@ export async function markWindowQCApproved(
 export async function computeAndUpdateManufacturingRisk(): Promise<void> {
   try {
     const supabase = await createClient();
+    const { settings, overrides } = await loadManufacturingSettings();
+    const overridesByDate = new Map(overrides.map((override) => [override.workDate, override]));
 
     // Load all measured units that have an installation date
     const { data: units } = await supabase
       .from("units")
       .select("id, installation_date, window_count")
-      .eq("status", "measured")
+      .in("status", ["measured", "measured_and_bracketed"])
       .not("installation_date", "is", null);
 
     if (!units || units.length === 0) return;
@@ -175,10 +182,16 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
     for (const unit of units) {
       if (!unit.installation_date || unit.window_count === 0) continue;
 
-      const installDate = new Date(unit.installation_date);
-      installDate.setHours(0, 0, 0, 0);
+      const targetReadyDate = addWorkingDays(
+        unit.installation_date,
+        -3,
+        settings,
+        overridesByDate
+      );
+      const readyDate = new Date(targetReadyDate);
+      readyDate.setHours(0, 0, 0, 0);
       const daysUntil = Math.floor(
-        (installDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+        (readyDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
 
       // Count production statuses for this unit's windows
@@ -228,7 +241,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
             recipientId: assignment.scheduler_id,
             type: NOTIF_MFG_BEHIND_SCHEDULE,
             title: flag === "red" ? "🔴 Blinds at risk for install" : "🟡 Manufacturing behind schedule",
-            body: `Installation in ${daysUntil} day(s) — blinds are not manufacturing-ready yet.`,
+            body: `Ready-by target in ${daysUntil} day(s) — blinds are not QC-approved yet.`,
             relatedUnitId: unit.id,
           });
         }

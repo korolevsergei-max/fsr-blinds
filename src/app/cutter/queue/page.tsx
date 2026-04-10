@@ -1,7 +1,12 @@
-import { loadCutterDataset } from "@/lib/cutter-data";
-import { CuttingQueue } from "./cutting-queue";
+import { getCurrentUser } from "@/lib/auth";
+import { loadManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
+import { ManufacturingRoleQueue } from "@/components/manufacturing/manufacturing-role-queue";
 
 export default async function CutterQueuePage() {
-  const data = await loadCutterDataset();
-  return <CuttingQueue units={data.units} />;
+  const [schedule, user] = await Promise.all([
+    loadManufacturingRoleSchedule("cutter"),
+    getCurrentUser(),
+  ]);
+
+  return <ManufacturingRoleQueue role="cutter" schedule={schedule} userName={user?.displayName} />;
 }

@@ -21,7 +21,6 @@ import {
 import type { AppDataset } from "@/lib/app-dataset";
 import type { Building, Client, Assembler } from "@/lib/types";
 import type { InstallerCutterAuthDrift } from "@/lib/account-sync";
-import type { OwnerProfile } from "./page";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +44,12 @@ import { CalendarCheck } from "@phosphor-icons/react";
 import { ChangePasswordInline } from "@/components/ui/change-password-inline";
 
 type Tab = "installers" | "cutters" | "schedulers" | "assemblers" | "owners";
+
+type OwnerProfile = {
+  authUserId: string;
+  displayName: string;
+  email: string;
+};
 
 // Unused function removed to fix lint warning
 

@@ -1,9 +1,16 @@
-"use client";
+import { loadManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
+import { ScheduleScreen } from "./schedule-screen";
 
-import { useAppDataset } from "@/lib/dataset-context";
-import { OwnerSchedule } from "./owner-schedule";
+export default async function SchedulePage() {
+  const [cutterSchedule, assemblerSchedule] = await Promise.all([
+    loadManufacturingRoleSchedule("cutter"),
+    loadManufacturingRoleSchedule("assembler"),
+  ]);
 
-export default function SchedulePage() {
-  const { data } = useAppDataset();
-  return <OwnerSchedule data={data} />;
+  return (
+    <ScheduleScreen
+      cutterSchedule={cutterSchedule}
+      assemblerSchedule={assemblerSchedule}
+    />
+  );
 }

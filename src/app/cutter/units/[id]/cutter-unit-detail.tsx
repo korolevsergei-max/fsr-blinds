@@ -126,7 +126,34 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
     setWindows((prev) =>
       prev.map((w) =>
         w.id === windowId
-          ? { ...w, production: { ...(w.production ?? { id: "", windowId, unitId: unit.id, cutByCutterId: null, cutNotes: "", assembledByAssemblerId: null, assembledAt: null, assembledNotes: "", qcApprovedByAssemblerId: null, qcApprovedAt: null, qcNotes: "", createdAt: new Date().toISOString() }), status: "cut" as const, cutAt: new Date().toISOString() } }
+          ? {
+              ...w,
+              production: {
+                ...(w.production ?? {
+                  id: "",
+                  windowId,
+                  unitId: unit.id,
+                  cutByCutterId: null,
+                  cutAt: null,
+                  cutNotes: "",
+                  assembledByAssemblerId: null,
+                  assembledAt: null,
+                  assembledNotes: "",
+                  qcApprovedByAssemblerId: null,
+                  qcApprovedAt: null,
+                  qcNotes: "",
+                  issueStatus: "none" as const,
+                  issueReason: "",
+                  issueNotes: "",
+                  issueReportedByRole: null,
+                  issueReportedAt: null,
+                  issueResolvedAt: null,
+                  createdAt: new Date().toISOString(),
+                }),
+                status: "cut" as const,
+                cutAt: new Date().toISOString(),
+              },
+            }
           : w
       )
     );
