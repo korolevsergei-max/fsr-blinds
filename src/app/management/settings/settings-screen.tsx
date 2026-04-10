@@ -110,7 +110,7 @@ export function SettingsScreen({
         title="Settings"
         subtitle="Accounts and manufacturing controls"
         belowTitle={
-          <div className="flex gap-2 py-1">
+          <div className="flex gap-2">
             <TabButton
               active={tab === "manufacturing"}
               icon={<Factory size={16} weight={tab === "manufacturing" ? "fill" : "regular"} />}

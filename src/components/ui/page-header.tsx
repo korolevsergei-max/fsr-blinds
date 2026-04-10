@@ -52,7 +52,7 @@ export function PageHeader({
         )}
       </div>
       {belowTitle && (
-        <div className="px-4 pb-3 pt-0 border-t border-border/60 bg-card/95">
+        <div className="border-t border-border/60 bg-card/95 px-4 py-3">
           {belowTitle}
         </div>
       )}
