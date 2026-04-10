@@ -152,15 +152,15 @@ export function ManufacturingRoleQueue({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-tertiary">
                     {bucket.date && bucket.label === bucket.date ? "Work day" : bucket.label}
                   </p>
-                  <p className="mt-1 text-[1.35rem] font-semibold tracking-[-0.03em] text-foreground text-balance sm:text-[1.45rem]">
+                  <p className="mt-1 text-[17px] font-semibold leading-snug tracking-tight text-foreground sm:text-[18px]">
                     {formatBucketDate(bucket.date) || bucket.label}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[1.5rem] font-semibold tracking-[-0.05em] text-foreground sm:text-[1.65rem]">
+                  <p className="font-mono text-[1.2rem] font-semibold tracking-[-0.04em] text-foreground sm:text-[1.3rem]">
                     {bucket.scheduledCount}/{bucket.capacity}
                   </p>
-                  <p className={`mt-1 text-[12px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
+                  <p className={`mt-1 text-[11px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
                     {bucket.isOverCapacity ? "Over capacity" : "Scheduled"}
                   </p>
                 </div>
@@ -179,14 +179,14 @@ export function ManufacturingRoleQueue({
                     >
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div>
-                          <p className="text-[1.125rem] font-semibold tracking-tight text-foreground sm:text-[1.2rem]">
+                          <p className="text-[15px] font-semibold tracking-tight text-foreground sm:text-[15px]">
                             Unit {unit.unitNumber}
                           </p>
-                          <p className="mt-1 text-[13px] text-secondary sm:text-[14px]">
+                          <p className="mt-1 text-[12px] text-secondary sm:text-[12px]">
                             {unit.buildingName} · {unit.clientName}
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end sm:text-[13px]">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end sm:text-[12px]">
                           <span>{unit.scheduledCount} blinds</span>
                           {unit.installationDate && <span>{formatInstallDate(unit.installationDate)}</span>}
                         </div>
@@ -197,7 +197,7 @@ export function ManufacturingRoleQueue({
                       {unit.blindTypeGroups.map((group) => (
                         <div key={`${unit.unitId}-${group.blindType}`}>
                           <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-secondary">
+                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary">
                               {group.blindType}
                             </span>
                             <span className="text-[12px] text-tertiary">
@@ -215,7 +215,7 @@ export function ManufacturingRoleQueue({
                                 >
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                                      <h3 className="text-[1rem] font-semibold tracking-tight text-foreground sm:text-[1.05rem]">
+                                      <h3 className="text-[15px] font-semibold tracking-tight text-foreground sm:text-[15px]">
                                         {item.label}
                                       </h3>
                                       <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
@@ -223,7 +223,7 @@ export function ManufacturingRoleQueue({
                                       </span>
                                     </div>
 
-                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-tertiary">
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
                                       <span>{formatReadyDate(item.targetReadyDate)}</span>
                                       {item.issueStatus === "open" && (
                                         <span className="inline-flex items-center gap-1 font-medium text-amber-700">
@@ -234,7 +234,7 @@ export function ManufacturingRoleQueue({
                                     </div>
 
                                     {item.notes && (
-                                      <p className="mt-2 max-w-[65ch] text-[13px] leading-6 text-secondary">
+                                      <p className="mt-2 max-w-[65ch] text-[12px] leading-6 text-secondary">
                                         {item.notes}
                                       </p>
                                     )}
@@ -370,8 +370,8 @@ export function ManufacturingRoleQueue({
                                     </div>
                                   </div>
 
-                                  <div className="md:min-w-[10rem] md:text-right">
-                                    <p className="font-mono text-[1.05rem] font-semibold leading-none tracking-[-0.045em] text-foreground sm:text-[1.1rem] md:text-[1.2rem]">
+                                  <div className="md:min-w-[9rem] md:text-right">
+                                    <p className="font-mono text-[15px] font-semibold leading-none tracking-tight text-foreground sm:text-[15px] md:text-[16px]">
                                       {formatMeasurement(item)}
                                     </p>
                                   </div>
@@ -422,7 +422,7 @@ function ActionButton({
       disabled={busy}
       onClick={onClick}
       className={[
-        "rounded-full border px-3 py-2 text-[12px] font-semibold transition-all sm:text-[13px]",
+        "rounded-full border px-3 py-2 text-[12px] font-semibold transition-all",
         "active:scale-[0.98] disabled:opacity-50",
         toneClasses[tone],
       ].join(" ")}
@@ -444,7 +444,7 @@ function StatusChip({
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[12px] font-semibold sm:text-[13px] ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[12px] font-semibold ${toneClasses[tone]}`}>
       {label}
     </span>
   );
@@ -475,12 +475,12 @@ function SummaryCard({
   };
 
   return (
-    <div className={`rounded-[22px] border px-3.5 py-3.5 ${classes[tone]}`}>
+    <div className={`rounded-[22px] border px-3.5 py-3 ${classes[tone]}`}>
       <div className="flex items-center gap-2">
         <Icon size={16} weight="fill" />
         <span className="text-[11px] font-medium uppercase tracking-[0.05em]">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-[1.85rem] font-semibold tracking-[-0.05em]">{value}</p>
+      <p className="mt-2 font-mono text-[1.45rem] font-bold tracking-[-0.04em]">{value}</p>
     </div>
   );
 }
