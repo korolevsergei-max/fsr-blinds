@@ -126,8 +126,8 @@ export function ManufacturingRoleQueue({
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-lg font-semibold text-primary">{title}</h1>
-          <p className="text-xs text-tertiary">
+          <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
+          <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
             {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
           </p>
         </div>
@@ -144,23 +144,23 @@ export function ManufacturingRoleQueue({
         {schedule.buckets.map((bucket) => (
           <section
             key={`${bucket.label}-${bucket.date ?? "special"}`}
-            className="overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_20px_60px_rgba(15,23,42,0.06)]"
+            className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_18px_54px_rgba(15,23,42,0.05)]"
           >
-            <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-5 py-4">
+            <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-4 py-3.5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tertiary">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-tertiary">
                     {bucket.date && bucket.label === bucket.date ? "Work day" : bucket.label}
                   </p>
-                  <p className="mt-1 text-[1.8rem] font-semibold tracking-[-0.045em] text-foreground text-balance">
+                  <p className="mt-1 text-[1.35rem] font-semibold tracking-[-0.03em] text-foreground text-balance sm:text-[1.45rem]">
                     {formatBucketDate(bucket.date) || bucket.label}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[1.9rem] font-bold tracking-[-0.06em] text-foreground">
+                  <p className="font-mono text-[1.5rem] font-semibold tracking-[-0.05em] text-foreground sm:text-[1.65rem]">
                     {bucket.scheduledCount}/{bucket.capacity}
                   </p>
-                  <p className={`mt-1 text-[11px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
+                  <p className={`mt-1 text-[12px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
                     {bucket.isOverCapacity ? "Over capacity" : "Scheduled"}
                   </p>
                 </div>
@@ -168,25 +168,25 @@ export function ManufacturingRoleQueue({
             </div>
 
             {bucket.units.length === 0 ? (
-              <p className="px-5 py-5 text-sm text-tertiary">Nothing queued here.</p>
+              <p className="px-4 py-5 text-[14px] text-tertiary">Nothing queued here.</p>
             ) : (
               <div className="divide-y divide-border/80">
                 {bucket.units.map((unit) => (
-                  <div key={`${bucket.label}-${unit.unitId}`} className="px-5 py-4">
+                  <div key={`${bucket.label}-${unit.unitId}`} className="px-4 py-4">
                     <button
                       onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
                       className="w-full text-left"
                     >
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div>
-                          <p className="text-[1.45rem] font-semibold tracking-[-0.04em] text-foreground">
+                          <p className="text-[1.125rem] font-semibold tracking-tight text-foreground sm:text-[1.2rem]">
                             Unit {unit.unitNumber}
                           </p>
-                          <p className="mt-1 text-[15px] text-secondary">
+                          <p className="mt-1 text-[13px] text-secondary sm:text-[14px]">
                             {unit.buildingName} · {unit.clientName}
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-tertiary sm:justify-end">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end sm:text-[13px]">
                           <span>{unit.scheduledCount} blinds</span>
                           {unit.installationDate && <span>{formatInstallDate(unit.installationDate)}</span>}
                         </div>
@@ -197,10 +197,10 @@ export function ManufacturingRoleQueue({
                       {unit.blindTypeGroups.map((group) => (
                         <div key={`${unit.unitId}-${group.blindType}`}>
                           <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-secondary">
+                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-secondary">
                               {group.blindType}
                             </span>
-                            <span className="text-[13px] text-tertiary">
+                            <span className="text-[12px] text-tertiary">
                               {group.windows.length} scheduled
                             </span>
                           </div>
@@ -215,15 +215,15 @@ export function ManufacturingRoleQueue({
                                 >
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                                      <h3 className="text-[1.35rem] font-semibold tracking-[-0.045em] text-foreground">
+                                      <h3 className="text-[1rem] font-semibold tracking-tight text-foreground sm:text-[1.05rem]">
                                         {item.label}
                                       </h3>
-                                      <span className="rounded-full bg-surface px-2 py-1 text-[12px] font-medium text-secondary">
+                                      <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
                                         {item.roomName}
                                       </span>
                                     </div>
 
-                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-tertiary">
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-tertiary">
                                       <span>{formatReadyDate(item.targetReadyDate)}</span>
                                       {item.issueStatus === "open" && (
                                         <span className="inline-flex items-center gap-1 font-medium text-amber-700">
@@ -234,7 +234,7 @@ export function ManufacturingRoleQueue({
                                     </div>
 
                                     {item.notes && (
-                                      <p className="mt-2 max-w-[65ch] text-[14px] leading-6 text-secondary">
+                                      <p className="mt-2 max-w-[65ch] text-[13px] leading-6 text-secondary">
                                         {item.notes}
                                       </p>
                                     )}
@@ -370,8 +370,8 @@ export function ManufacturingRoleQueue({
                                     </div>
                                   </div>
 
-                                  <div className="md:min-w-[10.5rem] md:text-right">
-                                    <p className="font-mono text-[1.35rem] font-semibold leading-none tracking-[-0.065em] text-foreground md:text-[1.55rem]">
+                                  <div className="md:min-w-[10rem] md:text-right">
+                                    <p className="font-mono text-[1.05rem] font-semibold leading-none tracking-[-0.045em] text-foreground sm:text-[1.1rem] md:text-[1.2rem]">
                                       {formatMeasurement(item)}
                                     </p>
                                   </div>
@@ -422,7 +422,7 @@ function ActionButton({
       disabled={busy}
       onClick={onClick}
       className={[
-        "rounded-full border px-3 py-2 text-[13px] font-semibold transition-all",
+        "rounded-full border px-3 py-2 text-[12px] font-semibold transition-all sm:text-[13px]",
         "active:scale-[0.98] disabled:opacity-50",
         toneClasses[tone],
       ].join(" ")}
@@ -444,7 +444,7 @@ function StatusChip({
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[13px] font-semibold ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[12px] font-semibold sm:text-[13px] ${toneClasses[tone]}`}>
       {label}
     </span>
   );
@@ -475,12 +475,12 @@ function SummaryCard({
   };
 
   return (
-    <div className={`rounded-2xl border px-3 py-3 ${classes[tone]}`}>
+    <div className={`rounded-[22px] border px-3.5 py-3.5 ${classes[tone]}`}>
       <div className="flex items-center gap-2">
         <Icon size={16} weight="fill" />
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em]">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.05em]">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-[1.65rem] font-bold tracking-[-0.06em]">{value}</p>
+      <p className="mt-2 font-mono text-[1.85rem] font-semibold tracking-[-0.05em]">{value}</p>
     </div>
   );
 }

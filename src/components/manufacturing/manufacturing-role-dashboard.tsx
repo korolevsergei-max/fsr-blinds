@@ -26,20 +26,20 @@ export function ManufacturingRoleDashboard({
   const highlightBucket = schedule.buckets.find((bucket) => bucket.date) ?? schedule.buckets[0];
 
   return (
-    <div className="px-4 pt-6 pb-4 space-y-6">
+    <div className="space-y-5 px-4 pt-5 pb-4">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[10px] text-tertiary uppercase tracking-[0.18em] font-medium mb-1">
+          <p className="mb-0.5 text-[12px] font-medium text-tertiary">
             {role === "cutter" ? "Cutter" : "Assembler"}
           </p>
-          <h1 className="text-[1.65rem] font-semibold tracking-[-0.04em] text-primary">
+          <h1 className="text-[1.625rem] font-bold leading-none tracking-[-0.03em] text-foreground">
             {userName ? `Hi, ${userName.split(" ")[0]}` : headline}
           </h1>
         </div>
         <button
           onClick={() => startSignOut(async () => { await signOut(); })}
           disabled={signingOut}
-          className="flex items-center gap-1.5 text-xs text-tertiary hover:text-secondary transition-colors px-2 py-1.5 rounded-md hover:bg-muted"
+          className="flex items-center gap-1.5 rounded-[var(--radius-md)] px-3 py-1.5 text-[12px] font-medium text-tertiary transition-colors hover:bg-surface hover:text-secondary"
         >
           <SignOut size={14} />
           Sign out
@@ -55,13 +55,13 @@ export function ManufacturingRoleDashboard({
 
       <button
         onClick={() => router.push(queueHref)}
-        className="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3 text-white transition-opacity active:opacity-80"
+        className="flex w-full items-center justify-between rounded-[22px] bg-accent px-4 py-3 text-white transition-opacity active:opacity-80"
       >
-        <span className="flex items-center gap-2 text-sm font-semibold">
+        <span className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <Queue size={18} />
           {queueLabel}
         </span>
-        <span className="font-mono text-[15px] text-white/80">
+        <span className="text-[14px] font-medium text-white/80">
           {schedule.todayCount} today
         </span>
       </button>
@@ -79,19 +79,19 @@ export function ManufacturingRoleDashboard({
       )}
 
       {highlightBucket && highlightBucket.units.length > 0 && (
-        <div className="rounded-[24px] border border-border bg-card px-4 py-4 space-y-3 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
+        <div className="space-y-3 rounded-[24px] border border-border bg-card px-4 py-4 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-tertiary">
                 {highlightBucket.date && highlightBucket.label === highlightBucket.date ? "Work day" : highlightBucket.label}
               </p>
               {highlightBucket.date && (
-                <p className="mt-1 text-[1.15rem] font-semibold tracking-[-0.03em] text-foreground">
+                <p className="mt-1 text-[1.2rem] font-semibold tracking-[-0.025em] text-foreground">
                   {formatStoredDateLongEnglish(highlightBucket.date) ?? highlightBucket.date}
                 </p>
               )}
             </div>
-            <span className="font-mono text-[15px] text-tertiary">
+            <span className="text-[14px] font-medium text-tertiary">
               {highlightBucket.scheduledCount}/{highlightBucket.capacity}
             </span>
           </div>
@@ -101,16 +101,16 @@ export function ManufacturingRoleDashboard({
               <button
                 key={unit.unitId}
                 onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
-                className="w-full rounded-2xl border border-border bg-white px-3 py-3 text-left transition-colors hover:bg-surface"
+                className="w-full rounded-[18px] border border-border bg-white px-3.5 py-3 text-left transition-colors hover:bg-surface"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[1rem] font-semibold tracking-[-0.02em] text-foreground">Unit {unit.unitNumber}</p>
-                    <p className="mt-1 text-[13px] text-tertiary">
+                    <p className="text-[1rem] font-semibold tracking-tight text-foreground">Unit {unit.unitNumber}</p>
+                    <p className="mt-1 text-[12px] text-tertiary">
                       {unit.buildingName} · {unit.clientName}
                     </p>
                   </div>
-                  <span className="text-[13px] text-tertiary">
+                  <span className="text-[12px] font-medium text-tertiary">
                     {unit.scheduledCount} blind{unit.scheduledCount === 1 ? "" : "s"}
                   </span>
                 </div>
@@ -141,12 +141,12 @@ function StatCard({
   };
 
   return (
-    <div className={`rounded-xl border px-3 py-3 ${classes[tone]}`}>
+    <div className={`rounded-[22px] border px-3.5 py-3.5 ${classes[tone]}`}>
       <div className="flex items-center gap-2">
         <Icon size={16} weight="fill" />
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em]">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.05em]">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-[1.6rem] font-bold tracking-[-0.06em]">{value}</p>
+      <p className="mt-2 font-mono text-[1.85rem] font-semibold tracking-[-0.05em]">{value}</p>
     </div>
   );
 }
