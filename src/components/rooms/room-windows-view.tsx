@@ -222,7 +222,11 @@ export function RoomWindowsView({
                     openGallery();
                   }
                 }}
-                className={`rounded-2xl border border-border bg-white p-4 transition-all ${
+                className={`rounded-2xl border p-4 transition-all ${
+                  win.riskFlag === "red"
+                    ? "border-red-300 bg-red-50"
+                    : "border-border bg-white"
+                } ${
                   galleryCount > 0
                     ? "cursor-pointer hover:border-zinc-300 hover:shadow-[var(--shadow-sm)]"
                     : ""
