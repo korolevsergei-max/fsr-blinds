@@ -514,7 +514,7 @@ export function RoomWindowsView({
                                 rel="noreferrer"
                                 className="group overflow-hidden rounded-2xl border border-border bg-surface transition-colors hover:border-zinc-300"
                               >
-                                <div className="aspect-square overflow-hidden bg-zinc-100">
+                                <div className="relative aspect-square overflow-hidden bg-zinc-100">
                                   <Image
                                     src={item.url}
                                     alt={item.title}

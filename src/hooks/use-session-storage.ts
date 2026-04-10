@@ -1,20 +1,22 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 export function useSessionStorage<T>(key: string, initialValue: T) {
-  const [state, setState] = useState<T>(initialValue);
-  const [isMounted, setIsMounted] = useState(false);
+  const [state, setState] = useState<T>(() => {
+    if (typeof window === "undefined") {
+      return initialValue;
+    }
 
-  useEffect(() => {
-    setIsMounted(true);
     try {
       const item = window.sessionStorage.getItem(key);
       if (item) {
-        setState(JSON.parse(item));
+        return JSON.parse(item) as T;
       }
     } catch (error) {
       console.warn(`Error reading sessionStorage key "${key}":`, error);
     }
-  }, [key]);
+
+    return initialValue;
+  });
 
   const setValue = useCallback((value: T | ((val: T) => T)) => {
     setState((prevState) => {
@@ -30,5 +32,5 @@ export function useSessionStorage<T>(key: string, initialValue: T) {
     });
   }, [key]);
 
-  return [isMounted ? state : initialValue, setValue] as const;
+  return [state, setValue] as const;
 }

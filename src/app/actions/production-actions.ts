@@ -151,10 +151,10 @@ export async function markWindowQCApproved(
  * Called server-side on cutter/assembler dashboard load.
  *
  * Risk logic (per unit):
- *   - If all windows qc_approved → complete
- *   - If installation_date - today <= 3 days AND not all qc_approved → red
- *   - If installation_date - today <= 5 days AND not all cut → yellow
- *   - Otherwise → green
+ *   - If all windows qc_approved → complete (checkmark, green)
+ *   - If installation_date - today <= 0 days → red (not ready by install day)
+ *   - If installation_date - today <= 2 days → yellow (1-2 day buffer)
+ *   - Otherwise (3+ days) → green (on track)
  */
 export async function computeAndUpdateManufacturingRisk(): Promise<void> {
   try {
@@ -187,23 +187,19 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
         .select("status")
         .eq("unit_id", unit.id);
 
-      const cutCount = statuses?.filter(
-        (s) => s.status === "cut" || s.status === "assembled" || s.status === "qc_approved"
-      ).length ?? 0;
       const qcApprovedCount = statuses?.filter(
         (s) => s.status === "qc_approved"
       ).length ?? 0;
 
       const totalWindows = unit.window_count;
       const allQCApproved = qcApprovedCount >= totalWindows;
-      const allCut = cutCount >= totalWindows;
 
       let flag: "green" | "yellow" | "red" | "complete" = "green";
       if (allQCApproved) {
         flag = "complete";
-      } else if (daysUntil <= 3) {
+      } else if (daysUntil <= 0) {
         flag = "red";
-      } else if (daysUntil <= 5 && !allCut) {
+      } else if (daysUntil <= 2) {
         flag = "yellow";
       }
 
@@ -219,8 +215,8 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
         .update({ manufacturing_risk_flag: flag })
         .eq("id", unit.id);
 
-      // Emit scheduler notification when risk escalates to yellow/red within 3 days of install
-      if ((flag === "yellow" || flag === "red") && flag !== prevFlag && daysUntil <= 3) {
+      // Emit scheduler notification when risk escalates inside the 2-day install buffer.
+      if ((flag === "yellow" || flag === "red") && flag !== prevFlag && daysUntil <= 2) {
         const { data: assignment } = await supabase
           .from("scheduler_unit_assignments")
           .select("scheduler_id")
@@ -232,7 +228,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
             recipientId: assignment.scheduler_id,
             type: NOTIF_MFG_BEHIND_SCHEDULE,
             title: flag === "red" ? "🔴 Blinds at risk for install" : "🟡 Manufacturing behind schedule",
-            body: `Installation in ${daysUntil} day(s) — blinds not yet ${flag === "red" ? "QC approved" : "fully cut"}.`,
+            body: `Installation in ${daysUntil} day(s) — blinds are not manufacturing-ready yet.`,
             relatedUnitId: unit.id,
           });
         }
