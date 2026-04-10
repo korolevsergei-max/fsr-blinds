@@ -1194,43 +1194,48 @@ export async function createWindowWithPhoto(
     }
 
     const supabase = await createClient();
-    const { data: room, error: re } = await supabase
-      .from("rooms")
-      .select("unit_id")
-      .eq("id", roomId)
-      .single();
-    if (re || !room || room.unit_id !== unitId) {
-      return { ok: false, error: "Room does not belong to this unit" };
-    }
 
     // Measurements should appear in the bracketed or installed photo stage.
     const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
-    let publicUrl: string | null = null;
-    let storagePath: string | null = null;
-
+    // Prepare photo upload promise (runs in parallel with room validation below).
+    let photoUploadPromise: Promise<{ publicUrl: string; storagePath: string } | { error: string } | null> = Promise.resolve(null);
+    let photoPath: string | null = null;
     if (hasPhoto && file instanceof File) {
       const ext =
         (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") ||
         "jpg";
-      const path = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
+      photoPath = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
       const buf = new Uint8Array(await file.arrayBuffer());
-      const { error: upErr } = await supabase.storage
+      photoUploadPromise = supabase.storage
         .from(BUCKET)
-        .upload(path, buf, {
-          contentType: file.type || "image/jpeg",
-          upsert: false,
+        .upload(photoPath, buf, { contentType: file.type || "image/jpeg", upsert: false })
+        .then(({ error: upErr }) => {
+          if (upErr) return { error: normalizeStorageError(upErr.message) };
+          const { data: { publicUrl: url } } = supabase.storage.from(BUCKET).getPublicUrl(photoPath!);
+          return { publicUrl: url, storagePath: photoPath! };
         });
-      if (upErr) {
-        return { ok: false, error: normalizeStorageError(upErr.message) };
-      }
+    }
 
-      const {
-        data: { publicUrl: url },
-      } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      publicUrl = url;
-      storagePath = path;
+    // Validate room membership in parallel with the photo upload.
+    const [roomResult, photoResult] = await Promise.all([
+      supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
+      photoUploadPromise,
+    ]);
+    if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
+      if (photoPath) await supabase.storage.from(BUCKET).remove([photoPath]);
+      return { ok: false, error: "Room does not belong to this unit" };
+    }
+    if (photoResult && "error" in photoResult) {
+      return { ok: false, error: photoResult.error };
+    }
+
+    let publicUrl: string | null = null;
+    let storagePath: string | null = null;
+    if (photoResult && "publicUrl" in photoResult) {
+      publicUrl = photoResult.publicUrl;
+      storagePath = photoResult.storagePath;
     }
 
     const windowId = `win-${crypto.randomUUID()}`;
@@ -1435,49 +1440,52 @@ export async function updateWindowWithOptionalPhoto(
     }
 
     const supabase = await createClient();
-    const { data: win, error: we } = await supabase
-      .from("windows")
-      .select("id, room_id")
-      .eq("id", windowId)
-      .single();
-    if (we || !win || win.room_id !== roomId) {
-      return { ok: false, error: "Window not found" };
-    }
-    const { data: room, error: re } = await supabase
-      .from("rooms")
-      .select("unit_id")
-      .eq("id", roomId)
-      .single();
-    if (re || !room || room.unit_id !== unitId) {
-      return { ok: false, error: "Invalid room" };
-    }
 
     // Measurements should appear in the bracketed or installed photo stage.
     const uploadStage = getStageForWindowUpload();
     const uploadPhase = getPhaseForStage(uploadStage);
 
-    let publicUrl: string | undefined;
-    let storagePath: string | undefined;
+    // Prepare photo upload promise (runs in parallel with validation queries below).
+    let photoUploadPromise2: Promise<{ publicUrl: string; storagePath: string } | { error: string } | null> = Promise.resolve(null);
+    let photoPath2: string | null = null;
     if (file instanceof File && file.size > 0) {
       const ext =
         (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") ||
         "jpg";
-      const path = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
+      photoPath2 = `${unitId}/${roomId}/${crypto.randomUUID()}.${ext}`;
       const buf = new Uint8Array(await file.arrayBuffer());
-      const { error: upErr } = await supabase.storage
+      photoUploadPromise2 = supabase.storage
         .from(BUCKET)
-        .upload(path, buf, {
-          contentType: file.type || "image/jpeg",
-          upsert: false,
+        .upload(photoPath2, buf, { contentType: file.type || "image/jpeg", upsert: false })
+        .then(({ error: upErr }) => {
+          if (upErr) return { error: normalizeStorageError(upErr.message) };
+          const { data: { publicUrl: url } } = supabase.storage.from(BUCKET).getPublicUrl(photoPath2!);
+          return { publicUrl: url, storagePath: photoPath2! };
         });
-      if (upErr) {
-        return { ok: false, error: normalizeStorageError(upErr.message) };
-      }
-      const {
-        data: { publicUrl: url },
-      } = supabase.storage.from(BUCKET).getPublicUrl(path);
-      publicUrl = url;
-      storagePath = path;
+    }
+
+    const [winResult, roomResult2, photoResult2] = await Promise.all([
+      supabase.from("windows").select("id, room_id").eq("id", windowId).single(),
+      supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
+      photoUploadPromise2,
+    ]);
+    if (winResult.error || !winResult.data || winResult.data.room_id !== roomId) {
+      if (photoPath2) await supabase.storage.from(BUCKET).remove([photoPath2]);
+      return { ok: false, error: "Window not found" };
+    }
+    if (roomResult2.error || !roomResult2.data || roomResult2.data.unit_id !== unitId) {
+      if (photoPath2) await supabase.storage.from(BUCKET).remove([photoPath2]);
+      return { ok: false, error: "Invalid room" };
+    }
+    if (photoResult2 && "error" in photoResult2) {
+      return { ok: false, error: photoResult2.error };
+    }
+
+    let publicUrl: string | undefined;
+    let storagePath: string | undefined;
+    if (photoResult2 && "publicUrl" in photoResult2) {
+      publicUrl = photoResult2.publicUrl;
+      storagePath = photoResult2.storagePath;
     }
 
     const dn = depth.trim() ? parseFloat(depth) : null;
@@ -1658,21 +1666,15 @@ export async function uploadWindowPostBracketingPhoto(
     }
 
     const supabase = await createClient();
-    const { data: room, error: roomError } = await supabase
-      .from("rooms")
-      .select("unit_id")
-      .eq("id", roomId)
-      .single();
-    if (roomError || !room || room.unit_id !== unitId) {
+    const [roomResult, windowResult] = await Promise.all([
+      supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
+      supabase.from("windows").select("id, room_id, label").eq("id", windowId).single(),
+    ]);
+    if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
       return { ok: false, error: "Room does not belong to this unit." };
     }
-
-    const { data: windowRow, error: windowError } = await supabase
-      .from("windows")
-      .select("id, room_id, label")
-      .eq("id", windowId)
-      .single();
-    if (windowError || !windowRow || windowRow.room_id !== roomId) {
+    const windowRow = windowResult.data;
+    if (windowResult.error || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
     }
 
@@ -1816,30 +1818,20 @@ export async function uploadWindowInstalledPhoto(
     }
 
     const supabase = await createClient();
-    const { data: room, error: roomError } = await supabase
-      .from("rooms")
-      .select("unit_id")
-      .eq("id", roomId)
-      .single();
-    if (roomError || !room || room.unit_id !== unitId) {
+    const [roomResult, windowResult, unitResult] = await Promise.all([
+      supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
+      supabase.from("windows").select("id, room_id, label").eq("id", windowId).single(),
+      supabase.from("units").select("status").eq("id", unitId).single(),
+    ]);
+    if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
       return { ok: false, error: "Room does not belong to this unit." };
     }
-
-    const { data: windowRow, error: windowError } = await supabase
-      .from("windows")
-      .select("id, room_id, label")
-      .eq("id", windowId)
-      .single();
-    if (windowError || !windowRow || windowRow.room_id !== roomId) {
+    const windowRow = windowResult.data;
+    if (windowResult.error || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
     }
-
-    const { data: unitRow, error: unitStatusError } = await supabase
-      .from("units")
-      .select("status")
-      .eq("id", unitId)
-      .single();
-    if (unitStatusError || !unitRow) {
+    const unitRow = unitResult.data;
+    if (unitResult.error || !unitRow) {
       return { ok: false, error: "Unit not found." };
     }
     // Allow override when installer confirms they did bracketing + installation together
@@ -2158,6 +2150,109 @@ export async function deleteWindowMediaItem(
       .eq("id", windowId);
 
     const capturedUnitId = media.unit_id;
+    after(async () => {
+      const db = createAdminClient();
+      await refreshUnitAggregates(db, capturedUnitId);
+      await recomputeUnitStatus(db, capturedUnitId);
+      revalidateUnit(capturedUnitId);
+    });
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Undo a window stage completion flag.
+ * - Undo "measured": resets measured + installed (cascade)
+ * - Undo "bracketed": resets bracketed + installed (cascade)
+ * - Undo "installed": resets installed only
+ */
+export async function undoWindowStage(
+  windowId: string,
+  stage: "measured" | "bracketed" | "installed"
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    // Look up the window to get its room, then the room to get unit_id
+    const { data: win, error: winErr } = await supabase
+      .from("windows")
+      .select("room_id")
+      .eq("id", windowId)
+      .single();
+    if (winErr || !win) return { ok: false, error: "Window not found." };
+
+    const { data: room, error: roomErr } = await supabase
+      .from("rooms")
+      .select("unit_id")
+      .eq("id", win.room_id)
+      .single();
+    if (roomErr || !room) return { ok: false, error: "Room not found." };
+
+    const updates: Record<string, boolean> =
+      stage === "measured"
+        ? { measured: false, installed: false }
+        : stage === "bracketed"
+          ? { bracketed: false, installed: false }
+          : { installed: false };
+
+    const { error: updateErr } = await supabase
+      .from("windows")
+      .update(updates)
+      .eq("id", windowId);
+    if (updateErr) return { ok: false, error: updateErr.message };
+
+    const capturedUnitId = room.unit_id;
+    after(async () => {
+      const db = createAdminClient();
+      await refreshUnitAggregates(db, capturedUnitId);
+      await recomputeUnitStatus(db, capturedUnitId);
+      revalidateUnit(capturedUnitId);
+    });
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Delete a window measurement photo, clearing photo_url and resetting measured flag.
+ */
+/**
+ * Delete a room finished photo from storage and the media_uploads table.
+ */
+export async function deleteRoomFinishedPhoto(
+  mediaId: string,
+  unitId: string
+): Promise<ActionResult> {
+  try {
+    const supabase = await createClient();
+
+    const { data: media, error: fetchErr } = await supabase
+      .from("media_uploads")
+      .select("storage_path")
+      .eq("id", mediaId)
+      .single();
+    if (fetchErr || !media) {
+      return { ok: false, error: "Media item not found." };
+    }
+
+    if (media.storage_path) {
+      await supabase.storage.from(BUCKET).remove([media.storage_path]);
+    }
+
+    const { error: delErr } = await supabase
+      .from("media_uploads")
+      .delete()
+      .eq("id", mediaId);
+    if (delErr) return { ok: false, error: delErr.message };
+
+    const capturedUnitId = unitId;
     after(async () => {
       const db = createAdminClient();
       await refreshUnitAggregates(db, capturedUnitId);

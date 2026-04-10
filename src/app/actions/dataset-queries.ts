@@ -4,8 +4,6 @@ import { loadFullDataset, loadSchedulerDataset, loadInstallerDataset, loadUnitAc
 import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { getUnitMilestoneCoverage, type UnitMilestoneCoverage } from "@/lib/unit-milestones";
-import { recomputeUnitStatus } from "@/lib/unit-progress";
-import { createClient } from "@/lib/supabase/server";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 
@@ -36,14 +34,10 @@ export type UnitSupplementalData = {
 
 /**
  * Full supplemental data for unit detail pages (activity log + media + milestones).
- * Also self-heals stale unit status.
  */
 export async function fetchUnitSupplementalData(
   unitId: string
 ): Promise<UnitSupplementalData> {
-  const supabase = await createClient();
-  await recomputeUnitStatus(supabase, unitId);
-
   const [activityLog, mediaItems, milestones] = await Promise.all([
     loadUnitActivityLog(unitId),
     loadUnitStageMedia(unitId),
