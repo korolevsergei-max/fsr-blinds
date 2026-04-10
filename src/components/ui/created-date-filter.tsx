@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { CaretDown } from "@phosphor-icons/react";
 import type { AddedDateFilter } from "@/lib/created-date";
@@ -70,8 +71,8 @@ export function CreatedDateFilter({
       </button>
 
       <AnimatePresence>
-        {open && (
-          <div key="date-filter-container">
+        {open && typeof document !== "undefined" && createPortal(
+          <div key="date-filter-container" className="relative z-[9999]">
             <div
               key="date-filter-backdrop"
               className="fixed inset-0 z-40"
@@ -153,7 +154,8 @@ export function CreatedDateFilter({
                 </button>
               </div>
             </motion.div>
-          </div>
+          </div>,
+          document.body
         )}
       </AnimatePresence>
     </>

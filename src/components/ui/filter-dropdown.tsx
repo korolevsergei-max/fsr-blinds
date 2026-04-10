@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { CaretDown, Check } from "@phosphor-icons/react";
 
@@ -112,8 +113,8 @@ export function FilterDropdown(props: FilterDropdownProps) {
       </button>
 
       <AnimatePresence>
-        {open && (
-          <div key="dd-wrap">
+        {open && typeof document !== "undefined" && createPortal(
+          <div key="dd-wrap" className="relative z-[9999]">
             <div
               key="dd-backdrop"
               className="fixed inset-0 z-40"
@@ -192,7 +193,8 @@ export function FilterDropdown(props: FilterDropdownProps) {
                 );
               })}
             </motion.div>
-          </div>
+          </div>,
+          document.body
         )}
       </AnimatePresence>
     </>
