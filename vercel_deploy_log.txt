@@ -1,0 +1,46 @@
+Retrieving project…
+Deploying sergei-korolevs-projects/fsr-blinds
+Uploading [--------------------] (0.0B/68B)
+Uploading [====================] (68.0B/68B)
+Inspect: https://vercel.com/sergei-korolevs-projects/fsr-blinds/12ZWmZLuXNrapKFgJFdBz8bi5Sw9 [3s]
+Production: https://fsr-blinds-lqukzrcwm-sergei-korolevs-projects.vercel.app [3s]
+https://fsr-blinds-lqukzrcwm-sergei-korolevs-projects.vercel.appBuilding...
+Building...
+Building: Running build in Washington, D.C., USA (East) – iad1
+Building: Build machine configuration: 2 cores, 8 GB
+Building: Retrieving list of deployment files...
+Building: Downloading 316 deployment files...
+Building: Restored build cache from previous deployment (9gbtQnh6hJVHT16pqh8S4pCCfKV1)
+Building: Running "vercel build"
+Building: Vercel CLI 50.42.0
+Building: Installing dependencies...
+Building: up to date in 926ms
+Building: 150 packages are looking for funding
+Building: run `npm fund` for details
+Building: Detected Next.js version: 16.2.1
+Building: Running "npm run build"
+Building: > fsr-blinds@0.1.0 build
+Building: > next build
+Building: ▲ Next.js 16.2.1 (Turbopack)
+Building: - Experiments (use with caution):
+Building: · serverActions
+Building: ✓ viewTransition
+Building: Creating an optimized production build ...
+Building: ✓ Compiled successfully in 20.1s
+Building: Running TypeScript ...
+Building: Failed to type check.
+Building: ./src/lib/window-issues.ts:34:3
+Building: Type error: Type '{ roomId: string; roomName: string; windowId: string; windowLabel: string; riskFlag: RiskFlag; issueType: string; note: string; }[]' is not assignable to type 'UnitEscalationSummary[]'.
+Building: Type '{ roomId: string; roomName: string; windowId: string; windowLabel: string; riskFlag: RiskFlag; issueType: string; note: string; }' is not assignable to type 'UnitEscalationSummary'.
+Building: Types of property 'issueType' are incompatible.
+Building: Type 'string' is not assignable to type '"manufacturing" | "client_approval"'.
+Building: 32 |   );
+Building: 33 |
+Building: > 34 |   return data.windows
+Building: |   ^
+Building: 35 |     .filter((window) => roomMap.has(window.roomId) && window.riskFlag !== "green")
+Building: 36 |     .map((window) => ({
+Building: 37 |       roomId: window.roomId,
+Building: Next.js build worker exited with code: 1 and signal: null
+Building: Error: Command "npm run build" exited with 1
+Error: Command "npm run build" exited with 1

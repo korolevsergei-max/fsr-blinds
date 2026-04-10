@@ -39,10 +39,9 @@ export function getUnitEscalations(
       windowId: window.id,
       windowLabel: window.label,
       riskFlag: window.riskFlag,
-      issueType:
-        window.installed && window.riskFlag === "red"
-          ? "client_approval"
-          : "manufacturing",
+      issueType: (window.installed && window.riskFlag === "red"
+        ? "client_approval"
+        : "manufacturing") as "manufacturing" | "client_approval",
       note: window.notes.trim() || describeRiskFlag(window.riskFlag),
     }))
     .sort((a, b) => {
