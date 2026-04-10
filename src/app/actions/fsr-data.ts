@@ -356,8 +356,8 @@ export async function bulkAssignUnits(
           .upsert(assignments, { onConflict: "unit_id" });
 
         if (assError) return { ok: false, error: assError.message };
-        patch.assigned_installer_name = instName;
-        patch.assigned_installer_id = installerId;
+        patch.assigned_installer_name = null;
+        patch.assigned_installer_id = null;
       } else {
         patch.assigned_installer_name = instName;
         patch.assigned_installer_id = installerId;
@@ -627,8 +627,8 @@ export async function updateUnitAssignment(
           );
 
         if (assError) return { ok: false, error: assError.message };
-        patch.assigned_installer_name = installerName;
-        patch.assigned_installer_id = installerId;
+        patch.assigned_installer_name = null;
+        patch.assigned_installer_id = null;
       } else {
         patch.assigned_installer_name = installerName;
         patch.assigned_installer_id = installerId;
