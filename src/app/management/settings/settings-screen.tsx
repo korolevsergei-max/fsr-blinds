@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { CaretLeft, CaretRight, CheckCircle, Factory, UsersFour } from "@phosphor-icons/react";
+import { CaretLeft, CaretRight, CheckCircle, Factory, HardDrives, UsersFour } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DataManagementSection } from "@/components/settings/data-management-section";
 import type { ManufacturingCalendarOverride, ManufacturingSettings } from "@/lib/types";
 import {
   getOntarioHolidayName,
@@ -17,7 +18,7 @@ import {
   updateManufacturingSettings,
 } from "@/app/actions/manufacturing-actions";
 
-type SettingsTab = "manufacturing" | "accounts";
+type SettingsTab = "manufacturing" | "accounts" | "data";
 
 function formatMonthLabel(baseDate: Date) {
   return baseDate.toLocaleDateString("en-CA", {
@@ -37,11 +38,13 @@ function dateToMonth(dateKey: string) {
 export function SettingsScreen({
   initialTab,
   accounts,
+  showDataTab,
   settings,
   overrides,
 }: {
   initialTab: SettingsTab;
   accounts: ReactNode;
+  showDataTab: boolean;
   settings: ManufacturingSettings;
   overrides: ManufacturingCalendarOverride[];
 }) {
@@ -108,7 +111,11 @@ export function SettingsScreen({
     <div className="flex flex-col pb-24">
       <PageHeader
         title="Settings"
-        subtitle="Accounts and manufacturing controls"
+        subtitle={
+          showDataTab
+            ? "Accounts, manufacturing, and data controls"
+            : "Accounts and manufacturing controls"
+        }
         belowTitle={
           <div className="flex gap-2">
             <TabButton
@@ -123,6 +130,14 @@ export function SettingsScreen({
               label="Accounts"
               onClick={() => setTab("accounts")}
             />
+            {showDataTab && (
+              <TabButton
+                active={tab === "data"}
+                icon={<HardDrives size={16} weight={tab === "data" ? "fill" : "regular"} />}
+                label="Data"
+                onClick={() => setTab("data")}
+              />
+            )}
           </div>
         }
       />
@@ -247,8 +262,12 @@ export function SettingsScreen({
             </div>
           </section>
         </div>
-      ) : (
+      ) : tab === "accounts" ? (
         <div>{accounts}</div>
+      ) : (
+        <div className="px-4 py-4 space-y-5">
+          <DataManagementSection />
+        </div>
       )}
     </div>
   );

@@ -82,8 +82,15 @@ export default async function SettingsPage({
 
   return (
     <SettingsScreen
-      initialTab={tab === "accounts" ? "accounts" : "manufacturing"}
+      initialTab={
+        tab === "accounts"
+          ? "accounts"
+          : tab === "data" && user?.role === "owner"
+            ? "data"
+            : "manufacturing"
+      }
       accounts={accounts}
+      showDataTab={user?.role === "owner"}
       settings={manufacturing.settings}
       overrides={manufacturing.overrides}
     />

@@ -1,42 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Plus, Envelope, Phone, Warning } from "@phosphor-icons/react";
+import { ArrowRight, Plus, Envelope, Phone } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { InlineAlert } from "@/components/ui/inline-alert";
-import { purgeAllClientData } from "@/app/actions/management-actions";
-import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 
 export function ClientsList({ data }: { data: AppDataset }) {
   const { clients, buildings, units } = data;
-  const [purgePhrase, setPurgePhrase] = useState("");
-  const [purgeError, setPurgeError] = useState("");
-  const [purgePending, startPurge] = useTransition();
-
-  const runPurge = () => {
-    if (
-      !window.confirm(
-        "This permanently deletes every client, building, unit, room, window, schedule entry, and related database records. Installers and accounts are kept. Continue?"
-      )
-    ) {
-      return;
-    }
-    setPurgeError("");
-    startPurge(async () => {
-      const result = await purgeAllClientData(purgePhrase);
-      if (!result.ok) {
-        setPurgeError(result.error);
-        return;
-      }
-      setPurgePhrase("");
-      window.location.reload();
-    });
-  };
 
   return (
     <div className="flex flex-col">
@@ -121,36 +93,6 @@ export function ClientsList({ data }: { data: AppDataset }) {
             </motion.div>
           );
         })}
-
-        <div className="mt-6 pt-6 border-t border-border-subtle flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-danger">
-            <Warning size={14} weight="fill" />
-            Danger zone
-          </div>
-          <p className="text-[12px] text-secondary leading-relaxed">
-            Remove all client-linked project data to start fresh. Accounts (installers, schedulers,
-            cutters) stay; clear orphaned storage objects in Supabase if you use uploads.
-          </p>
-          <Input
-            label={`Type "${CONFIRM_PURGE_ALL_CLIENTS}" to enable reset`}
-            value={purgePhrase}
-            onChange={(e) => {
-              setPurgePhrase(e.target.value);
-              if (purgeError) setPurgeError("");
-            }}
-            placeholder={CONFIRM_PURGE_ALL_CLIENTS}
-            autoComplete="off"
-          />
-          {purgeError && <InlineAlert variant="error">{purgeError}</InlineAlert>}
-          <Button
-            size="sm"
-            variant="danger"
-            disabled={purgePending || purgePhrase.trim() !== CONFIRM_PURGE_ALL_CLIENTS}
-            onClick={runPurge}
-          >
-            {purgePending ? "Removing…" : "Delete all client data"}
-          </Button>
-        </div>
       </div>
     </div>
   );

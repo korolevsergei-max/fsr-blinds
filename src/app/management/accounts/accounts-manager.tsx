@@ -75,6 +75,17 @@ export function AccountsManager({
   const [deletePending, startDeleteTransition] = useTransition();
   const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
 
+  const tabLabel =
+    tab === "installers"
+      ? "Installers"
+      : tab === "cutters"
+        ? "Cutters"
+        : tab === "assemblers"
+          ? "Assemblers"
+          : tab === "schedulers"
+            ? "Schedulers"
+            : "Owners";
+
   const linkedCutters = cutters.filter((m) => Boolean(m.authUserId));
   const orphanCutters = cutters.filter((m) => !m.authUserId);
   const linkedSchedulers = schedulers.filter((s) => Boolean(s.authUserId));
@@ -182,15 +193,7 @@ export function AccountsManager({
 
   return (
     <div className="flex flex-col">
-      <PageHeader
-        title="Accounts"
-        actions={
-          <Button size="sm" onClick={() => setShowForm(!showForm)}>
-            <Plus size={14} weight="bold" />
-            Invite
-          </Button>
-        }
-      />
+      <PageHeader title="Accounts" />
 
       {authDrift.length > 0 && (
         <div className="px-4 pt-4 flex flex-col gap-3">
@@ -267,35 +270,41 @@ export function AccountsManager({
       </div>
 
       {/* Invite form */}
-      {showForm && (
-        <div className="px-4 pb-3">
-          {tab === "installers" ? (
-            <InviteInstallerForm
-              onDone={() => { setShowForm(false); window.location.reload(); }}
-            />
-          ) : tab === "cutters" ? (
-            <InviteCutterForm
-              onDone={() => { setShowForm(false); window.location.reload(); }}
-            />
-          ) : tab === "schedulers" ? (
-            <InviteSchedulerForm
-              onDone={() => { setShowForm(false); window.location.reload(); }}
-            />
-          ) : tab === "assemblers" ? (
-            <InviteAssemblerForm
-              onDone={() => { setShowForm(false); window.location.reload(); }}
-            />
-          ) : (
-            <InviteOwnerForm
-              onDone={() => { setShowForm(false); window.location.reload(); }}
-            />
-          )}
-        </div>
-      )}
-
       {/* List */}
       <div className="px-4 flex flex-col gap-3 pb-8">
         {deleteError && <InlineAlert variant="error">{deleteError}</InlineAlert>}
+        <div className="pt-1">
+          <Button size="sm" onClick={() => setShowForm(!showForm)}>
+            <Plus size={14} weight="bold" />
+            {showForm ? `Close ${tabLabel} invite` : `Invite ${tabLabel}`}
+          </Button>
+        </div>
+
+        {showForm && (
+          <div>
+            {tab === "installers" ? (
+              <InviteInstallerForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            ) : tab === "cutters" ? (
+              <InviteCutterForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            ) : tab === "schedulers" ? (
+              <InviteSchedulerForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            ) : tab === "assemblers" ? (
+              <InviteAssemblerForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            ) : (
+              <InviteOwnerForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            )}
+          </div>
+        )}
 
         {tab === "installers" && (
           <>
