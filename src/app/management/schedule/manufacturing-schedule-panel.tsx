@@ -9,6 +9,14 @@ function formatLongDate(date: string | null) {
   return formatStoredDateLongEnglish(date) ?? date ?? "";
 }
 
+function formatMeasurement(
+  width: number | null,
+  height: number | null,
+  depth: number | null
+) {
+  return `${width ?? "—"} × ${height ?? "—"}${depth != null ? ` × ${depth}` : ""}`;
+}
+
 export function ManufacturingSchedulePanel({
   cutterSchedule,
   assemblerSchedule,
@@ -20,7 +28,7 @@ export function ManufacturingSchedulePanel({
   const schedule = role === "cutter" ? cutterSchedule : assemblerSchedule;
 
   return (
-    <div className="px-4 py-4 space-y-4">
+    <div className="space-y-4 px-4 py-4">
       <div className="flex gap-2">
         <button
           onClick={() => setRole("cutter")}
@@ -59,23 +67,23 @@ export function ManufacturingSchedulePanel({
         {schedule.buckets.map((bucket) => (
           <section
             key={bucket.label + bucket.date}
-            className="overflow-hidden rounded-[28px] border border-border bg-card shadow-[0_20px_60px_rgba(15,23,42,0.06)]"
+            className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_18px_54px_rgba(15,23,42,0.05)]"
           >
-            <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-5 py-4">
+            <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-4 py-3.5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-tertiary">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-tertiary">
                     {bucket.label}
                   </p>
-                  <p className="mt-1 text-xl font-semibold tracking-[-0.03em] text-foreground">
+                  <p className="mt-1 text-[17px] font-semibold leading-snug tracking-tight text-foreground sm:text-[18px]">
                     {formatLongDate(bucket.date) || bucket.label}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-2xl font-bold tracking-[-0.04em] text-foreground">
+                  <p className="font-mono text-[1.2rem] font-semibold tracking-[-0.04em] text-foreground sm:text-[1.3rem]">
                     {bucket.scheduledCount}/{bucket.capacity}
                   </p>
-                  <p className={`mt-1 text-xs ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
+                  <p className={`mt-1 text-[11px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
                     {bucket.isOverCapacity ? "Over capacity" : "Scheduled"}
                   </p>
                 </div>
@@ -83,34 +91,37 @@ export function ManufacturingSchedulePanel({
             </div>
 
             {bucket.units.length === 0 ? (
-              <p className="px-5 py-5 text-sm text-tertiary">Nothing scheduled here.</p>
+              <p className="px-4 py-5 text-[14px] text-tertiary">Nothing scheduled here.</p>
             ) : (
-              <div className="divide-y divide-border/80">
+              <div className="space-y-4 bg-surface/35 px-4 py-4">
                 {bucket.units.map((unit) => (
-                  <div key={`${bucket.label}-${unit.unitId}`} className="px-5 py-4">
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                  <div
+                    key={`${bucket.label}-${unit.unitId}`}
+                    className="overflow-hidden rounded-[22px] border border-border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
+                  >
+                    <div className="grid gap-3 border-b border-border/70 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                       <div>
-                        <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                        <p className="text-[15px] font-semibold tracking-tight text-foreground">
                           Unit {unit.unitNumber}
                         </p>
-                        <p className="mt-1 text-sm text-secondary">
+                        <p className="mt-1 text-[12px] text-secondary">
                           {unit.buildingName} · {unit.clientName}
                         </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-tertiary sm:justify-end">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">
                         <span>{unit.scheduledCount} blinds</span>
                         {unit.installationDate && <span>Install {formatLongDate(unit.installationDate)}</span>}
                       </div>
                     </div>
 
-                    <div className="mt-4 space-y-4">
+                    <div className="space-y-5 px-4 py-4">
                       {unit.blindTypeGroups.map((group) => (
                         <div key={`${unit.unitId}-${group.blindType}`}>
                           <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-                            <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
+                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary">
                               {group.blindType}
                             </span>
-                            <span className="text-xs text-tertiary">
+                            <span className="text-[12px] text-tertiary">
                               {group.windows.length} scheduled
                             </span>
                           </div>
@@ -119,18 +130,18 @@ export function ManufacturingSchedulePanel({
                             {group.windows.map((window) => (
                               <article
                                 key={window.windowId}
-                                className="grid gap-3 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start"
+                                className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start"
                               >
                                 <div>
                                   <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                                    <p className="text-xl font-semibold tracking-[-0.03em] text-foreground">
+                                    <p className="text-[15px] font-semibold tracking-tight text-foreground">
                                       {window.label}
                                     </p>
                                     <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
                                       {window.roomName}
                                     </span>
                                   </div>
-                                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-tertiary">
+                                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
                                     {window.targetReadyDate && (
                                       <span>Ready by {formatLongDate(window.targetReadyDate)}</span>
                                     )}
@@ -142,12 +153,13 @@ export function ManufacturingSchedulePanel({
                                     )}
                                   </div>
                                 </div>
-                                <div className="lg:text-right">
-                                  <p className="font-mono text-[1.75rem] font-bold leading-none tracking-[-0.08em] text-foreground">
-                                    {(window.blindWidth ?? window.width) ?? "—"} × {(window.blindHeight ?? window.height) ?? "—"}
-                                    {window.blindDepth != null || window.depth != null
-                                      ? ` × ${window.blindDepth ?? window.depth}`
-                                      : ""}
+                                <div className="lg:min-w-[9rem] lg:text-right">
+                                  <p className="font-mono text-[15px] font-semibold leading-none tracking-tight text-foreground md:text-[16px]">
+                                    {formatMeasurement(
+                                      window.blindWidth ?? window.width,
+                                      window.blindHeight ?? window.height,
+                                      window.blindDepth ?? window.depth
+                                    )}
                                   </p>
                                 </div>
                               </article>
@@ -184,12 +196,12 @@ function SummaryCard({
   };
 
   return (
-    <div className={`rounded-2xl border px-3 py-3 ${classes[tone]}`}>
-      <div className="flex items-center gap-2">
-        <CalendarBlank size={16} weight="fill" />
-        <span className="text-xs font-medium">{label}</span>
+    <div className={`rounded-[22px] border px-4 py-3 ${classes[tone]}`}>
+      <p className="font-mono text-[1.45rem] font-bold tracking-[-0.04em]">{value}</p>
+      <div className="mt-2 flex items-center gap-2">
+        <CalendarBlank size={15} weight="fill" />
+        <span className="text-[11px] font-medium uppercase tracking-[0.05em]">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-2xl font-bold tracking-[-0.05em]">{value}</p>
     </div>
   );
 }

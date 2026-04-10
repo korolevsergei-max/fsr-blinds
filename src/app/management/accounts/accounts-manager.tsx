@@ -246,7 +246,7 @@ export function AccountsManager({
 
       {/* Tabs */}
       <div className="px-4 pt-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
-        {(["installers", "cutters", "schedulers", "assemblers", "owners"] as Tab[]).map((t) => (
+        {(["installers", "cutters", "assemblers", "schedulers", "owners"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -259,8 +259,8 @@ export function AccountsManager({
           >
             {t === "installers" ? "Installers"
               : t === "cutters" ? "Cutters"
-              : t === "schedulers" ? "Schedulers"
               : t === "assemblers" ? "Assemblers"
+              : t === "schedulers" ? "Schedulers"
               : "Owners"}
           </button>
         ))}
