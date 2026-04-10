@@ -173,6 +173,16 @@ export function PostBracketingPhotoForm({
           return;
         }
 
+        // Optimistically update context so the rooms page reflects bracketed=true immediately.
+        datasetCtx?.patchData((prev) => ({
+          ...prev,
+          windows: prev.windows.map((w) =>
+            w.id === windowItem.id
+              ? { ...w, bracketed: true, riskFlag, notes: notes.trim() }
+              : w
+          ),
+        }));
+
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       } catch {
         setError("Something went wrong. Please try again.");
