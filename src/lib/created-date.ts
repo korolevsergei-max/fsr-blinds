@@ -61,6 +61,29 @@ export function formatAddedDateLabel(ymd: string): string {
   return formatStoredDateForDisplay(ymd, undefined, DEFAULT_STORED_DATE_DISPLAY) ?? ymd;
 }
 
+function ordinalSuffix(day: number): string {
+  if (day >= 11 && day <= 13) return "th";
+  const remainder = day % 10;
+  if (remainder === 1) return "st";
+  if (remainder === 2) return "nd";
+  if (remainder === 3) return "rd";
+  return "th";
+}
+
+export function formatStoredDateLongEnglish(
+  value: string | null | undefined,
+  locale = "en-US"
+): string | null {
+  if (!value) return null;
+  const parsed = parseStoredDate(value);
+  if (!parsed) return null;
+
+  const month = parsed.toLocaleDateString(locale, { month: "long" });
+  const day = parsed.getDate();
+  const year = parsed.getFullYear();
+  return `${month} ${day}${ordinalSuffix(day)}, ${year}`;
+}
+
 /**
  * True if a `YYYY-MM-DD` stored date string matches the filter day.
  * Uses `parseStoredDate` so plain date strings are treated as local calendar days.
