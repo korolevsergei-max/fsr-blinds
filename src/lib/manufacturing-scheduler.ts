@@ -226,25 +226,39 @@ function todayKey(): string {
   return formatDateKey(new Date());
 }
 
+function getCurrentWorkDate(
+  settings: ManufacturingSettings,
+  overrides: Map<string, ManufacturingCalendarOverride>
+): string {
+  const today = todayKey();
+  return isWorkingDay(today, settings, overrides)
+    ? today
+    : addWorkingDays(today, 1, settings, overrides);
+}
+
 function findLatestWorkingDayWithCapacity(
   latestDate: string,
   capacity: number,
   loadMap: Map<string, number>,
   settings: ManufacturingSettings,
   overrides: Map<string, ManufacturingCalendarOverride>,
-  requiredSlots: number
+  requiredSlots: number,
+  floorDate: string
 ): string | null {
   if (capacity <= 0) return null;
 
-  let cursor = latestDate;
+  let cursor = latestDate < floorDate ? floorDate : latestDate;
   for (let i = 0; i < 370; i += 1) {
+    if (cursor < floorDate) return null;
     if (isWorkingDay(cursor, settings, overrides)) {
       const load = loadMap.get(cursor) ?? 0;
       if (load + requiredSlots <= capacity) {
         return cursor;
       }
     }
-    cursor = addWorkingDays(cursor, -1, settings, overrides);
+    const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+    if (nextCursor < floorDate) return null;
+    cursor = nextCursor;
   }
   return null;
 }
@@ -260,6 +274,7 @@ function buildBlindSortKey(win: WindowRow): string {
 
 export async function reflowManufacturingSchedules(reason = "system_reflow"): Promise<void> {
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
+  const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
   const { data: unitRows } = await supabase
     .from("units")
@@ -359,6 +374,13 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     if (production?.issue_status === "open") {
       scheduledAssemblyDate = null;
       scheduledCutDate = null;
+    } else {
+      if (scheduledAssemblyDate && scheduledAssemblyDate < currentWorkDate) {
+        scheduledAssemblyDate = currentWorkDate;
+      }
+      if (scheduledCutDate && scheduledCutDate < currentWorkDate) {
+        scheduledCutDate = currentWorkDate;
+      }
     }
 
     const candidate: Candidate = {
@@ -410,7 +432,8 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       assemblyLoad,
       settings,
       overrides,
-      unlocked.length
+      unlocked.length,
+      currentWorkDate
     );
 
     if (sameDay) {
@@ -422,16 +445,20 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     }
 
     const remaining = [...unlocked];
-    let cursor = latestDate;
+    let cursor = latestDate < currentWorkDate ? currentWorkDate : latestDate;
     while (remaining.length > 0) {
       if (!isWorkingDay(cursor, settings, overrides)) {
-        cursor = addWorkingDays(cursor, -1, settings, overrides);
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
         continue;
       }
       const used = assemblyLoad.get(cursor) ?? 0;
       const available = Math.max(0, settings.assemblerDailyCapacity - used);
       if (available === 0) {
-        cursor = addWorkingDays(cursor, -1, settings, overrides);
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
         continue;
       }
       const take = remaining.splice(0, available);
@@ -439,7 +466,9 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         item.scheduledAssemblyDate = cursor;
         pushLoad(assemblyLoad, cursor);
       }
-      cursor = addWorkingDays(cursor, -1, settings, overrides);
+      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+      if (nextCursor < currentWorkDate) break;
+      cursor = nextCursor;
     }
   }
 
@@ -473,7 +502,8 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       cutLoad,
       settings,
       overrides,
-      unlocked.length
+      unlocked.length,
+      currentWorkDate
     );
 
     if (sameDay) {
@@ -485,16 +515,20 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     }
 
     const remaining = [...unlocked];
-    let cursor = latestCutDate;
+    let cursor = latestCutDate < currentWorkDate ? currentWorkDate : latestCutDate;
     while (remaining.length > 0) {
       if (!isWorkingDay(cursor, settings, overrides)) {
-        cursor = addWorkingDays(cursor, -1, settings, overrides);
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
         continue;
       }
       const used = cutLoad.get(cursor) ?? 0;
       const available = Math.max(0, settings.cutterDailyCapacity - used);
       if (available === 0) {
-        cursor = addWorkingDays(cursor, -1, settings, overrides);
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
         continue;
       }
       const take = remaining.splice(0, available);
@@ -502,7 +536,9 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         item.scheduledCutDate = cursor;
         pushLoad(cutLoad, cursor);
       }
-      cursor = addWorkingDays(cursor, -1, settings, overrides);
+      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+      if (nextCursor < currentWorkDate) break;
+      cursor = nextCursor;
     }
   }
 
@@ -573,6 +609,7 @@ export async function loadManufacturingRoleSchedule(
 ): Promise<ManufacturingRoleSchedule> {
   await reflowManufacturingSchedules("load_queue");
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
+  const currentWorkDate = getCurrentWorkDate(settings, overrides);
   const { data: scheduleRows } = await supabase
     .from("window_manufacturing_schedule")
     .select("*")
@@ -677,13 +714,14 @@ export async function loadManufacturingRoleSchedule(
     });
   }
 
-  const today = todayKey();
+  const today = currentWorkDate;
   const tomorrow = addWorkingDays(today, 1, settings, overrides);
   const capacity = role === "cutter" ? settings.cutterDailyCapacity : settings.assemblerDailyCapacity;
 
   const byBucket = new Map<string, ManufacturingWindowItem[]>();
   for (const item of items) {
-    const date = item[roleDateKey];
+    const rawDate = item[roleDateKey];
+    const date = rawDate && rawDate < currentWorkDate ? currentWorkDate : rawDate;
     if (item.issueStatus === "open") {
       const list = byBucket.get("__issues__") ?? [];
       list.push(item);

@@ -133,7 +133,7 @@ export function ManufacturingRoleQueue({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <SummaryCard label="Today" value={schedule.todayCount} tone="emerald" />
         <SummaryCard label="Next day" value={schedule.tomorrowCount} tone="blue" />
         <SummaryCard label="Issues" value={schedule.issueCount} tone="amber" />
@@ -149,18 +149,18 @@ export function ManufacturingRoleQueue({
             <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-5 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-tertiary">
-                    {bucket.label}
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tertiary">
+                    {bucket.date && bucket.label === bucket.date ? "Work day" : bucket.label}
                   </p>
-                  <p className="mt-1 text-xl font-semibold tracking-[-0.03em] text-foreground text-balance">
+                  <p className="mt-1 text-[1.8rem] font-semibold tracking-[-0.045em] text-foreground text-balance">
                     {formatBucketDate(bucket.date) || bucket.label}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-2xl font-bold tracking-[-0.04em] text-foreground">
+                  <p className="font-mono text-[1.9rem] font-bold tracking-[-0.06em] text-foreground">
                     {bucket.scheduledCount}/{bucket.capacity}
                   </p>
-                  <p className={`mt-1 text-xs ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
+                  <p className={`mt-1 text-[11px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
                     {bucket.isOverCapacity ? "Over capacity" : "Scheduled"}
                   </p>
                 </div>
@@ -179,14 +179,14 @@ export function ManufacturingRoleQueue({
                     >
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div>
-                          <p className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+                          <p className="text-[1.45rem] font-semibold tracking-[-0.04em] text-foreground">
                             Unit {unit.unitNumber}
                           </p>
-                          <p className="mt-1 text-sm text-secondary">
+                          <p className="mt-1 text-[15px] text-secondary">
                             {unit.buildingName} · {unit.clientName}
                           </p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-tertiary sm:justify-end">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px] text-tertiary sm:justify-end">
                           <span>{unit.scheduledCount} blinds</span>
                           {unit.installationDate && <span>{formatInstallDate(unit.installationDate)}</span>}
                         </div>
@@ -197,10 +197,10 @@ export function ManufacturingRoleQueue({
                       {unit.blindTypeGroups.map((group) => (
                         <div key={`${unit.unitId}-${group.blindType}`}>
                           <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-                            <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
+                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-secondary">
                               {group.blindType}
                             </span>
-                            <span className="text-xs text-tertiary">
+                            <span className="text-[13px] text-tertiary">
                               {group.windows.length} scheduled
                             </span>
                           </div>
@@ -211,19 +211,19 @@ export function ManufacturingRoleQueue({
                               return (
                                 <article
                                   key={item.windowId}
-                                  className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start"
+                                  className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
                                 >
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                                      <h3 className="text-xl font-semibold tracking-[-0.03em] text-foreground">
+                                      <h3 className="text-[1.35rem] font-semibold tracking-[-0.045em] text-foreground">
                                         {item.label}
                                       </h3>
-                                      <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
+                                      <span className="rounded-full bg-surface px-2 py-1 text-[12px] font-medium text-secondary">
                                         {item.roomName}
                                       </span>
                                     </div>
 
-                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-tertiary">
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-tertiary">
                                       <span>{formatReadyDate(item.targetReadyDate)}</span>
                                       {item.issueStatus === "open" && (
                                         <span className="inline-flex items-center gap-1 font-medium text-amber-700">
@@ -234,12 +234,12 @@ export function ManufacturingRoleQueue({
                                     </div>
 
                                     {item.notes && (
-                                      <p className="mt-2 max-w-[65ch] text-sm leading-6 text-secondary">
+                                      <p className="mt-2 max-w-[65ch] text-[14px] leading-6 text-secondary">
                                         {item.notes}
                                       </p>
                                     )}
 
-                                    <div className="mt-4 flex flex-wrap gap-2">
+                                    <div className="mt-4 flex flex-wrap gap-2.5">
                                       {item.issueStatus === "open" ? (
                                         <ActionButton
                                           label="Resolve issue"
@@ -370,8 +370,8 @@ export function ManufacturingRoleQueue({
                                     </div>
                                   </div>
 
-                                  <div className="lg:min-w-[13rem] lg:text-right">
-                                    <p className="font-mono text-[1.9rem] font-bold leading-none tracking-[-0.08em] text-foreground">
+                                  <div className="md:min-w-[10.5rem] md:text-right">
+                                    <p className="font-mono text-[1.35rem] font-semibold leading-none tracking-[-0.065em] text-foreground md:text-[1.55rem]">
                                       {formatMeasurement(item)}
                                     </p>
                                   </div>
@@ -422,7 +422,7 @@ function ActionButton({
       disabled={busy}
       onClick={onClick}
       className={[
-        "rounded-full border px-3 py-2 text-xs font-semibold transition-all",
+        "rounded-full border px-3 py-2 text-[13px] font-semibold transition-all",
         "active:scale-[0.98] disabled:opacity-50",
         toneClasses[tone],
       ].join(" ")}
@@ -444,7 +444,7 @@ function StatusChip({
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-2 text-xs font-semibold ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[13px] font-semibold ${toneClasses[tone]}`}>
       {label}
     </span>
   );
@@ -478,9 +478,9 @@ function SummaryCard({
     <div className={`rounded-2xl border px-3 py-3 ${classes[tone]}`}>
       <div className="flex items-center gap-2">
         <Icon size={16} weight="fill" />
-        <span className="text-xs font-medium">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em]">{label}</span>
       </div>
-      <p className="mt-2 font-mono text-2xl font-bold tracking-[-0.05em]">{value}</p>
+      <p className="mt-2 font-mono text-[1.65rem] font-bold tracking-[-0.06em]">{value}</p>
     </div>
   );
 }

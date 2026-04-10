@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarBlank, Factory, Queue, SignOut, WarningCircle } from "@phosphor-icons/react";
 import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { signOut } from "@/app/actions/auth-actions";
+import { formatStoredDateLongEnglish } from "@/lib/created-date";
 
 export function ManufacturingRoleDashboard({
   role,
@@ -28,10 +29,10 @@ export function ManufacturingRoleDashboard({
     <div className="px-4 pt-6 pb-4 space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs text-tertiary uppercase tracking-widest font-medium mb-1">
+          <p className="text-[10px] text-tertiary uppercase tracking-[0.18em] font-medium mb-1">
             {role === "cutter" ? "Cutter" : "Assembler"}
           </p>
-          <h1 className="text-xl font-semibold text-primary">
+          <h1 className="text-[1.65rem] font-semibold tracking-[-0.04em] text-primary">
             {userName ? `Hi, ${userName.split(" ")[0]}` : headline}
           </h1>
         </div>
@@ -45,7 +46,7 @@ export function ManufacturingRoleDashboard({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <StatCard label="Today" value={schedule.todayCount} tone="emerald" />
         <StatCard label="Next Day" value={schedule.tomorrowCount} tone="blue" />
         <StatCard label="Issues" value={schedule.issueCount} tone="amber" />
@@ -54,19 +55,19 @@ export function ManufacturingRoleDashboard({
 
       <button
         onClick={() => router.push(queueHref)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-accent text-white rounded-xl font-medium text-sm active:opacity-80 transition-opacity"
+        className="w-full flex items-center justify-between rounded-2xl bg-accent px-4 py-3 text-white transition-opacity active:opacity-80"
       >
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-2 text-sm font-semibold">
           <Queue size={18} />
           {queueLabel}
         </span>
-        <span className="text-white/80">
+        <span className="font-mono text-[15px] text-white/80">
           {schedule.todayCount} today
         </span>
       </button>
 
       {schedule.issueCount > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
             <WarningCircle size={16} weight="fill" />
             {schedule.issueCount} manufacturing issue{schedule.issueCount === 1 ? "" : "s"} open
@@ -78,15 +79,19 @@ export function ManufacturingRoleDashboard({
       )}
 
       {highlightBucket && highlightBucket.units.length > 0 && (
-        <div className="rounded-xl border border-border bg-card px-4 py-4 space-y-3">
+        <div className="rounded-[24px] border border-border bg-card px-4 py-4 space-y-3 shadow-[0_18px_50px_rgba(15,23,42,0.05)]">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold text-foreground">{highlightBucket.label}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-tertiary">
+                {highlightBucket.date && highlightBucket.label === highlightBucket.date ? "Work day" : highlightBucket.label}
+              </p>
               {highlightBucket.date && (
-                <p className="text-xs text-tertiary mt-1">{highlightBucket.date}</p>
+                <p className="mt-1 text-[1.15rem] font-semibold tracking-[-0.03em] text-foreground">
+                  {formatStoredDateLongEnglish(highlightBucket.date) ?? highlightBucket.date}
+                </p>
               )}
             </div>
-            <span className="text-xs text-tertiary">
+            <span className="font-mono text-[15px] text-tertiary">
               {highlightBucket.scheduledCount}/{highlightBucket.capacity}
             </span>
           </div>
@@ -96,16 +101,16 @@ export function ManufacturingRoleDashboard({
               <button
                 key={unit.unitId}
                 onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
-                className="w-full rounded-xl border border-border bg-white px-3 py-3 text-left transition-colors hover:bg-surface"
+                className="w-full rounded-2xl border border-border bg-white px-3 py-3 text-left transition-colors hover:bg-surface"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Unit {unit.unitNumber}</p>
-                    <p className="mt-1 text-xs text-tertiary">
+                    <p className="text-[1rem] font-semibold tracking-[-0.02em] text-foreground">Unit {unit.unitNumber}</p>
+                    <p className="mt-1 text-[13px] text-tertiary">
                       {unit.buildingName} · {unit.clientName}
                     </p>
                   </div>
-                  <span className="text-xs text-tertiary">
+                  <span className="text-[13px] text-tertiary">
                     {unit.scheduledCount} blind{unit.scheduledCount === 1 ? "" : "s"}
                   </span>
                 </div>
@@ -139,9 +144,9 @@ function StatCard({
     <div className={`rounded-xl border px-3 py-3 ${classes[tone]}`}>
       <div className="flex items-center gap-2">
         <Icon size={16} weight="fill" />
-        <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em]">{label}</span>
       </div>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
+      <p className="mt-2 font-mono text-[1.6rem] font-bold tracking-[-0.06em]">{value}</p>
     </div>
   );
 }
