@@ -170,12 +170,15 @@ export function ManufacturingRoleQueue({
             {bucket.units.length === 0 ? (
               <p className="px-4 py-5 text-[14px] text-tertiary">Nothing queued here.</p>
             ) : (
-              <div className="divide-y divide-border/80">
+              <div className="space-y-4 bg-surface/35 px-4 py-4">
                 {bucket.units.map((unit) => (
-                  <div key={`${bucket.label}-${unit.unitId}`} className="px-4 py-4">
+                  <div
+                    key={`${bucket.label}-${unit.unitId}`}
+                    className="overflow-hidden rounded-[22px] border border-border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
+                  >
                     <button
                       onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
-                      className="w-full text-left"
+                      className="w-full border-b border-border/70 px-4 py-4 text-left"
                     >
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div>
@@ -193,7 +196,7 @@ export function ManufacturingRoleQueue({
                       </div>
                     </button>
 
-                    <div className="mt-4 space-y-4">
+                    <div className="space-y-5 px-4 py-4">
                       {unit.blindTypeGroups.map((group) => (
                         <div key={`${unit.unitId}-${group.blindType}`}>
                           <div className="flex items-center gap-3 border-b border-border/70 pb-2">
