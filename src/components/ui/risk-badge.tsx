@@ -1,7 +1,7 @@
 "use client";
 
 import type { RiskFlag } from "@/lib/types";
-import { Wrench, CheckCircle } from "@phosphor-icons/react";
+import { Wrench, CheckCircle, UserCircle } from "@phosphor-icons/react";
 
 const config: Record<RiskFlag, { bg: string; text: string; Icon: typeof Wrench; label: string }> = {
   green:    { bg: "bg-teal-50 border-teal-200",   text: "text-teal-700",  Icon: Wrench,      label: "MFG"   },
@@ -10,8 +10,30 @@ const config: Record<RiskFlag, { bg: string; text: string; Icon: typeof Wrench; 
   complete: { bg: "bg-green-500 border-green-500", text: "text-white",     Icon: CheckCircle, label: "Ready" },
 };
 
-export function RiskBadge({ flag, showLabel = true }: { flag: RiskFlag; showLabel?: boolean }) {
-  const { bg, text, label, Icon } = config[flag];
+type RiskBadgeKind = "manufacturing" | "client_approval";
+
+const kindConfig: Record<RiskBadgeKind, Partial<Record<RiskFlag, { bg: string; text: string; Icon: typeof Wrench; label: string }>>> = {
+  manufacturing: {},
+  client_approval: {
+    red: {
+      bg: "bg-red-50 border-red-200",
+      text: "text-red-700",
+      Icon: UserCircle,
+      label: "Client Approval",
+    },
+  },
+};
+
+export function RiskBadge({
+  flag,
+  kind = "manufacturing",
+  showLabel = true,
+}: {
+  flag: RiskFlag;
+  kind?: RiskBadgeKind;
+  showLabel?: boolean;
+}) {
+  const { bg, text, label, Icon } = kindConfig[kind][flag] ?? config[flag];
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${bg} ${text}`}>
       <Icon size={13} weight="fill" />

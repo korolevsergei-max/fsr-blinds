@@ -35,7 +35,7 @@ export function UnitEscalationsPanel({
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.note}</p>
               </div>
-              <RiskBadge flag={item.riskFlag} />
+              <RiskBadge flag={item.riskFlag} kind={item.issueType} />
             </div>
           </div>
         ))}

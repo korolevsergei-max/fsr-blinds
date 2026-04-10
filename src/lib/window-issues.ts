@@ -7,6 +7,7 @@ export type UnitEscalationSummary = {
   windowId: string;
   windowLabel: string;
   riskFlag: RiskFlag;
+  issueType: "manufacturing" | "client_approval";
   note: string;
 };
 
@@ -38,6 +39,10 @@ export function getUnitEscalations(
       windowId: window.id,
       windowLabel: window.label,
       riskFlag: window.riskFlag,
+      issueType:
+        window.installed && window.riskFlag === "red"
+          ? "client_approval"
+          : "manufacturing",
       note: window.notes.trim() || describeRiskFlag(window.riskFlag),
     }))
     .sort((a, b) => {
