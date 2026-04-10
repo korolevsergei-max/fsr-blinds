@@ -112,31 +112,51 @@ export function FilterDropdown(props: FilterDropdownProps) {
         />
       </button>
 
-      <AnimatePresence>
-        {open && typeof document !== "undefined" && createPortal(
-          <div key="dd-wrap" className="relative z-[9999]">
-            <div
-              key="dd-backdrop"
-              className="fixed inset-0 z-40"
-              onClick={() => setOpen(false)}
-            />
-            <motion.div
-              key="dd-menu"
-              initial={{ opacity: 0, y: -4, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.97 }}
-              transition={{ duration: 0.15 }}
-              style={{ top: position.top, left: position.left, right: position.right }}
-              className="fixed z-50 min-w-[180px] max-h-72 overflow-y-auto overflow-x-hidden rounded-[var(--radius-lg)] border border-border bg-card py-1 shadow-[var(--shadow-md)]"
-            >
-              {options.map((option) => {
-                const isFirst = option.value === options[0]?.value;
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {open && (
+            <div key="dd-wrap" className="relative z-[9999]">
+              <div
+                key="dd-backdrop"
+                className="fixed inset-0 z-40"
+                onClick={() => setOpen(false)}
+              />
+              <motion.div
+                key="dd-menu"
+                initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                style={{ top: position.top, left: position.left, right: position.right }}
+                className="fixed z-50 min-w-[180px] max-h-72 overflow-y-auto overflow-x-hidden rounded-[var(--radius-lg)] border border-border bg-card py-1 shadow-[var(--shadow-md)]"
+              >
+                {options.map((option) => {
+                  const isFirst = option.value === options[0]?.value;
 
-                if (isMulti) {
-                  const p = props as MultiProps;
-                  // "All X" row — active when nothing selected
-                  if (isFirst) {
-                    const allActive = p.values.length === 0;
+                  if (isMulti) {
+                    const p = props as MultiProps;
+                    // "All X" row — active when nothing selected
+                    if (isFirst) {
+                      const allActive = p.values.length === 0;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleMulti(option.value)}
+                          className={[
+                            "w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs font-medium transition-colors",
+                            allActive
+                              ? "bg-emerald-50 text-accent"
+                              : "text-zinc-500 hover:bg-zinc-50",
+                          ].join(" ")}
+                        >
+                          <span>{option.label}</span>
+                          {allActive && <Check size={13} weight="bold" className="text-accent flex-shrink-0" />}
+                        </button>
+                      );
+                    }
+                    // Normal multi-select row
+                    const checked = p.values.includes(option.value);
                     return (
                       <button
                         key={option.value}
@@ -144,59 +164,41 @@ export function FilterDropdown(props: FilterDropdownProps) {
                         onClick={() => handleMulti(option.value)}
                         className={[
                           "w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs font-medium transition-colors",
-                          allActive
+                          checked
                             ? "bg-emerald-50 text-accent"
-                            : "text-zinc-500 hover:bg-zinc-50",
+                            : "text-zinc-700 hover:bg-zinc-50",
                         ].join(" ")}
                       >
                         <span>{option.label}</span>
-                        {allActive && <Check size={13} weight="bold" className="text-accent flex-shrink-0" />}
+                        {checked && <Check size={13} weight="bold" className="text-accent flex-shrink-0" />}
                       </button>
                     );
                   }
-                  // Normal multi-select row
-                  const checked = p.values.includes(option.value);
+
+                  // Single-select (original behavior)
+                  const p = props as SingleProps;
                   return (
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => handleMulti(option.value)}
+                      onClick={() => handleSingle(option.value)}
                       className={[
-                        "w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs font-medium transition-colors",
-                        checked
+                        "w-full px-3.5 py-2.5 text-left text-xs font-medium transition-colors",
+                        option.value === p.value
                           ? "bg-emerald-50 text-accent"
                           : "text-zinc-700 hover:bg-zinc-50",
                       ].join(" ")}
                     >
-                      <span>{option.label}</span>
-                      {checked && <Check size={13} weight="bold" className="text-accent flex-shrink-0" />}
+                      {option.label}
                     </button>
                   );
-                }
-
-                // Single-select (original behavior)
-                const p = props as SingleProps;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => handleSingle(option.value)}
-                    className={[
-                      "w-full px-3.5 py-2.5 text-left text-xs font-medium transition-colors",
-                      option.value === p.value
-                        ? "bg-emerald-50 text-accent"
-                        : "text-zinc-700 hover:bg-zinc-50",
-                    ].join(" ")}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </motion.div>
-          </div>,
-          document.body
-        )}
-      </AnimatePresence>
+                })}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
