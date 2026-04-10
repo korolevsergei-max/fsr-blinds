@@ -210,7 +210,7 @@ export function InstalledPhotoForm({
       <PageHeader
         title="Installed Photo"
         subtitle={`${windowItem.label} • ${room.name}`}
-        backHref={`${routeBasePath}/${id}/rooms/${roomId}/windows/new?edit=${windowItem.id}`}
+        backHref={`${routeBasePath}/${id}/rooms/${roomId}`}
       />
 
       <form onSubmit={onSubmit} className="flex flex-1 flex-col gap-6 px-5 py-5">

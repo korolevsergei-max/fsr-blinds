@@ -45,12 +45,8 @@ export function CreatedDateFilter({
     setOpen((current) => !current);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener("scroll", close, true);
-    return () => window.removeEventListener("scroll", close, true);
-  }, [open]);
+  // Scroll listener removed as it causes immediate close on subtle layout shifts
+  // or user scrolling inside the dropdown. The backdrop handles outside clicks.
 
   return (
     <>
