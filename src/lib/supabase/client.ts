@@ -35,8 +35,9 @@ function setCookieOnDocument(
   if (typeof document === "undefined") return;
 
   const parts: string[] = [`${encodeURIComponent(name)}=${encodeURIComponent(value)}`];
+  const path = options?.path?.trim() || "/";
 
-  if (options?.path) parts.push(`Path=${options.path}`);
+  parts.push(`Path=${path}`);
   if (options?.domain) parts.push(`Domain=${options.domain}`);
   if (typeof options?.maxAge === "number") parts.push(`Max-Age=${options.maxAge}`);
   if (options?.expires) {
