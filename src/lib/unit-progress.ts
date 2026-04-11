@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUnitMilestoneCoverageWithClient } from "@/lib/unit-milestones";
 import type { UnitStatus } from "@/lib/types";
+import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -37,12 +38,12 @@ export async function recomputeUnitStatus(
 export function deriveStatusFromCoverage(
   coverage: Awaited<ReturnType<typeof getUnitMilestoneCoverageWithClient>>
 ): UnitStatus {
-  if (coverage.totalWindows === 0) return "not_started";
-  if (coverage.allInstalled) return "installed";
-  if (coverage.allMeasured && coverage.allBracketed) return "measured_and_bracketed";
-  if (coverage.allMeasured) return "measured";
-  if (coverage.allBracketed) return "bracketed";
-  return "not_started";
+  return deriveUnitStatusFromCounts({
+    totalWindows: coverage.totalWindows,
+    measuredCount: coverage.measuredCount,
+    bracketedCount: coverage.bracketedCount,
+    installedCount: coverage.installedCount,
+  });
 }
 
 async function logStatusChange(
@@ -61,4 +62,3 @@ async function logStatusChange(
     created_at: new Date().toISOString(),
   });
 }
-

@@ -16,13 +16,14 @@ import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fi
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 
 export function InstalledPhotoForm({
   data,
   mediaItems,
   routeBasePath = "/installer/units",
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
   routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
@@ -33,10 +34,11 @@ export function InstalledPhotoForm({
   }>();
   const router = useRouter();
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
-
-  const unit = data.units.find((u) => u.id === id);
-  const room = data.rooms.find((r) => r.id === roomId);
-  const windowItem = data.windows.find((w) => w.id === windowId && w.roomId === roomId);
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const initialWindowItem = datasetData?.windows.find(
+    (w) => w.id === windowId && w.roomId === roomId
+  );
   const existingInstalled = mediaItems.find(
     (item) =>
       item.windowId === windowId &&
@@ -49,8 +51,8 @@ export function InstalledPhotoForm({
     existingInstalled?.publicUrl ?? null
   );
   const [photoOrientation, setPhotoOrientation] = useState<"portrait" | "landscape" | "square">("landscape");
-  const [riskFlag, setRiskFlag] = useState<RiskFlag>(windowItem?.riskFlag ?? "green");
-  const [notes, setNotes] = useState(windowItem?.notes ?? "");
+  const [riskFlag, setRiskFlag] = useState<RiskFlag>(initialWindowItem?.riskFlag ?? "green");
+  const [notes, setNotes] = useState(initialWindowItem?.notes ?? "");
   const [notesError, setNotesError] = useState("");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -58,9 +60,7 @@ export function InstalledPhotoForm({
   const [deleting, setDeleting] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [confirmOverrideOpen, setConfirmOverrideOpen] = useState(false);
-  const datasetCtx = useAppDatasetMaybe();
 
-  // mediaItems loads asynchronously — sync preview once it arrives
   useEffect(() => {
     if (existingInstalled?.publicUrl && !photoFile) {
       setPhotoPreview(existingInstalled.publicUrl);
@@ -77,6 +77,18 @@ export function InstalledPhotoForm({
     };
     probe.src = photoPreview;
   }, [photoPreview]);
+
+  useEffect(() => {
+    router.prefetch(`${routeBasePath}/${id}/rooms/${roomId}`);
+  }, [id, roomId, routeBasePath, router]);
+
+  if (!datasetData) {
+    return <div className="p-6 text-center text-muted">Window not found</div>;
+  }
+
+  const unit = datasetData.units.find((u) => u.id === id);
+  const room = datasetData.rooms.find((r) => r.id === roomId);
+  const windowItem = datasetData.windows.find((w) => w.id === windowId && w.roomId === roomId);
 
   if (!unit || !room || !windowItem) {
     return <div className="p-6 text-center text-muted">Window not found</div>;
@@ -118,7 +130,21 @@ export function InstalledPhotoForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
-        router.refresh();
+        datasetCtx?.patchData((prev) =>
+          reconcileUnitDerivedState(
+            {
+              ...prev,
+              windows: prev.windows.map((w) =>
+                w.id === windowItem.id ? { ...w, installed: false } : w
+              ),
+            },
+            unit.id,
+            {
+              unitStatus: result.unitStatus,
+              photoDelta: result.photoCountDelta ?? -1,
+            }
+          )
+        );
       } else {
         setError(result.error ?? "Failed to delete photo.");
       }
@@ -188,14 +214,29 @@ export function InstalledPhotoForm({
         }
 
         // Optimistically update context so the rooms page reflects installed=true immediately.
-        datasetCtx?.patchData((prev) => ({
-          ...prev,
-          windows: prev.windows.map((w) =>
-            w.id === windowItem.id
-              ? { ...w, installed: true, ...(overrideBracketing ? { bracketed: true } : {}), riskFlag, notes: notes.trim() }
-              : w
-          ),
-        }));
+        datasetCtx?.patchData((prev) =>
+          reconcileUnitDerivedState(
+            {
+              ...prev,
+              windows: prev.windows.map((w) =>
+                w.id === windowItem.id
+                  ? {
+                      ...w,
+                      installed: true,
+                      ...(overrideBracketing ? { bracketed: true } : {}),
+                      riskFlag,
+                      notes: notes.trim(),
+                    }
+                  : w
+              ),
+            },
+            unit.id,
+            {
+              unitStatus: result.unitStatus,
+              photoDelta: result.photoCountDelta ?? 0,
+            }
+          )
+        );
 
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       } catch {
@@ -288,7 +329,8 @@ export function InstalledPhotoForm({
                     src={photoPreview}
                     alt="Installed preview"
                     fill
-                    unoptimized
+                    sizes="(max-width: 640px) 100vw, 560px"
+                    unoptimized={photoPreview.startsWith("blob:")}
                     className="object-contain"
                   />
                 </div>
@@ -381,13 +423,18 @@ export function InstalledPhotoForm({
                 try {
                   const result = await undoWindowStage(windowItem.id, "installed");
                   if (result.ok) {
-                    datasetCtx?.patchData((prev) => ({
-                      ...prev,
-                      windows: prev.windows.map((w) =>
-                        w.id === windowItem.id ? { ...w, installed: false } : w
-                      ),
-                    }));
-                    router.refresh();
+                    datasetCtx?.patchData((prev) =>
+                      reconcileUnitDerivedState(
+                        {
+                          ...prev,
+                          windows: prev.windows.map((w) =>
+                            w.id === windowItem.id ? { ...w, installed: false } : w
+                          ),
+                        },
+                        unit.id,
+                        { unitStatus: result.unitStatus }
+                      )
+                    );
                   } else {
                     alert(`Failed to undo: ${result.error}`);
                   }

@@ -1,11 +1,17 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwner } from "@/lib/auth";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 import { emitNotification } from "@/lib/emit-notification";
+import {
+  revalidateAllPortalData,
+  revalidateBuildingRoutes,
+  revalidateClientRoutes,
+  revalidateManyUnitRoutes,
+  revalidateUnitRoutes,
+} from "@/app/actions/revalidation";
 import {
   NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
   NOTIF_COMPLETE_BY_DATE_CHANGED,
@@ -13,13 +19,13 @@ import {
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-function revalidateApp() {
-  revalidatePath("/management", "layout");
-  revalidatePath("/scheduler", "layout");
-  revalidatePath("/installer", "layout");
-}
-
 /** For scheduler callers: unit must match `loadSchedulerDataset` scope (assignments or team installer). */
+
+type UnitRouteMeta = {
+  id: string;
+  buildingId: string | null;
+  clientId: string | null;
+};
 
 async function logUnitActivity(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -40,6 +46,55 @@ async function logUnitActivity(
   });
 }
 
+async function loadUnitRouteMeta(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string
+): Promise<UnitRouteMeta | null> {
+  const { data } = await supabase
+    .from("units")
+    .select("id, building_id, client_id")
+    .eq("id", unitId)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    buildingId: data.building_id ?? null,
+    clientId: data.client_id ?? null,
+  };
+}
+
+async function loadUnitsRouteMeta(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitIds: string[]
+): Promise<UnitRouteMeta[]> {
+  if (unitIds.length === 0) return [];
+
+  const { data } = await supabase
+    .from("units")
+    .select("id, building_id, client_id")
+    .in("id", unitIds);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    buildingId: row.building_id ?? null,
+    clientId: row.client_id ?? null,
+  }));
+}
+
+async function loadBuildingClientId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  buildingId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("buildings")
+    .select("client_id")
+    .eq("id", buildingId)
+    .maybeSingle();
+  return data?.client_id ?? null;
+}
+
 export async function createClient_(
   name: string,
   contactName: string,
@@ -57,7 +112,7 @@ export async function createClient_(
       contact_phone: contactPhone.trim(),
     });
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateClientRoutes(id);
     return { ok: true, id };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create client" };
@@ -83,7 +138,7 @@ export async function updateClient(
       })
       .eq("id", clientId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateClientRoutes(clientId);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to update client" };
@@ -99,7 +154,7 @@ export async function deleteClient(clientId: string): Promise<ActionResult> {
       .delete()
       .eq("id", clientId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateClientRoutes(clientId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete client";
@@ -118,12 +173,13 @@ export async function updateBuilding(
   try {
     await requireOwner();
     const supabase = await createClient();
+    const clientId = await loadBuildingClientId(supabase, buildingId);
     const { error } = await supabase
       .from("buildings")
       .update({ name: name.trim(), address: address.trim() })
       .eq("id", buildingId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateBuildingRoutes(buildingId, clientId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to update building";
@@ -138,12 +194,13 @@ export async function deleteBuilding(buildingId: string): Promise<ActionResult> 
   try {
     await requireOwner();
     const supabase = await createClient();
+    const clientId = await loadBuildingClientId(supabase, buildingId);
     const { error } = await supabase
       .from("buildings")
       .delete()
       .eq("id", buildingId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateBuildingRoutes(buildingId, clientId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete building";
@@ -158,12 +215,13 @@ export async function deleteUnit(unitId: string): Promise<ActionResult> {
   try {
     await requireOwner();
     const supabase = await createClient();
+    const meta = await loadUnitRouteMeta(supabase, unitId);
     const { error } = await supabase
       .from("units")
       .delete()
       .eq("id", unitId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateUnitRoutes(unitId, meta ?? undefined);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete unit";
@@ -178,12 +236,13 @@ export async function bulkDeleteUnits(unitIds: string[]): Promise<ActionResult> 
   try {
     await requireOwner();
     const supabase = await createClient();
+    const unitsMeta = await loadUnitsRouteMeta(supabase, unitIds);
     const { error } = await supabase
       .from("units")
       .delete()
       .in("id", unitIds);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateManyUnitRoutes(unitsMeta);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to delete units";
@@ -223,7 +282,7 @@ export async function purgeAllClientData(typedConfirmation: string): Promise<Act
     const { error: clientsErr } = await admin.from("clients").delete().neq("id", "");
     if (clientsErr) return { ok: false, error: clientsErr.message };
 
-    revalidateApp();
+    revalidateAllPortalData();
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Purge failed";
@@ -249,7 +308,7 @@ export async function createBuilding(
       address: address.trim(),
     });
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateBuildingRoutes(id, clientId);
     return { ok: true, id };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create building" };
@@ -318,7 +377,7 @@ export async function createUnit(
     };
     await supabase.from("schedule_entries").insert(bracketEntry);
 
-    revalidateApp();
+    revalidateUnitRoutes(id, { buildingId, clientId });
     return { ok: true, id };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create unit" };
@@ -334,6 +393,7 @@ export async function updateUnit(
 ): Promise<ActionResult> {
   try {
     const supabase = await createClient();
+    const meta = await loadUnitRouteMeta(supabase, unitId);
     const { error } = await supabase
       .from("units")
       .update({
@@ -344,7 +404,7 @@ export async function updateUnit(
       })
       .eq("id", unitId);
     if (error) return { ok: false, error: error.message };
-    revalidateApp();
+    revalidateUnitRoutes(unitId, meta ?? undefined);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to update unit" };
@@ -358,6 +418,7 @@ export async function updateUnitCompleteByDate(
   try {
     const owner = await requireOwner();
     const supabase = await createClient();
+    const meta = await loadUnitRouteMeta(supabase, unitId);
 
     const nextDate = completeByDate || null;
     const { data: current } = await supabase
@@ -408,7 +469,7 @@ export async function updateUnitCompleteByDate(
       // ─────────────────────────────────────────────────────────────────────
     }
 
-    revalidateApp();
+    revalidateUnitRoutes(unitId, meta ?? undefined);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -501,7 +562,7 @@ export async function bulkImportUnits(
     existingNumbers.add(row.unitNumber.trim());
   }
 
-  revalidateApp();
+  revalidateBuildingRoutes(buildingId, clientId);
   return { created, skipped, errors };
 }
 
@@ -565,7 +626,8 @@ export async function assignUnitsToScheduler(
     });
     // ─────────────────────────────────────────────────────────────────────────
 
-    revalidateApp();
+    const unitsMeta = await loadUnitsRouteMeta(supabase, unitIds);
+    revalidateManyUnitRoutes(unitsMeta);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to assign units" };

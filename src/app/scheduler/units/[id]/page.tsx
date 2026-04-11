@@ -1,35 +1,18 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitSupplementalData, type UnitSupplementalData } from "@/app/actions/dataset-queries";
-import { EMPTY_MILESTONES } from "@/lib/unit-milestone-types";
+import { loadCachedUnitSupplementalData } from "@/lib/unit-route-data";
 import { SchedulerUnitDetail } from "./scheduler-unit-detail";
 
-export default function SchedulerUnitPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const { data } = useAppDataset();
-  const [supplemental, setSupplemental] = useState<UnitSupplementalData | null>(null);
-
-  const unit = data.units.find((u) => u.id === id);
-
-  useEffect(() => {
-    if (!unit) {
-      router.replace("/scheduler/units");
-      return;
-    }
-    fetchUnitSupplementalData(id).then(setSupplemental);
-  }, [id, unit, router]);
-
-  if (!unit) return null;
+export default async function SchedulerUnitPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supplemental = await loadCachedUnitSupplementalData(id);
 
   return (
     <SchedulerUnitDetail
-      data={data}
-      activityLog={supplemental?.activityLog ?? []}
-      milestones={supplemental?.milestones ?? EMPTY_MILESTONES}
+      activityLog={supplemental.activityLog}
+      milestones={supplemental.milestones}
     />
   );
 }

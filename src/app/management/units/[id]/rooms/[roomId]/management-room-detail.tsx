@@ -6,19 +6,22 @@ import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 export function ManagementRoomDetail({
   data,
   mediaItems,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const room = data.rooms.find((r) => r.id === roomId);
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const room = datasetData?.rooms.find((r) => r.id === roomId);
 
-  if (!unit || !room) {
+  if (!datasetData || !unit || !room) {
     return <div className="p-6 text-center text-muted">Room not found</div>;
   }
 
@@ -32,7 +35,7 @@ export function ManagementRoomDetail({
 
       <div className="flex-1 px-5 py-5 flex flex-col gap-5">
         <RoomWindowsView
-          data={data}
+          data={datasetData}
           mediaItems={mediaItems}
           roomId={roomId}
           getStageNavProps={(winId) => ({

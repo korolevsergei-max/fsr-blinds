@@ -10,7 +10,6 @@ export default function UnitsPage() {
     <UnitsList
       data={data}
       schedulers={data.schedulers}
-      unitSchedulerByUnit={data.unitSchedulerByUnit ?? {}}
       userRole={user.role}
     />
   );

@@ -200,7 +200,8 @@ export function RoomFinishedPhotos({
                           src={photo.publicUrl}
                           alt={photo.label ?? "Room photo"}
                           fill
-                          unoptimized
+                          sizes="(max-width: 640px) 30vw, 160px"
+                          unoptimized={photo.publicUrl.startsWith("blob:")}
                           className="object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                         />
                       </a>

@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -158,13 +159,15 @@ export function SchedulerUnitDetail({
   activityLog,
   milestones,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   activityLog: UnitActivityLog[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const rooms = getRoomsByUnit(data, id);
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const rooms = datasetData ? getRoomsByUnit(datasetData, id) : [];
 
   const today = new Date().toISOString().split("T")[0];
 

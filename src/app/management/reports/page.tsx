@@ -1,15 +1,18 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSelector } from "@/lib/dataset-context";
 import { StatusGridReport } from "./status-grid-report";
 
 export default function ReportsPage() {
-  const { data } = useAppDataset();
+  const units = useDatasetSelector((value) => value.data.units);
+  const clients = useDatasetSelector((value) => value.data.clients);
+  const buildings = useDatasetSelector((value) => value.data.buildings);
+
   return (
     <StatusGridReport
-      units={data.units}
-      clients={data.clients}
-      buildings={data.buildings}
+      units={units}
+      clients={clients}
+      buildings={buildings}
     />
   );
 }

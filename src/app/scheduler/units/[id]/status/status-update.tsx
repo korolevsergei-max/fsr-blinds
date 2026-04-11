@@ -10,17 +10,20 @@ import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 export function StatusUpdate({
   data,
   milestones,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   milestones: UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;

@@ -37,6 +37,7 @@ import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-mi
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the database",
@@ -196,7 +197,7 @@ export function ManagementUnitDetail({
   milestones,
   userRole,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   activityLog: UnitActivityLog[];
   mediaItems: UnitStageMediaItem[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
@@ -204,8 +205,11 @@ export function ManagementUnitDetail({
 }) {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const resolvedUserRole = userRole ?? (datasetCtx?.user.role as UserRole | undefined);
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
 
   const unitId = unit?.id;
   const unitCreatedAt = unit?.createdAt;
@@ -289,7 +293,7 @@ export function ManagementUnitDetail({
   }
 
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
-  const escalations = getUnitEscalations(data, unit.id);
+  const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
 
   return (
     <div className="flex flex-col">
@@ -317,7 +321,7 @@ export function ManagementUnitDetail({
                 Scheduler
               </Button>
             </Link>
-            {userRole === "owner" && (
+            {resolvedUserRole === "owner" && (
               <Button 
                 size="sm" 
                 variant="danger" 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowLeft } from "@phosphor-icons/react";
 
 interface PageHeaderProps {
@@ -19,20 +19,18 @@ export function PageHeader({
   actions,
   belowTitle,
 }: PageHeaderProps) {
-  const router = useRouter();
-
   return (
     <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border" suppressHydrationWarning>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 py-3 sm:py-4">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           {backHref && (
-            <button
-              onClick={() => router.push(backHref)}
+            <Link
+              href={backHref}
               aria-label="Go back"
               className="flex-shrink-0 flex items-center justify-center w-9 h-9 -ml-1 rounded-[var(--radius-md)] text-secondary hover:bg-surface hover:text-foreground transition-all duration-150 active:scale-[0.95]"
             >
               <ArrowLeft size={18} weight="bold" />
-            </button>
+            </Link>
           )}
           <div className="flex-1 min-w-0">
             <h1 className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-foreground truncate leading-snug">

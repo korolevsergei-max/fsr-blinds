@@ -27,11 +27,17 @@ import {
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type PatchFn = (updater: (prev: AppDataset) => AppDataset) => void;
+type LoaderKind = "full" | "scheduler" | "installer";
 
 type PgPayload<T = Record<string, unknown>> = {
   eventType: "INSERT" | "UPDATE" | "DELETE";
   new: T;
-  old: { id: string };
+  old: Partial<T> & { id?: string };
+};
+
+type SchedulerAssignmentRow = {
+  unit_id: string;
+  scheduler_id: string;
 };
 
 function upsert<T extends { id: string }>(arr: T[], item: T): T[] {
@@ -48,7 +54,56 @@ function remove<T extends { id: string }>(arr: T[], id: string): T[] {
   return arr.filter((x) => x.id !== id);
 }
 
-export function useRealtimeSync(patchData: PatchFn) {
+function getSchedulerLabels(prev: AppDataset, schedulerId: string) {
+  const schedulerName =
+    prev.schedulers.find((scheduler) => scheduler.id === schedulerId)?.name ??
+    prev.installers
+      .find((installer) => installer.id === `sch-${schedulerId}`)
+      ?.name?.replace(/^SC:\s*/, "") ??
+    null;
+
+  return {
+    schedulerName,
+    installerName: schedulerName ? `SC: ${schedulerName}` : null,
+  };
+}
+
+function applySchedulerAssignment(
+  prev: AppDataset,
+  unitId: string | undefined,
+  schedulerId: string | null
+): AppDataset {
+  if (!unitId) return prev;
+
+  let changed = false;
+  const labels = schedulerId ? getSchedulerLabels(prev, schedulerId) : null;
+
+  const units = prev.units.map((unit) => {
+    if (unit.id !== unitId) return unit;
+
+    changed = true;
+
+    return {
+      ...unit,
+      assignedSchedulerId: schedulerId,
+      assignedSchedulerName: labels?.schedulerName ?? null,
+      assignedInstallerId: schedulerId
+        ? `sch-${schedulerId}`
+        : unit.assignedInstallerId?.startsWith("sch-")
+          ? null
+          : unit.assignedInstallerId,
+      assignedInstallerName: schedulerId
+        ? labels?.installerName ?? unit.assignedInstallerName
+        : unit.assignedInstallerId?.startsWith("sch-")
+          ? null
+          : unit.assignedInstallerName,
+    };
+  });
+
+  return changed ? { ...prev, units } : prev;
+}
+
+export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
   const patchRef = useRef(patchData);
   useEffect(() => {
     patchRef.current = patchData;
@@ -57,6 +112,9 @@ export function useRealtimeSync(patchData: PatchFn) {
   useEffect(() => {
     const supabase = createClient();
     const channels: RealtimeChannel[] = [];
+    const shouldTrackMetaTables = loaderKind !== "installer";
+    const shouldTrackStaffLists = loaderKind === "full" || loaderKind === "scheduler";
+    const shouldTrackManufacturingLists = loaderKind === "full";
 
     function sub<Row>(
       table: string,
@@ -73,24 +131,33 @@ export function useRealtimeSync(patchData: PatchFn) {
       channels.push(ch);
     }
 
-    sub<ClientRow>("clients", (p) => {
-      patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, clients: remove(prev.clients, p.old.id) };
-        return { ...prev, clients: upsert(prev.clients, mapClient(p.new as ClientRow)) };
+    if (shouldTrackMetaTables) {
+      sub<ClientRow>("clients", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) {
+            return { ...prev, clients: remove(prev.clients, id) };
+          }
+          return { ...prev, clients: upsert(prev.clients, mapClient(p.new as ClientRow)) };
+        });
       });
-    });
 
-    sub<BuildingRow>("buildings", (p) => {
-      patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, buildings: remove(prev.buildings, p.old.id) };
-        return { ...prev, buildings: upsert(prev.buildings, mapBuilding(p.new as BuildingRow)) };
+      sub<BuildingRow>("buildings", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) {
+            return { ...prev, buildings: remove(prev.buildings, id) };
+          }
+          return { ...prev, buildings: upsert(prev.buildings, mapBuilding(p.new as BuildingRow)) };
+        });
       });
-    });
+    }
 
     sub<UnitRow>("units", (p) => {
       patchRef.current((prev) => {
-        if (p.eventType === "DELETE") {
-          const units = remove(prev.units, p.old.id);
+        const id = p.old.id;
+        if (p.eventType === "DELETE" && id) {
+          const units = remove(prev.units, id);
           return { ...prev, units, schedule: normalizeScheduleEntries(units, prev.schedule) };
         }
         const units = upsert(prev.units, mapUnit(p.new as UnitRow));
@@ -100,29 +167,37 @@ export function useRealtimeSync(patchData: PatchFn) {
 
     sub<RoomRow>("rooms", (p) => {
       patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, rooms: remove(prev.rooms, p.old.id) };
+        const id = p.old.id;
+        if (p.eventType === "DELETE" && id) return { ...prev, rooms: remove(prev.rooms, id) };
         return { ...prev, rooms: upsert(prev.rooms, mapRoom(p.new as RoomRow)) };
       });
     });
 
     sub<WindowRow>("windows", (p) => {
       patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, windows: remove(prev.windows, p.old.id) };
+        const id = p.old.id;
+        if (p.eventType === "DELETE" && id) return { ...prev, windows: remove(prev.windows, id) };
         return { ...prev, windows: upsert(prev.windows, mapWindow(p.new as WindowRow)) };
       });
     });
 
-    sub<InstallerRow>("installers", (p) => {
-      patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, installers: remove(prev.installers, p.old.id) };
-        return { ...prev, installers: upsert(prev.installers, mapInstaller(p.new as InstallerRow)) };
+    if (shouldTrackStaffLists) {
+      sub<InstallerRow>("installers", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) {
+            return { ...prev, installers: remove(prev.installers, id) };
+          }
+          return { ...prev, installers: upsert(prev.installers, mapInstaller(p.new as InstallerRow)) };
+        });
       });
-    });
+    }
 
     sub<ScheduleRow>("schedule_entries", (p) => {
       patchRef.current((prev) => {
-        if (p.eventType === "DELETE") {
-          const schedule = remove(prev.schedule, p.old.id);
+        const id = p.old.id;
+        if (p.eventType === "DELETE" && id) {
+          const schedule = remove(prev.schedule, id);
           return { ...prev, schedule };
         }
         const entry = mapSchedule(p.new as ScheduleRow);
@@ -130,19 +205,42 @@ export function useRealtimeSync(patchData: PatchFn) {
       });
     });
 
-    sub<CutterRow>("cutters", (p) => {
-      patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, cutters: remove(prev.cutters, p.old.id) };
-        return { ...prev, cutters: upsert(prev.cutters, mapCutter(p.new as CutterRow)) };
+    if (shouldTrackManufacturingLists) {
+      sub<CutterRow>("cutters", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) {
+            return { ...prev, cutters: remove(prev.cutters, id) };
+          }
+          return { ...prev, cutters: upsert(prev.cutters, mapCutter(p.new as CutterRow)) };
+        });
       });
-    });
+    }
 
-    sub<SchedulerRow>("schedulers", (p) => {
-      patchRef.current((prev) => {
-        if (p.eventType === "DELETE") return { ...prev, schedulers: remove(prev.schedulers, p.old.id) };
-        return { ...prev, schedulers: upsert(prev.schedulers, mapScheduler(p.new as SchedulerRow)) };
+    if (shouldTrackStaffLists) {
+      sub<SchedulerRow>("schedulers", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) {
+            return { ...prev, schedulers: remove(prev.schedulers, id) };
+          }
+          return { ...prev, schedulers: upsert(prev.schedulers, mapScheduler(p.new as SchedulerRow)) };
+        });
       });
-    });
+
+      sub<SchedulerAssignmentRow>("scheduler_unit_assignments", (p) => {
+        patchRef.current((prev) => {
+          if (p.eventType === "DELETE") {
+            return applySchedulerAssignment(prev, p.old.unit_id, null);
+          }
+          return applySchedulerAssignment(
+            prev,
+            (p.new as SchedulerAssignmentRow).unit_id,
+            (p.new as SchedulerAssignmentRow).scheduler_id
+          );
+        });
+      });
+    }
 
     // Re-fetch full dataset when tab returns to foreground after being hidden > 60s
     let hiddenAt = 0;
@@ -160,5 +258,5 @@ export function useRealtimeSync(patchData: PatchFn) {
       document.removeEventListener("visibilitychange", onVisibility);
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
-  }, []);
+  }, [loaderKind]);
 }

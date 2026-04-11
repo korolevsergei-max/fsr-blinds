@@ -9,20 +9,23 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 export function RoomDetail({
   data,
   mediaItems,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const room = data.rooms.find((r) => r.id === roomId);
-  const windowCount = data.windows.filter((w) => w.roomId === roomId).length;
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const room = datasetData?.rooms.find((r) => r.id === roomId);
+  const windowCount = datasetData?.windows.filter((w) => w.roomId === roomId).length ?? 0;
 
-  if (!unit || !room) {
+  if (!datasetData || !unit || !room) {
     return <div className="p-6 text-center text-muted">Room not found</div>;
   }
 
@@ -46,7 +49,7 @@ export function RoomDetail({
         </div>
 
         <RoomWindowsView
-          data={data}
+          data={datasetData}
           mediaItems={mediaItems}
           roomId={roomId}
           getEditHref={(winId) =>

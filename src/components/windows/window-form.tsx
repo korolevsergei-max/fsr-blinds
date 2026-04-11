@@ -28,6 +28,7 @@ import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fi
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
+import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -76,7 +77,7 @@ export function WindowForm({
   activityLog,
   routeBasePath = "/installer/units",
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   activityLog: UnitActivityLog[];
   routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
@@ -84,13 +85,14 @@ export function WindowForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
   const editId = searchParams.get("edit");
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
-  const unit = data.units.find((u) => u.id === id);
-  const room = data.rooms.find((r) => r.id === roomId);
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const room = datasetData?.rooms.find((r) => r.id === roomId);
   const existingWindow = editId
-    ? data.windows.find((w) => w.id === editId && w.roomId === roomId)
+    ? datasetData?.windows.find((w) => w.id === editId && w.roomId === roomId)
     : undefined;
   const windowHistory = existingWindow
     ? activityLog.filter((log) => {
@@ -172,11 +174,15 @@ export function WindowForm({
     probe.src = photoPreview;
   }, [photoPreview]);
 
+  useEffect(() => {
+    router.prefetch(`${routeBasePath}/${id}/rooms/${roomId}`);
+  }, [id, roomId, routeBasePath, router]);
+
   const validate = () => {
     const e: Record<string, string> = {};
     if (!label.trim()) e.label = "Window label is required";
     else {
-      const duplicate = data.windows.find(
+      const duplicate = datasetData?.windows.find(
         (w) => w.roomId === roomId &&
           w.label.trim().toLowerCase() === label.trim().toLowerCase() &&
           w.id !== existingWindow?.id
@@ -236,7 +242,23 @@ export function WindowForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
-        router.refresh();
+        datasetCtx?.patchData((prev) =>
+          reconcileUnitDerivedState(
+            {
+              ...prev,
+              windows: prev.windows.map((w) =>
+                w.id === existingWindow.id
+                  ? { ...w, photoUrl: null, measured: false, installed: false }
+                  : w
+              ),
+            },
+            unit.id,
+            {
+              unitStatus: result.unitStatus,
+              photoDelta: result.photoCountDelta ?? -1,
+            }
+          )
+        );
       } else {
         setFormError(result.error ?? "Failed to delete photo.");
       }
@@ -326,13 +348,17 @@ export function WindowForm({
             bracketed: existingWindow?.bracketed ?? false,
             installed: existingWindow?.installed ?? false,
           };
-          if (existingWindow) {
-            return {
-              ...prev,
-              windows: prev.windows.map((w) => w.id === wId ? windowData : w),
-            };
-          }
-          return { ...prev, windows: [...prev.windows, windowData] };
+          const next = existingWindow
+            ? {
+                ...prev,
+                windows: prev.windows.map((w) => (w.id === wId ? windowData : w)),
+              }
+            : { ...prev, windows: [...prev.windows, windowData] };
+
+          return reconcileUnitDerivedState(next, unit.id, {
+            unitStatus: result.unitStatus,
+            photoDelta: result.photoCountDelta ?? 0,
+          });
         });
       }
 
@@ -554,7 +580,9 @@ export function WindowForm({
                   src={photoPreview}
                   alt="Window measurement"
                   width={800}
-                  height={600} unoptimized
+                  height={600}
+                  sizes="(max-width: 640px) 100vw, 560px"
+                  unoptimized={photoPreview.startsWith("blob:")}
                   onLoad={(e) => {
                     const img = e.currentTarget;
                     if (img.naturalHeight > img.naturalWidth) {
@@ -675,13 +703,20 @@ export function WindowForm({
                 try {
                   const result = await undoWindowStage(existingWindow.id, "measured");
                   if (result.ok) {
-                    datasetCtx?.patchData((prev) => ({
-                      ...prev,
-                      windows: prev.windows.map((w) =>
-                        w.id === existingWindow.id ? { ...w, measured: false, installed: false } : w
-                      ),
-                    }));
-                    router.refresh();
+                    datasetCtx?.patchData((prev) =>
+                      reconcileUnitDerivedState(
+                        {
+                          ...prev,
+                          windows: prev.windows.map((w) =>
+                            w.id === existingWindow.id
+                              ? { ...w, measured: false, installed: false }
+                              : w
+                          ),
+                        },
+                        unit.id,
+                        { unitStatus: result.unitStatus }
+                      )
+                    );
                   } else {
                     alert(`Failed to undo: ${result.error}`);
                   }
@@ -708,6 +743,19 @@ export function WindowForm({
                 if (!confirmed) return;
                 const result = await deleteWindow(existingWindow.id, id);
                 if (result.ok) {
+                  datasetCtx?.patchData((prev) =>
+                    reconcileUnitDerivedState(
+                      {
+                        ...prev,
+                        windows: prev.windows.filter((w) => w.id !== existingWindow.id),
+                      },
+                      unit.id,
+                      {
+                        unitStatus: result.unitStatus,
+                        photoDelta: result.photoCountDelta ?? 0,
+                      }
+                    )
+                  );
                   router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
                 } else {
                   alert(`Failed to delete: ${result.error}`);

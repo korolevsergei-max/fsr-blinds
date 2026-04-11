@@ -155,6 +155,43 @@ export interface ManufacturingRoleSchedule {
   buckets: ManufacturingDayBucket[];
 }
 
+function getQueueWindowPriority(
+  role: "cutter" | "assembler",
+  item: ManufacturingWindowItem
+) {
+  if (item.issueStatus === "open") return 0;
+  if (role === "cutter") {
+    return item.productionStatus === "pending" ? 1 : 2;
+  }
+  if (item.productionStatus === "cut") return 1;
+  if (item.productionStatus === "assembled") return 2;
+  return 3;
+}
+
+function countQueueReadyWindows(
+  role: "cutter" | "assembler",
+  windows: ManufacturingWindowItem[]
+) {
+  return windows.filter((item) => getQueueWindowPriority(role, item) < 3).length;
+}
+
+function sortQueueWindows(
+  role: "cutter" | "assembler",
+  windows: ManufacturingWindowItem[]
+) {
+  return [...windows].sort((a, b) => {
+    const priorityDiff = getQueueWindowPriority(role, a) - getQueueWindowPriority(role, b);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const readyDateA = a.targetReadyDate ?? "9999-12-31";
+    const readyDateB = b.targetReadyDate ?? "9999-12-31";
+    if (readyDateA !== readyDateB) return readyDateA.localeCompare(readyDateB);
+
+    if (a.roomName !== b.roomName) return a.roomName.localeCompare(b.roomName);
+    return a.label.localeCompare(b.label);
+  });
+}
+
 function formatDateKey(date: Date): string {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -758,10 +795,7 @@ export async function loadManufacturingRoleSchedule(
   });
 
   const buckets: ManufacturingDayBucket[] = orderedKeys.map((key) => {
-    const bucketItems = (byBucket.get(key) ?? []).sort((a, b) => {
-      if (a.unitNumber !== b.unitNumber) return a.unitNumber.localeCompare(b.unitNumber);
-      return a.label.localeCompare(b.label);
-    });
+    const bucketItems = [...(byBucket.get(key) ?? [])];
     const unitsMap = new Map<string, ManufacturingUnitCard>();
     for (const item of bucketItems) {
       const existing = unitsMap.get(item.unitId);
@@ -786,6 +820,40 @@ export async function loadManufacturingRoleSchedule(
       }
     }
 
+    const units = [...unitsMap.values()]
+      .map((unit) => ({
+        ...unit,
+        blindTypeGroups: [...unit.blindTypeGroups]
+          .map((group) => ({
+            ...group,
+            windows: sortQueueWindows(role, group.windows),
+          }))
+          .sort((a, b) => {
+            const aReady = countQueueReadyWindows(role, a.windows);
+            const bReady = countQueueReadyWindows(role, b.windows);
+            if (aReady !== bReady) return bReady - aReady;
+
+            const aPriority = Math.min(...a.windows.map((window) => getQueueWindowPriority(role, window)));
+            const bPriority = Math.min(...b.windows.map((window) => getQueueWindowPriority(role, window)));
+            if (aPriority !== bPriority) return aPriority - bPriority;
+
+            return a.blindType.localeCompare(b.blindType);
+          }),
+      }))
+      .sort((a, b) => {
+        const aWindows = a.blindTypeGroups.flatMap((group) => group.windows);
+        const bWindows = b.blindTypeGroups.flatMap((group) => group.windows);
+        const aPriority = Math.min(...aWindows.map((window) => getQueueWindowPriority(role, window)));
+        const bPriority = Math.min(...bWindows.map((window) => getQueueWindowPriority(role, window)));
+        if (aPriority !== bPriority) return aPriority - bPriority;
+
+        const aReady = countQueueReadyWindows(role, aWindows);
+        const bReady = countQueueReadyWindows(role, bWindows);
+        if (aReady !== bReady) return bReady - aReady;
+
+        return a.unitNumber.localeCompare(b.unitNumber);
+      });
+
     return {
       date: key.startsWith("__") ? null : key,
       label:
@@ -803,7 +871,7 @@ export async function loadManufacturingRoleSchedule(
       capacity,
       scheduledCount: bucketItems.length,
       isOverCapacity: !key.startsWith("__") && bucketItems.length > capacity,
-      units: [...unitsMap.values()].sort((a, b) => a.unitNumber.localeCompare(b.unitNumber)),
+      units,
     };
   });
 

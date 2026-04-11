@@ -31,36 +31,58 @@ export function AppDatasetClientShell({
   children: ReactNode;
 }) {
   const loaderKind = portalDataLoader ?? "full";
+  const cacheKey = `${DATASET_CACHE_KEY}:${loaderKind}:${linkedEntityId ?? user.id}`;
 
   return (
     <AppDatasetProvider initialData={initialData} user={user} linkedEntityId={linkedEntityId}>
-      <RealtimeBridge loaderKind={loaderKind} />
+      <RealtimeBridge loaderKind={loaderKind} cacheKey={cacheKey} />
       {children}
     </AppDatasetProvider>
   );
 }
 
 /** Hooks into the dataset context to wire up Realtime, visibility refresh, and IDB persistence. */
-function RealtimeBridge({ loaderKind }: { loaderKind: "full" | "scheduler" | "installer" }) {
+function RealtimeBridge({
+  loaderKind,
+  cacheKey,
+}: {
+  loaderKind: "full" | "scheduler" | "installer";
+  cacheKey: string;
+}) {
   const { data, patchData, setData } = useAppDataset();
+  const cacheWriteTimerRef = useRef<number | null>(null);
 
   // Wire up Supabase Realtime subscriptions
-  useRealtimeSync(patchData);
+  useRealtimeSync(patchData, loaderKind);
 
   // On mount: seed from IDB if server provided empty data (offline / first-render fallback).
   useEffect(() => {
     if (data.units.length === 0 && data.clients.length === 0) {
-      getCachedData<typeof data>(DATASET_CACHE_KEY).then((cached) => {
+      getCachedData<typeof data>(cacheKey).then((cached) => {
         if (cached) setData(cached);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cacheKey]);
 
-  // Persist dataset to IDB whenever it changes (debounced via ref)
+  // Persist dataset to IDB whenever it changes, but debounce bursts of realtime patches.
   useEffect(() => {
-    setCachedData(DATASET_CACHE_KEY, data);
-  }, [data]);
+    if (cacheWriteTimerRef.current !== null) {
+      window.clearTimeout(cacheWriteTimerRef.current);
+    }
+
+    cacheWriteTimerRef.current = window.setTimeout(() => {
+      void setCachedData(cacheKey, data);
+      cacheWriteTimerRef.current = null;
+    }, 800);
+
+    return () => {
+      if (cacheWriteTimerRef.current !== null) {
+        window.clearTimeout(cacheWriteTimerRef.current);
+        cacheWriteTimerRef.current = null;
+      }
+    };
+  }, [cacheKey, data]);
 
   // Refresh when the tab returns from background after 60s+
   const setDataRef = useRef(setData);

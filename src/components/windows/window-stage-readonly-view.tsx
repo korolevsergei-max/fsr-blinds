@@ -8,13 +8,14 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { WindowStageNav } from "@/components/window-stage-nav";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 type StageMode = "before" | "bracketed" | "installed";
 
 type StageRouteBasePath = "/management/units" | "/scheduler/units";
 
 type WindowStageReadonlyViewProps = {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
   mode: StageMode;
   /** Read-only stage pages under management or scheduler. */
@@ -38,15 +39,19 @@ export function WindowStageReadonlyView({
   mode,
   routeBasePath = "/management/units",
 }: WindowStageReadonlyViewProps) {
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
   const params = useParams<{ id: string; roomId: string; windowId?: string }>();
   const searchParams = useSearchParams();
   const unitId = params.id;
   const roomId = params.roomId;
   const windowId = mode === "before" ? searchParams.get("edit") ?? "" : params.windowId ?? "";
 
-  const unit = data.units.find((u) => u.id === unitId);
-  const room = data.rooms.find((r) => r.id === roomId);
-  const windowItem = data.windows.find((w) => w.id === windowId && w.roomId === roomId);
+  const unit = datasetData?.units.find((u) => u.id === unitId);
+  const room = datasetData?.rooms.find((r) => r.id === roomId);
+  const windowItem = datasetData?.windows.find(
+    (w) => w.id === windowId && w.roomId === roomId
+  );
 
   const selectedPhotoUrl = useMemo(() => {
     if (!windowItem) return null;
@@ -95,6 +100,7 @@ export function WindowStageReadonlyView({
               src={selectedPhotoUrl}
               alt={`${windowItem.label} ${modeTitle} photo`}
               fill
+              sizes="(max-width: 640px) 100vw, 560px"
               className="select-none object-cover [-webkit-touch-callout:none]"
               draggable={false}
             />

@@ -1,20 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitMedia } from "@/app/actions/dataset-queries";
-import type { UnitStageMediaItem } from "@/lib/server-data";
+import { loadCachedUnitMedia } from "@/lib/unit-route-data";
 import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
-export default function SchedulerInstalledPhotoPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data } = useAppDataset();
-  const [mediaItems, setMediaItems] = useState<UnitStageMediaItem[]>([]);
-
-  useEffect(() => {
-    fetchUnitMedia(id).then(setMediaItems);
-  }, [id]);
-
-  return <InstalledPhotoForm data={data} mediaItems={mediaItems} routeBasePath="/scheduler/units" />;
+export default async function SchedulerInstalledPhotoPage({
+  params,
+}: {
+  params: Promise<{ id: string; roomId: string; windowId: string }>;
+}) {
+  const { id } = await params;
+  const mediaItems = await loadCachedUnitMedia(id);
+  return <InstalledPhotoForm mediaItems={mediaItems} routeBasePath="/scheduler/units" />;
 }

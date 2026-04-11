@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Plus, Envelope, Phone } from "@phosphor-icons/react";
-import type { AppDataset } from "@/lib/app-dataset";
+import type { Building, Client, Unit } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 
-export function ClientsList({ data }: { data: AppDataset }) {
-  const { clients, buildings, units } = data;
-
+export function ClientsList({
+  clients,
+  buildings,
+  units,
+}: {
+  clients: Client[];
+  buildings: Building[];
+  units: Unit[];
+}) {
   return (
     <div className="flex flex-col">
       <PageHeader

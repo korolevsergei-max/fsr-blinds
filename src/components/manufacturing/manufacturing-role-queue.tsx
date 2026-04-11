@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -20,6 +20,7 @@ import {
   shiftWindowManufacturingSchedule,
   undoWindowAssembly,
   undoWindowCut,
+  undoWindowQC,
 } from "@/app/actions/manufacturing-actions";
 import {
   markWindowAssembled,
@@ -48,6 +49,118 @@ function formatReadyDate(date: string | null) {
   return label ? `Ready by ${label}` : null;
 }
 
+type QueueActionResult = {
+  ok: boolean;
+  error?: string;
+  needsConfirmation?: boolean;
+  targetDate?: string;
+};
+
+function getWindowPriority(
+  role: "cutter" | "assembler",
+  item: ManufacturingWindowItem
+) {
+  if (item.issueStatus === "open") return 0;
+  if (role === "cutter") {
+    return item.productionStatus === "pending" ? 1 : 2;
+  }
+  if (item.productionStatus === "cut") return 1;
+  if (item.productionStatus === "assembled") return 2;
+  return 3;
+}
+
+function countActionReadyWindows(
+  role: "cutter" | "assembler",
+  windows: ManufacturingWindowItem[]
+) {
+  return windows.filter((item) => getWindowPriority(role, item) < 3).length;
+}
+
+function sortWindows(
+  role: "cutter" | "assembler",
+  windows: ManufacturingWindowItem[]
+) {
+  return [...windows].sort((a, b) => {
+    const priorityDiff = getWindowPriority(role, a) - getWindowPriority(role, b);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    const readyDateA = a.targetReadyDate ?? "9999-12-31";
+    const readyDateB = b.targetReadyDate ?? "9999-12-31";
+    if (readyDateA !== readyDateB) return readyDateA.localeCompare(readyDateB);
+
+    if (a.roomName !== b.roomName) return a.roomName.localeCompare(b.roomName);
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function normalizeSchedule(
+  schedule: ManufacturingRoleSchedule,
+  role: "cutter" | "assembler"
+): ManufacturingRoleSchedule {
+  return {
+    ...schedule,
+    buckets: schedule.buckets.map((bucket) => ({
+      ...bucket,
+      units: [...bucket.units]
+        .map((unit) => ({
+          ...unit,
+          blindTypeGroups: [...unit.blindTypeGroups]
+            .map((group) => ({
+              ...group,
+              windows: sortWindows(role, group.windows),
+            }))
+            .sort((a, b) => {
+              const aReady = countActionReadyWindows(role, a.windows);
+              const bReady = countActionReadyWindows(role, b.windows);
+              if (aReady !== bReady) return bReady - aReady;
+
+              const aPriority = Math.min(...a.windows.map((window) => getWindowPriority(role, window)));
+              const bPriority = Math.min(...b.windows.map((window) => getWindowPriority(role, window)));
+              if (aPriority !== bPriority) return aPriority - bPriority;
+
+              return a.blindType.localeCompare(b.blindType);
+            }),
+        }))
+        .sort((a, b) => {
+          const aWindows = a.blindTypeGroups.flatMap((group) => group.windows);
+          const bWindows = b.blindTypeGroups.flatMap((group) => group.windows);
+          const aPriority = Math.min(...aWindows.map((window) => getWindowPriority(role, window)));
+          const bPriority = Math.min(...bWindows.map((window) => getWindowPriority(role, window)));
+          if (aPriority !== bPriority) return aPriority - bPriority;
+
+          const aReady = countActionReadyWindows(role, aWindows);
+          const bReady = countActionReadyWindows(role, bWindows);
+          if (aReady !== bReady) return bReady - aReady;
+
+          return a.unitNumber.localeCompare(b.unitNumber);
+        }),
+    })),
+  };
+}
+
+function updateWindowInSchedule(
+  schedule: ManufacturingRoleSchedule,
+  role: "cutter" | "assembler",
+  windowId: string,
+  updater: (item: ManufacturingWindowItem) => ManufacturingWindowItem
+) {
+  const nextSchedule: ManufacturingRoleSchedule = {
+    ...schedule,
+    buckets: schedule.buckets.map((bucket) => ({
+      ...bucket,
+      units: bucket.units.map((unit) => ({
+        ...unit,
+        blindTypeGroups: unit.blindTypeGroups.map((group) => ({
+          ...group,
+          windows: group.windows.map((item) => (item.windowId === windowId ? updater(item) : item)),
+        })),
+      })),
+    })),
+  };
+
+  return normalizeSchedule(nextSchedule, role);
+}
+
 export function ManufacturingRoleQueue({
   role,
   schedule,
@@ -60,20 +173,49 @@ export function ManufacturingRoleQueue({
   const router = useRouter();
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
+
+  useEffect(() => {
+    setLocalSchedule(normalizeSchedule(schedule, role));
+  }, [role, schedule]);
 
   const runWindowAction = (
     windowId: string,
-    task: () => Promise<{ ok: boolean; error?: string }>
+    task: () => Promise<QueueActionResult>,
+    options?: {
+      optimisticUpdate?: (current: ManufacturingRoleSchedule) => ManufacturingRoleSchedule;
+      refreshOnSuccess?: boolean;
+    }
   ) => {
+    const previousSchedule = localSchedule;
+    if (options?.optimisticUpdate) {
+      setLocalSchedule((current) => options.optimisticUpdate?.(current) ?? current);
+    }
+
     setBusyWindowId(windowId);
     startTransition(async () => {
       const result = await task();
       if (!result.ok && result.error) {
+        if (options?.optimisticUpdate) {
+          setLocalSchedule(previousSchedule);
+        }
         globalThis.window.alert(result.error);
         setBusyWindowId(null);
         return;
       }
-      router.refresh();
+
+      if (!result.ok) {
+        if (options?.optimisticUpdate) {
+          setLocalSchedule(previousSchedule);
+        }
+        setBusyWindowId(null);
+        return;
+      }
+
+      if (options?.refreshOnSuccess) {
+        router.refresh();
+      }
+
       setBusyWindowId(null);
     });
   };
@@ -111,6 +253,20 @@ export function ManufacturingRoleQueue({
         );
       }
       return firstAttempt;
+    }, { refreshOnSuccess: true });
+  };
+
+  const handleOpenIssue = (item: ManufacturingWindowItem) => {
+    const reason = globalThis.window.prompt("Why are you opening an issue?");
+    if (!reason) return;
+
+    runWindowAction(item.windowId, () => markWindowManufacturingIssue(item.windowId, reason), {
+      optimisticUpdate: (current) =>
+        updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+          ...currentItem,
+          issueStatus: "open",
+          issueReason: reason,
+        })),
     });
   };
 
@@ -134,14 +290,14 @@ export function ManufacturingRoleQueue({
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <SummaryCard label="Today" value={schedule.todayCount} tone="emerald" />
-        <SummaryCard label="Next day" value={schedule.tomorrowCount} tone="blue" />
-        <SummaryCard label="Issues" value={schedule.issueCount} tone="amber" />
-        <SummaryCard label="Unscheduled" value={schedule.unscheduledCount} tone="zinc" />
+        <SummaryCard label="Today" value={localSchedule.todayCount} tone="emerald" />
+        <SummaryCard label="Next day" value={localSchedule.tomorrowCount} tone="blue" />
+        <SummaryCard label="Issues" value={localSchedule.issueCount} tone="amber" />
+        <SummaryCard label="Unscheduled" value={localSchedule.unscheduledCount} tone="zinc" />
       </div>
 
       <div className="space-y-4">
-        {schedule.buckets.map((bucket) => (
+        {localSchedule.buckets.map((bucket) => (
           <section
             key={`${bucket.label}-${bucket.date ?? "special"}`}
             className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_18px_54px_rgba(15,23,42,0.05)]"
@@ -251,49 +407,92 @@ export function ManufacturingRoleQueue({
                                           onClick={() =>
                                             runWindowAction(item.windowId, () =>
                                               resolveWindowManufacturingIssue(item.windowId)
-                                            )
+                                            , {
+                                              optimisticUpdate: (current) =>
+                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                  ...currentItem,
+                                                  issueStatus: "resolved",
+                                                })),
+                                            })
                                           }
                                         />
                                       ) : role === "cutter" ? (
-                                        <>
-                                          <ActionButton
-                                            label="Mark cut"
-                                            tone="primary"
-                                            busy={busy}
-                                            onClick={() =>
-                                              runWindowAction(item.windowId, () =>
-                                                markWindowCut(item.windowId)
-                                              )
-                                            }
-                                          />
-                                          <ActionButton
-                                            label="Issue"
-                                            tone="warning"
-                                            busy={busy}
-                                            onClick={() =>
-                                              runWindowAction(item.windowId, async () => {
-                                                const reason = globalThis.window.prompt("Why are you opening an issue?");
-                                                if (!reason) return { ok: false, error: "Issue reason is required." };
-                                                return markWindowManufacturingIssue(item.windowId, reason);
-                                              })
-                                            }
-                                          />
-                                          <ActionButton
-                                            label="Move earlier"
-                                            tone="secondary"
-                                            busy={busy}
-                                            onClick={() => handleMove(item, "earlier")}
-                                          />
-                                          <ActionButton
-                                            label="Move later"
-                                            tone="secondary"
-                                            busy={busy}
-                                            onClick={() => handleMove(item, "later")}
-                                          />
-                                        </>
+                                        item.productionStatus === "pending" ? (
+                                          <>
+                                            <ActionButton
+                                              label="Mark cut"
+                                              tone="primary"
+                                              busy={busy}
+                                              onClick={() =>
+                                                runWindowAction(item.windowId, () =>
+                                                  markWindowCut(item.windowId)
+                                                , {
+                                                  optimisticUpdate: (current) =>
+                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                      ...currentItem,
+                                                      productionStatus: "cut",
+                                                    })),
+                                                })
+                                              }
+                                            />
+                                            <ActionButton
+                                              label="Issue"
+                                              tone="warning"
+                                              busy={busy}
+                                              onClick={() => handleOpenIssue(item)}
+                                            />
+                                            <ActionButton
+                                              label="Move earlier"
+                                              tone="secondary"
+                                              busy={busy}
+                                              onClick={() => handleMove(item, "earlier")}
+                                            />
+                                            <ActionButton
+                                              label="Move later"
+                                              tone="secondary"
+                                              busy={busy}
+                                              onClick={() => handleMove(item, "later")}
+                                            />
+                                          </>
+                                        ) : (
+                                          <>
+                                            <StatusChip
+                                              label="Cut complete"
+                                              tone="success"
+                                              icon={<CheckCircle size={13} weight="fill" />}
+                                            />
+                                            <ActionButton
+                                              label="Issue"
+                                              tone="secondary"
+                                              busy={false}
+                                              disabled
+                                              onClick={() => undefined}
+                                            />
+                                            <ActionButton
+                                              label="Move earlier"
+                                              tone="secondary"
+                                              busy={false}
+                                              disabled
+                                              onClick={() => undefined}
+                                            />
+                                            <ActionButton
+                                              label="Move later"
+                                              tone="secondary"
+                                              busy={false}
+                                              disabled
+                                              onClick={() => undefined}
+                                            />
+                                          </>
+                                        )
                                       ) : (
                                         <>
-                                          {item.productionStatus === "assembled" ? (
+                                          {item.productionStatus === "qc_approved" ? (
+                                            <StatusChip
+                                              label="QC approved"
+                                              tone="success"
+                                              icon={<CheckCircle size={13} weight="fill" />}
+                                            />
+                                          ) : item.productionStatus === "assembled" ? (
                                             <ActionButton
                                               label="Approve QC"
                                               tone="success"
@@ -301,7 +500,13 @@ export function ManufacturingRoleQueue({
                                               onClick={() =>
                                                 runWindowAction(item.windowId, () =>
                                                   markWindowQCApproved(item.windowId)
-                                                )
+                                                , {
+                                                  optimisticUpdate: (current) =>
+                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                      ...currentItem,
+                                                      productionStatus: "qc_approved",
+                                                    })),
+                                                })
                                               }
                                             />
                                           ) : item.productionStatus === "cut" ? (
@@ -312,7 +517,13 @@ export function ManufacturingRoleQueue({
                                               onClick={() =>
                                                 runWindowAction(item.windowId, () =>
                                                   markWindowAssembled(item.windowId)
-                                                )
+                                                , {
+                                                  optimisticUpdate: (current) =>
+                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                      ...currentItem,
+                                                      productionStatus: "assembled",
+                                                    })),
+                                                })
                                               }
                                             />
                                           ) : (
@@ -321,31 +532,28 @@ export function ManufacturingRoleQueue({
                                           <ActionButton
                                             label="Issue"
                                             tone="warning"
-                                            busy={busy}
-                                            onClick={() =>
-                                              runWindowAction(item.windowId, async () => {
-                                                const reason = globalThis.window.prompt("Why are you opening an issue?");
-                                                if (!reason) return { ok: false, error: "Issue reason is required." };
-                                                return markWindowManufacturingIssue(item.windowId, reason);
-                                              })
-                                            }
+                                            busy={item.productionStatus === "qc_approved" ? false : busy}
+                                            disabled={item.productionStatus === "qc_approved"}
+                                            onClick={() => handleOpenIssue(item)}
                                           />
                                           <ActionButton
                                             label="Move earlier"
                                             tone="secondary"
-                                            busy={busy}
+                                            busy={item.productionStatus === "qc_approved" ? false : busy}
+                                            disabled={item.productionStatus === "qc_approved"}
                                             onClick={() => handleMove(item, "earlier")}
                                           />
                                           <ActionButton
                                             label="Move later"
                                             tone="secondary"
-                                            busy={busy}
+                                            busy={item.productionStatus === "qc_approved" ? false : busy}
+                                            disabled={item.productionStatus === "qc_approved"}
                                             onClick={() => handleMove(item, "later")}
                                           />
                                         </>
                                       )}
 
-                                      {role === "cutter" && item.productionStatus !== "pending" && (
+                                      {role === "cutter" && item.productionStatus === "cut" && (
                                         <ActionButton
                                           label="Undo cut"
                                           tone="ghost"
@@ -353,7 +561,13 @@ export function ManufacturingRoleQueue({
                                           onClick={() =>
                                             runWindowAction(item.windowId, () =>
                                               undoWindowCut(item.windowId)
-                                            )
+                                            , {
+                                              optimisticUpdate: (current) =>
+                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                  ...currentItem,
+                                                  productionStatus: "pending",
+                                                })),
+                                            })
                                           }
                                         />
                                       )}
@@ -366,7 +580,32 @@ export function ManufacturingRoleQueue({
                                           onClick={() =>
                                             runWindowAction(item.windowId, () =>
                                               undoWindowAssembly(item.windowId)
-                                            )
+                                            , {
+                                              optimisticUpdate: (current) =>
+                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                  ...currentItem,
+                                                  productionStatus: "cut",
+                                                })),
+                                            })
+                                          }
+                                        />
+                                      )}
+
+                                      {role === "assembler" && item.productionStatus === "qc_approved" && (
+                                        <ActionButton
+                                          label="Undo QC"
+                                          tone="ghost"
+                                          busy={busy}
+                                          onClick={() =>
+                                            runWindowAction(item.windowId, () =>
+                                              undoWindowQC(item.windowId)
+                                            , {
+                                              optimisticUpdate: (current) =>
+                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                  ...currentItem,
+                                                  productionStatus: "assembled",
+                                                })),
+                                            })
                                           }
                                         />
                                       )}
@@ -400,11 +639,13 @@ function ActionButton({
   label,
   tone,
   busy,
+  disabled = false,
   onClick,
 }: {
   label: string;
   tone: "primary" | "secondary" | "warning" | "success" | "ghost";
   busy: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   const toneClasses = {
@@ -422,11 +663,11 @@ function ActionButton({
 
   return (
     <button
-      disabled={busy}
+      disabled={busy || disabled}
       onClick={onClick}
       className={[
         "rounded-full border px-3 py-2 text-[12px] font-semibold transition-all",
-        "active:scale-[0.98] disabled:opacity-50",
+        "active:scale-[0.98] disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none",
         toneClasses[tone],
       ].join(" ")}
     >
@@ -438,16 +679,20 @@ function ActionButton({
 function StatusChip({
   label,
   tone,
+  icon,
 }: {
   label: string;
-  tone: "muted";
+  tone: "muted" | "success";
+  icon?: ReactNode;
 }) {
   const toneClasses = {
     muted: "bg-zinc-100 text-zinc-600",
+    success: "bg-emerald-50 text-emerald-700",
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-2 text-[12px] font-semibold ${toneClasses[tone]}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-[12px] font-semibold ${toneClasses[tone]}`}>
+      {icon}
       {label}
     </span>
   );

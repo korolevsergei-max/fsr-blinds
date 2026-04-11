@@ -25,6 +25,10 @@ import {
   NOTIF_UNIT_ESCALATION,
   NOTIF_UNIT_PROGRESS_UPDATE,
 } from "@/lib/notification-types";
+import {
+  revalidateManyUnitRoutes,
+  revalidateUnitRoutes,
+} from "@/app/actions/revalidation";
 
 const BUCKET = "fsr-media";
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB hard safety cap
@@ -64,7 +68,7 @@ function validateIncomingImageFile(
     fieldLabel?: string;
     maxBytes?: number;
   } = {}
-): ActionResult | null {
+): { ok: false; error: string } | null {
   if (!(file instanceof File) || file.size <= 0) {
     return { ok: false, error: `${fieldLabel} is required.` };
   }
@@ -102,25 +106,13 @@ function removeUnsupportedBlindSizeColumns(
   return { payload: next, removedAny };
 }
 
-function revalidateApp() {
-  revalidatePath("/management", "layout");
-  revalidatePath("/scheduler", "layout");
-  revalidatePath("/installer", "layout");
-}
-
 /**
  * Targeted revalidation for unit-specific mutations (window/room CRUD, photos, status).
  * Only invalidates the affected unit's pages + the list pages that show unit counts/status.
  * Much cheaper than revalidateApp() which busts the entire layout cache.
  */
 function revalidateUnit(unitId: string) {
-  // Specific unit detail pages across all portals
-  revalidatePath(`/management/units/${unitId}`);
-  revalidatePath(`/scheduler/units/${unitId}`);
-  revalidatePath(`/installer/units/${unitId}`);
-  // List pages show unit status/window counts so they need a refresh too
-  revalidatePath("/management/units");
-  revalidatePath("/scheduler/units");
+  revalidateUnitRoutes(unitId);
 }
 
 function getPhaseForStage(stage: UnitPhotoStage): "bracketing" | "installation" {
@@ -202,6 +194,39 @@ async function refreshUnitAggregates(
 }
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+type UnitMutationSuccess = {
+  ok: true;
+  unitStatus: UnitStatus;
+  roomId?: string;
+  windowId?: string;
+  photoUrl?: string | null;
+  photoCountDelta?: number;
+};
+
+type UnitMutationResult = UnitMutationSuccess | { ok: false; error: string };
+
+async function finalizeUnitMutation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string,
+  roomIds: string[] = []
+): Promise<UnitStatus> {
+  for (const roomId of [...new Set(roomIds.filter(Boolean))]) {
+    await refreshRoomAggregates(supabase, roomId);
+  }
+
+  await refreshUnitAggregates(supabase, unitId);
+  await recomputeUnitStatus(supabase, unitId);
+
+  const { data: unit } = await supabase
+    .from("units")
+    .select("status")
+    .eq("id", unitId)
+    .single();
+
+  revalidateUnit(unitId);
+  return (unit?.status as UnitStatus | undefined) ?? "not_started";
+}
 
 async function resolveInstallerName(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -554,7 +579,9 @@ export async function bulkAssignUnits(
     });
     // ─────────────────────────────────────────────────────────────────────────
 
-    revalidateApp();
+    revalidateManyUnitRoutes(
+      scopedUnitIds.map((id) => ({ id }))
+    );
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -817,7 +844,7 @@ export async function updateUnitAssignment(
     });
     // ─────────────────────────────────────────────────────────────────────────
 
-    revalidateApp();
+    revalidateUnitRoutes(unitId);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -1077,7 +1104,7 @@ export async function deleteRoom(
 export async function deleteWindow(
   windowId: string,
   unitId: string
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     if (!windowId || !unitId) {
       return { ok: false, error: "Missing window or unit." };
@@ -1097,33 +1124,46 @@ export async function deleteWindow(
       return { ok: false, error: "Window does not belong to this unit." };
     }
 
+    const { count: deletedMediaCount } = await supabase
+      .from("media_uploads")
+      .select("*", { count: "exact", head: true })
+      .eq("window_id", windowId);
+
     // Delete associated media uploads first
     await supabase.from("media_uploads").delete().eq("window_id", windowId);
 
-    const { data: winRow } = await supabase
-      .from("windows")
-      .select("label, blind_type, room_id")
-      .eq("id", windowId)
-      .single();
+    const [{ data: winRow }, { data: unitRow }] = await Promise.all([
+      supabase
+        .from("windows")
+        .select("label, blind_type, room_id")
+        .eq("id", windowId)
+        .single(),
+      supabase
+        .from("units")
+        .select("assigned_installer_name, status")
+        .eq("id", unitId)
+        .single(),
+    ]);
 
     const { error } = await supabase.from("windows").delete().eq("id", windowId);
     if (error) {
       return { ok: false, error: error.message };
     }
 
+    const prevStatus = (unitRow?.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [
+      winRow?.room_id ?? "",
+    ]);
+
     const capturedWinRow = winRow;
+    const actorName = unitRow?.assigned_installer_name ?? "Installer";
     after(async () => {
       const db = createAdminClient();
-      const { data: unitRow } = await db
-        .from("units")
-        .select("assigned_installer_name")
-        .eq("id", unitId)
-        .single();
       await logUnitActivity(
         db,
         unitId,
         "installer",
-        unitRow?.assigned_installer_name ?? "Installer",
+        actorName,
         "window_deleted",
         {
           windowId,
@@ -1132,11 +1172,36 @@ export async function deleteWindow(
           roomId: capturedWinRow?.room_id,
         }
       );
-      await refreshUnitAggregates(db, unitId);
-      await recomputeUnitStatus(db, unitId);
-      revalidateUnit(unitId);
+      if (unitStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(db, unitId);
+        if (schedulerId) {
+          const progressTitles: Record<string, string> = {
+            measured: "All windows measured",
+            bracketed: "All windows bracketed",
+            measured_and_bracketed: "All windows measured & bracketed",
+            installed: "All windows installed",
+          };
+          const title = progressTitles[unitStatus];
+          if (title) {
+            await emitNotification({
+              recipientRole: "scheduler",
+              recipientId: schedulerId,
+              type: NOTIF_UNIT_PROGRESS_UPDATE,
+              title,
+              body: `Unit status updated to "${unitStatus}".`,
+              relatedUnitId: unitId,
+            });
+          }
+        }
+      }
     });
-    return { ok: true };
+    return {
+      ok: true,
+      windowId,
+      roomId: winRow?.room_id ?? undefined,
+      unitStatus,
+      photoCountDelta: -(deletedMediaCount ?? 0),
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -1145,7 +1210,7 @@ export async function deleteWindow(
 
 export async function createWindowWithPhoto(
   formData: FormData
-): Promise<ActionResult & { windowId?: string; roomId?: string; photoUrl?: string | null }> {
+): Promise<UnitMutationResult> {
   try {
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
@@ -1309,20 +1374,22 @@ export async function createWindowWithPhoto(
       }
     }
 
-    // Bust the cache immediately so the next navigation shows fresh data.
-    revalidateUnit(unitId);
+    const { data: unit } = await supabase
+      .from("units")
+      .select("assigned_installer_name, status")
+      .eq("id", unitId)
+      .single();
+    const prevStatus = (unit?.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
+    const actorName = unit?.assigned_installer_name ?? "Installer";
+
     after(async () => {
       const db = createAdminClient();
-      const { data: unit } = await db
-        .from("units")
-        .select("assigned_installer_name, status")
-        .eq("id", unitId)
-        .single();
       await logUnitActivity(
         db,
         unitId,
         "installer",
-        unit?.assigned_installer_name ?? "Installer",
+        actorName,
         "window_created",
         {
           roomId,
@@ -1336,10 +1403,6 @@ export async function createWindowWithPhoto(
           hasPhoto: !!publicUrl,
         }
       );
-      await refreshRoomAggregates(db, roomId);
-      await refreshUnitAggregates(db, unitId);
-      const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(db, unitId);
 
       // Escalation alert to scheduler when window has yellow/red flag
       if (riskFlag === "yellow" || riskFlag === "red") {
@@ -1356,14 +1419,7 @@ export async function createWindowWithPhoto(
         }
       }
 
-      // Progress notification on status milestone change
-      const { data: updated } = await db
-        .from("units")
-        .select("status")
-        .eq("id", unitId)
-        .single();
-      const newStatus = updated?.status ?? prevStatus;
-      if (newStatus !== prevStatus) {
+      if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
@@ -1372,23 +1428,28 @@ export async function createWindowWithPhoto(
             measured_and_bracketed: "All windows measured & bracketed",
             installed: "All windows installed",
           };
-          const title = progressTitles[newStatus];
+          const title = progressTitles[unitStatus];
           if (title) {
             await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
               title,
-              body: `Unit status updated to "${newStatus}".`,
+              body: `Unit status updated to "${unitStatus}".`,
               relatedUnitId: unitId,
             });
           }
         }
       }
-
-      revalidateUnit(unitId);
     });
-    return { ok: true, windowId, roomId, photoUrl: publicUrl };
+    return {
+      ok: true,
+      unitStatus,
+      windowId,
+      roomId,
+      photoUrl: publicUrl,
+      photoCountDelta: publicUrl ? 1 : 0,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -1397,7 +1458,7 @@ export async function createWindowWithPhoto(
 
 export async function updateWindowWithOptionalPhoto(
   formData: FormData
-): Promise<ActionResult & { windowId?: string; roomId?: string; photoUrl?: string | null }> {
+): Promise<UnitMutationResult> {
   try {
     const windowId = String(formData.get("windowId") ?? "");
     const unitId = String(formData.get("unitId") ?? "");
@@ -1538,7 +1599,7 @@ export async function updateWindowWithOptionalPhoto(
     }
 
     if (publicUrl && storagePath) {
-      await supabase.from("media_uploads").insert({
+      const { error: mediaInsertError } = await supabase.from("media_uploads").insert({
         id: `med-${crypto.randomUUID()}`,
         storage_path: storagePath,
         public_url: publicUrl,
@@ -1550,22 +1611,28 @@ export async function updateWindowWithOptionalPhoto(
         window_id: windowId,
         label: `${label} (updated)`,
       });
+      if (mediaInsertError) {
+        await supabase.storage.from(BUCKET).remove([storagePath]);
+        return { ok: false, error: mediaInsertError.message };
+      }
     }
 
-    // Bust the cache immediately so the next navigation shows fresh data.
-    revalidateUnit(unitId);
+    const { data: unit } = await supabase
+      .from("units")
+      .select("assigned_installer_name, status")
+      .eq("id", unitId)
+      .single();
+    const prevStatus = (unit?.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
+    const actorName = unit?.assigned_installer_name ?? "Installer";
+
     after(async () => {
       const db = createAdminClient();
-      const { data: unit } = await db
-        .from("units")
-        .select("assigned_installer_name, status")
-        .eq("id", unitId)
-        .single();
       await logUnitActivity(
         db,
         unitId,
         "installer",
-        unit?.assigned_installer_name ?? "Installer",
+        actorName,
         "window_updated",
         {
           roomId,
@@ -1576,10 +1643,6 @@ export async function updateWindowWithOptionalPhoto(
           replacedPhoto: Boolean(publicUrl),
         }
       );
-      await refreshRoomAggregates(db, roomId);
-      await refreshUnitAggregates(db, unitId);
-      const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(db, unitId);
 
       // Escalation alert to scheduler when window flag is yellow/red
       if (riskFlag === "yellow" || riskFlag === "red") {
@@ -1596,14 +1659,7 @@ export async function updateWindowWithOptionalPhoto(
         }
       }
 
-      // Progress notification on status milestone change
-      const { data: updatedUnit } = await db
-        .from("units")
-        .select("status")
-        .eq("id", unitId)
-        .single();
-      const newStatus = updatedUnit?.status ?? prevStatus;
-      if (newStatus !== prevStatus) {
+      if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
@@ -1612,23 +1668,28 @@ export async function updateWindowWithOptionalPhoto(
             measured_and_bracketed: "All windows measured & bracketed",
             installed: "All windows installed",
           };
-          const title = progressTitles[newStatus];
+          const title = progressTitles[unitStatus];
           if (title) {
             await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
               title,
-              body: `Unit status updated to "${newStatus}".`,
+              body: `Unit status updated to "${unitStatus}".`,
               relatedUnitId: unitId,
             });
           }
         }
       }
-
-      revalidateUnit(unitId);
     });
-    return { ok: true, windowId, roomId, photoUrl: publicUrl ?? null };
+    return {
+      ok: true,
+      unitStatus,
+      windowId,
+      roomId,
+      photoUrl: publicUrl ?? null,
+      photoCountDelta: publicUrl ? 1 : 0,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -1637,7 +1698,7 @@ export async function updateWindowWithOptionalPhoto(
 
 export async function uploadWindowPostBracketingPhoto(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
@@ -1670,9 +1731,14 @@ export async function uploadWindowPostBracketingPhoto(
     }
 
     const supabase = await createClient();
-    const [roomResult, windowResult] = await Promise.all([
+    const [roomResult, windowResult, unitResult] = await Promise.all([
       supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
       supabase.from("windows").select("id, room_id, label").eq("id", windowId).single(),
+      supabase
+        .from("units")
+        .select("assigned_installer_name, status")
+        .eq("id", unitId)
+        .single(),
     ]);
     if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
       return { ok: false, error: "Room does not belong to this unit." };
@@ -1680,6 +1746,9 @@ export async function uploadWindowPostBracketingPhoto(
     const windowRow = windowResult.data;
     if (windowResult.error || !windowRow || windowRow.room_id !== roomId) {
       return { ok: false, error: "Window not found." };
+    }
+    if (unitResult.error || !unitResult.data) {
+      return { ok: false, error: "Unit not found." };
     }
 
     const { error: windowUpdateError } = await supabase
@@ -1733,29 +1802,20 @@ export async function uploadWindowPostBracketingPhoto(
 
     const capturedWindowLabel = windowRow.label;
     const capturedHasPhoto = hasPhoto;
-    // Bust the cache immediately so the next navigation shows fresh data.
-    revalidateUnit(unitId);
+    const prevStatus = (unitResult.data.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
+    const actorName = unitResult.data.assigned_installer_name ?? "Installer";
     after(async () => {
       const db = createAdminClient();
-      const { data: unit } = await db
-        .from("units")
-        .select("assigned_installer_name, status")
-        .eq("id", unitId)
-        .single();
       await logUnitActivity(
         db,
         unitId,
         "installer",
-        unit?.assigned_installer_name ?? "Installer",
+        actorName,
         capturedHasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel, riskFlag, hasPhoto: capturedHasPhoto }
       );
-      await refreshUnitAggregates(db, unitId);
-      const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(db, unitId);
-      const { data: updatedUnit } = await db.from("units").select("status").eq("id", unitId).single();
-      const newStatus = updatedUnit?.status ?? prevStatus;
-      if (newStatus !== prevStatus) {
+      if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
@@ -1764,22 +1824,27 @@ export async function uploadWindowPostBracketingPhoto(
             measured_and_bracketed: "All windows measured & bracketed",
             installed: "All windows installed",
           };
-          const title = progressTitles[newStatus];
+          const title = progressTitles[unitStatus];
           if (title) {
             await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
               title,
-              body: `Unit status updated to "${newStatus}".`,
+              body: `Unit status updated to "${unitStatus}".`,
               relatedUnitId: unitId,
             });
           }
         }
       }
-      revalidateUnit(unitId);
     });
-    return { ok: true };
+    return {
+      ok: true,
+      unitStatus,
+      roomId,
+      windowId,
+      photoCountDelta: hasPhoto ? 1 : 0,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -1788,7 +1853,7 @@ export async function uploadWindowPostBracketingPhoto(
 
 export async function uploadWindowInstalledPhoto(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     const unitId = String(formData.get("unitId") ?? "");
     const roomId = String(formData.get("roomId") ?? "");
@@ -1825,7 +1890,11 @@ export async function uploadWindowInstalledPhoto(
     const [roomResult, windowResult, unitResult] = await Promise.all([
       supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
       supabase.from("windows").select("id, room_id, label, measured, bracketed, installed").eq("id", windowId).single(),
-      supabase.from("units").select("status").eq("id", unitId).single(),
+      supabase
+        .from("units")
+        .select("assigned_installer_name, status")
+        .eq("id", unitId)
+        .single(),
     ]);
     if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
       return { ok: false, error: "Room does not belong to this unit." };
@@ -1902,29 +1971,20 @@ export async function uploadWindowInstalledPhoto(
 
     const capturedWindowLabel2 = windowRow.label;
     const capturedHasPhoto2 = hasPhoto;
-    // Bust the cache immediately so the next navigation shows fresh data.
-    revalidateUnit(unitId);
+    const prevStatus = (unitRow.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
+    const actorName = unitRow.assigned_installer_name ?? "Installer";
     after(async () => {
       const db = createAdminClient();
-      const { data: unit } = await db
-        .from("units")
-        .select("assigned_installer_name, status")
-        .eq("id", unitId)
-        .single();
-      await refreshUnitAggregates(db, unitId);
       await logUnitActivity(
         db,
         unitId,
         "installer",
-        unit?.assigned_installer_name ?? "Installer",
+        actorName,
         capturedHasPhoto2 ? "installed_photo_added" : "installation_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel2, riskFlag, hasPhoto: capturedHasPhoto2 }
       );
-      const prevStatus = unit?.status ?? "not_started";
-      await recomputeUnitStatus(db, unitId);
-      const { data: updatedUnit } = await db.from("units").select("status").eq("id", unitId).single();
-      const newStatus = updatedUnit?.status ?? prevStatus;
-      if (newStatus !== prevStatus) {
+      if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
           const progressTitles: Record<string, string> = {
@@ -1933,22 +1993,27 @@ export async function uploadWindowInstalledPhoto(
             measured_and_bracketed: "All windows measured & bracketed",
             installed: "All windows installed",
           };
-          const title = progressTitles[newStatus];
+          const title = progressTitles[unitStatus];
           if (title) {
             await emitNotification({
               recipientRole: "scheduler",
               recipientId: schedulerId,
               type: NOTIF_UNIT_PROGRESS_UPDATE,
               title,
-              body: `Unit status updated to "${newStatus}".`,
+              body: `Unit status updated to "${unitStatus}".`,
               relatedUnitId: unitId,
             });
           }
         }
       }
-      revalidateUnit(unitId);
     });
-    return { ok: true };
+    return {
+      ok: true,
+      unitStatus,
+      roomId,
+      windowId,
+      photoCountDelta: hasPhoto ? 1 : 0,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -2122,14 +2187,14 @@ export async function deleteWindowMediaItem(
   mediaId: string,
   windowId: string,
   stage: "bracketed_measured" | "installed_pending_approval"
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     const supabase = await createClient();
 
     // Fetch the media record to get the storage path and unit
     const { data: media, error: fetchErr } = await supabase
       .from("media_uploads")
-      .select("storage_path, unit_id")
+      .select("storage_path, unit_id, room_id")
       .eq("id", mediaId)
       .single();
     if (fetchErr || !media) {
@@ -2149,21 +2214,30 @@ export async function deleteWindowMediaItem(
     if (delErr) return { ok: false, error: delErr.message };
 
     // Reset the window stage flag so installer can re-upload
-    const windowField = stage === "bracketed_measured" ? "bracketed" : "installed";
-    await supabase
+    const updates =
+      stage === "bracketed_measured"
+        ? { bracketed: false, installed: false }
+        : { installed: false };
+    const { error: flagResetError } = await supabase
       .from("windows")
-      .update({ [windowField]: false })
+      .update(updates)
       .eq("id", windowId);
+    if (flagResetError) return { ok: false, error: flagResetError.message };
 
     const capturedUnitId = media.unit_id;
-    after(async () => {
-      const db = createAdminClient();
-      await refreshUnitAggregates(db, capturedUnitId);
-      await recomputeUnitStatus(db, capturedUnitId);
-      revalidateUnit(capturedUnitId);
-    });
+    const unitStatus = await finalizeUnitMutation(
+      supabase,
+      capturedUnitId,
+      media.room_id ? [media.room_id] : []
+    );
 
-    return { ok: true };
+    return {
+      ok: true,
+      unitStatus,
+      roomId: media.room_id ?? undefined,
+      windowId,
+      photoCountDelta: -1,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -2179,7 +2253,7 @@ export async function deleteWindowMediaItem(
 export async function undoWindowStage(
   windowId: string,
   stage: "measured" | "bracketed" | "installed"
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     const supabase = await createClient();
 
@@ -2212,16 +2286,14 @@ export async function undoWindowStage(
     if (updateErr) return { ok: false, error: updateErr.message };
 
     const capturedUnitId = room.unit_id;
-    // Bust cache immediately so router.refresh() on the client sees fresh data.
-    revalidateUnit(capturedUnitId);
-    after(async () => {
-      const db = createAdminClient();
-      await refreshUnitAggregates(db, capturedUnitId);
-      await recomputeUnitStatus(db, capturedUnitId);
-      revalidateUnit(capturedUnitId);
-    });
+    const unitStatus = await finalizeUnitMutation(supabase, capturedUnitId, [win.room_id]);
 
-    return { ok: true };
+    return {
+      ok: true,
+      unitStatus,
+      roomId: win.room_id,
+      windowId,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };
@@ -2278,9 +2350,18 @@ export async function deleteRoomFinishedPhoto(
 export async function deleteWindowMeasurementPhoto(
   windowId: string,
   unitId: string
-): Promise<ActionResult> {
+): Promise<UnitMutationResult> {
   try {
     const supabase = await createClient();
+
+    const { data: winRow, error: winErr } = await supabase
+      .from("windows")
+      .select("room_id")
+      .eq("id", windowId)
+      .single();
+    if (winErr || !winRow) {
+      return { ok: false, error: "Window not found." };
+    }
 
     // Find the measurement media record for this window
     const { data: media } = await supabase
@@ -2298,19 +2379,23 @@ export async function deleteWindowMeasurementPhoto(
     }
 
     // Clear photo_url and reset measured flag on the window
-    await supabase
+    const { error: windowUpdateError } = await supabase
       .from("windows")
-      .update({ photo_url: null, measured: false })
+      .update({ photo_url: null, measured: false, installed: false })
       .eq("id", windowId);
+    if (windowUpdateError) {
+      return { ok: false, error: windowUpdateError.message };
+    }
 
-    after(async () => {
-      const db = createAdminClient();
-      await refreshUnitAggregates(db, unitId);
-      await recomputeUnitStatus(db, unitId);
-      revalidateUnit(unitId);
-    });
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, [winRow.room_id]);
 
-    return { ok: true };
+    return {
+      ok: true,
+      unitStatus,
+      roomId: winRow.room_id,
+      windowId,
+      photoCountDelta: media?.id ? -1 : 0,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };

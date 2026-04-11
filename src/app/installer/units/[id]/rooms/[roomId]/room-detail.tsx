@@ -10,20 +10,24 @@ import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { deleteWindow } from "@/app/actions/fsr-data";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 
 export function RoomDetail({
   data,
   mediaItems,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const room = data.rooms.find((r) => r.id === roomId);
-  const windowCount = data.windows.filter((w) => w.roomId === roomId).length;
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const room = datasetData?.rooms.find((r) => r.id === roomId);
+  const windowCount = datasetData?.windows.filter((w) => w.roomId === roomId).length ?? 0;
 
-  if (!unit || !room) {
+  if (!datasetData || !unit || !room) {
     return <div className="p-6 text-center text-muted">Room not found</div>;
   }
 
@@ -47,7 +51,7 @@ export function RoomDetail({
         </div>
 
         <RoomWindowsView
-          data={data}
+          data={datasetData}
           mediaItems={mediaItems}
           roomId={roomId}
           getEditHref={(winId) =>
@@ -60,7 +64,23 @@ export function RoomDetail({
           })}
           addWindowHref={`/installer/units/${id}/rooms/${roomId}/windows/new`}
           onDeleteWindow={async (winId) => {
-            await deleteWindow(winId, id);
+            const result = await deleteWindow(winId, id);
+            if (!result.ok) {
+              throw new Error(result.error ?? "Failed to delete window.");
+            }
+            datasetCtx?.patchData((prev) =>
+              reconcileUnitDerivedState(
+                {
+                  ...prev,
+                  windows: prev.windows.filter((w) => w.id !== winId),
+                },
+                unit.id,
+                {
+                  unitStatus: result.unitStatus,
+                  photoDelta: result.photoCountDelta ?? 0,
+                }
+              )
+            );
           }}
         />
       </div>

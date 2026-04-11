@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, type AppUser } from "@/lib/auth";
-import { loadFullDataset, loadUnitSchedulerAssignmentMap } from "@/lib/server-data";
+import { loadFullDataset } from "@/lib/server-data";
 import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { ManagementNav } from "./management-nav";
 import ManagementLoading from "./loading";
@@ -55,14 +55,11 @@ async function ManagementDataShell({
   user: AppUser;
   children: React.ReactNode;
 }) {
-  const [data, unitSchedulerByUnit] = await Promise.all([
-    loadFullDataset(),
-    loadUnitSchedulerAssignmentMap(),
-  ]);
+  const data = await loadFullDataset();
 
   return (
     <AppDatasetClientShell
-      initialData={{ ...data, unitSchedulerByUnit }}
+      initialData={data}
       user={user}
     >
       {children}

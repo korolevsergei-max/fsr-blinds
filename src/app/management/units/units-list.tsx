@@ -41,12 +41,10 @@ import type { Scheduler } from "@/lib/types";
 export function UnitsList({
   data,
   schedulers = [],
-  unitSchedulerByUnit = {},
   userRole,
 }: {
   data: AppDataset;
   schedulers?: Scheduler[];
-  unitSchedulerByUnit?: Record<string, string>;
   userRole?: string;
 }) {
   const { units, clients, buildings, installers } = data;
@@ -101,7 +99,7 @@ export function UnitsList({
       selectedUnitsData.map((u) => u.assignedInstallerName).filter(Boolean)
     );
     const assignedSchedIds = new Set(
-      selectedUnitsData.map((u) => u.assignedSchedulerId || unitSchedulerByUnit[u.id]).filter(Boolean)
+      selectedUnitsData.map((u) => u.assignedSchedulerId).filter(Boolean)
     );
 
     let installerLabel = "Unassigned";
@@ -121,7 +119,7 @@ export function UnitsList({
     }
 
     return { installerLabel, schedulerLabel };
-  }, [selectedUnitsData, unitSchedulerByUnit, schedulers]);
+  }, [selectedUnitsData, schedulers]);
 
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return;
@@ -206,7 +204,7 @@ export function UnitsList({
         if (!matchUnassigned && !matchSpecific) return false;
       }
       
-      const assignedSchedulerId = u.assignedSchedulerId || unitSchedulerByUnit[u.id];
+      const assignedSchedulerId = u.assignedSchedulerId;
       if (schedulerFilter.length > 0) {
         const wantsUnassigned = schedulerFilter.includes("__unassigned_scheduler__");
         const matchUnassigned = wantsUnassigned && !assignedSchedulerId;
@@ -229,7 +227,6 @@ export function UnitsList({
     statusFilter,
     installerFilter,
     schedulerFilter,
-    unitSchedulerByUnit,
     floorFilter,
     dateAddedFilter,
     completeByFilter,
@@ -492,7 +489,7 @@ export function UnitsList({
         )}
         {sortedFiltered.map((unit, i) => {
           const isSelected = selectedIds.has(unit.id);
-          const schedulerId = unit.assignedSchedulerId || unitSchedulerByUnit[unit.id];
+          const schedulerId = unit.assignedSchedulerId;
           const schedulerName = unit.assignedSchedulerName || (schedulerId ? schedulers.find((s) => s.id === schedulerId)?.name : null);
           return (
             <motion.div

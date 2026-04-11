@@ -9,9 +9,10 @@ import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 type UnitStatusEditorProps = {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems?: unknown;
   milestones: UnitMilestoneCoverage;
   unitsBasePath: "/management/units" | "/scheduler/units";
@@ -23,8 +24,10 @@ export function UnitStatusEditor({
   unitsBasePath,
 }: UnitStatusEditorProps) {
   const { id } = useParams<{ id: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;

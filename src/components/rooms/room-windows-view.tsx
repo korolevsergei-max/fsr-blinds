@@ -83,6 +83,20 @@ export function RoomWindowsView({
     return map;
   }, [mediaItems]);
 
+  const windowMediaByWindowId = useMemo(() => {
+    const map = new Map<string, UnitStageMediaItem[]>();
+    for (const item of mediaItems) {
+      if (!item.windowId) continue;
+      const existing = map.get(item.windowId) ?? [];
+      existing.push(item);
+      map.set(item.windowId, existing);
+    }
+    for (const items of map.values()) {
+      items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return map;
+  }, [mediaItems]);
+
   const windowGalleryMap = useMemo(() => {
     const map = new Map<string, GalleryItem[]>();
 
@@ -100,9 +114,7 @@ export function RoomWindowsView({
         });
       }
 
-      const windowMedia = mediaItems
-        .filter((item) => item.windowId === win.id)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const windowMedia = windowMediaByWindowId.get(win.id) ?? [];
 
       for (const item of windowMedia) {
         const stage =
@@ -128,18 +140,22 @@ export function RoomWindowsView({
     }
 
     return map;
-  }, [mediaItems, windowsList]);
+  }, [windowMediaByWindowId, windowsList]);
 
-  const postBracketingWindowIds = new Set(
-    mediaItems
-      .filter(
-        (item) =>
-          item.roomId === roomId &&
-          item.stage === "bracketed_measured" &&
-          item.uploadKind === "window_measure" &&
-          item.windowId
-      )
-      .map((item) => item.windowId as string)
+  const postBracketingWindowIds = useMemo(
+    () =>
+      new Set(
+        mediaItems
+          .filter(
+            (item) =>
+              item.roomId === roomId &&
+              item.stage === "bracketed_measured" &&
+              item.uploadKind === "window_measure" &&
+              item.windowId
+          )
+          .map((item) => item.windowId as string)
+      ),
+    [mediaItems, roomId]
   );
 
   const galleryWindow = galleryWindowId
@@ -155,12 +171,12 @@ export function RoomWindowsView({
         description="No windows have been added to this room yet."
         action={
           addWindowHref ? (
-            <a
+            <Link
               href={addWindowHref}
               className="inline-flex items-center rounded-lg bg-accent px-3 py-2 text-[13px] font-semibold text-white"
             >
               Add First Window
-            </a>
+            </Link>
           ) : undefined
         }
       />
@@ -268,7 +284,8 @@ export function RoomWindowsView({
                       alt={`${win.label} photo`}
                       width={800}
                       height={600}
-                      unoptimized
+                      sizes="(max-width: 640px) 100vw, 560px"
+                      unoptimized={selectedImageUrl.startsWith("blob:")}
                       onLoad={(e) => {
                         const img = e.currentTarget;
                         const next: ImageOrientation =
@@ -421,7 +438,15 @@ export function RoomWindowsView({
                     const idToDelete = confirmDeleteWindowId;
                     setConfirmDeleteWindowId(null);
                     startDeleteTransition(async () => {
-                      await onDeleteWindow(idToDelete);
+                      try {
+                        await onDeleteWindow(idToDelete);
+                      } catch (error) {
+                        const message =
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to delete the window.";
+                        window.alert(message);
+                      }
                     });
                   }}
                 >
@@ -519,6 +544,8 @@ export function RoomWindowsView({
                                     src={item.url}
                                     alt={item.title}
                                     fill
+                                    sizes="(max-width: 640px) 50vw, 240px"
+                                    unoptimized={item.url.startsWith("blob:")}
                                     className="object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                                   />
                                 </div>

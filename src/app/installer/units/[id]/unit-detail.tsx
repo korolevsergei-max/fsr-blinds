@@ -21,6 +21,7 @@ import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -135,16 +136,18 @@ export function UnitDetail({
   activityLog,
   milestones,
 }: {
-  data: AppDataset;
+  data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
   activityLog: UnitActivityLog[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const unit = data.units.find((u) => u.id === id);
-  const rooms = unit ? getRoomsByUnit(data, unit.id) : [];
+  const datasetCtx = useAppDatasetMaybe();
+  const datasetData = data ?? datasetCtx?.data;
+  const unit = datasetData?.units.find((u) => u.id === id);
+  const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
   const roomIds = new Set(rooms.map((room) => room.id));
-  const escalationCount = data.windows.filter(
+  const escalationCount = (datasetData?.windows ?? []).filter(
     (window) => roomIds.has(window.roomId) && window.riskFlag !== "green"
   ).length;
   const bracketedWindowIdsByRoom = new Map<string, Set<string>>();
@@ -183,7 +186,7 @@ export function UnitDetail({
       : "not_started";
 
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
-  const escalations = getUnitEscalations(data, unit.id);
+  const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 

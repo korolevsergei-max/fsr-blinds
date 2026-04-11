@@ -20,8 +20,6 @@ export type AppDataset = {
   schedule: ScheduleEntry[];
   cutters: Cutter[];
   schedulers: Scheduler[];
-  /** unit_id → scheduler_id mapping (populated in management portal). */
-  unitSchedulerByUnit?: Record<string, string>;
 };
 
 export function getUnitsByInstaller(

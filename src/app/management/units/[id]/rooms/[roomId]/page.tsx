@@ -1,20 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitMedia } from "@/app/actions/dataset-queries";
-import type { UnitStageMediaItem } from "@/lib/server-data";
+import { loadCachedUnitMedia } from "@/lib/unit-route-data";
 import { ManagementRoomDetail } from "./management-room-detail";
 
-export default function ManagementRoomDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data } = useAppDataset();
-  const [mediaItems, setMediaItems] = useState<UnitStageMediaItem[]>([]);
-
-  useEffect(() => {
-    fetchUnitMedia(id).then(setMediaItems);
-  }, [id]);
-
-  return <ManagementRoomDetail data={data} mediaItems={mediaItems} />;
+export default async function ManagementRoomDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string; roomId: string }>;
+}) {
+  const { id } = await params;
+  const mediaItems = await loadCachedUnitMedia(id);
+  return <ManagementRoomDetail mediaItems={mediaItems} />;
 }

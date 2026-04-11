@@ -50,21 +50,29 @@ export function SettingsScreen({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<SettingsTab>(initialTab);
-  const [pending, startTransition] = useTransition();
+  const [settingsPending, startSettingsTransition] = useTransition();
+  const [, startCalendarTransition] = useTransition();
   const [monthOffset, setMonthOffset] = useState(0);
   const [cutterCapacity, setCutterCapacity] = useState(String(settings.cutterDailyCapacity));
   const [assemblerCapacity, setAssemblerCapacity] = useState(String(settings.assemblerDailyCapacity));
   const [applyHolidays, setApplyHolidays] = useState(settings.applyOntarioHolidays);
+  const [optimisticOverrides, setOptimisticOverrides] = useState<Map<string, ManufacturingCalendarOverride>>(
+    () => new Map()
+  );
+  const [pendingDates, setPendingDates] = useState<string[]>([]);
 
   const baseMonth = useMemo(() => {
     const current = new Date();
     return new Date(current.getFullYear(), current.getMonth() + monthOffset, 1);
   }, [monthOffset]);
 
-  const overridesByDate = useMemo(
-    () => new Map(overrides.map((override) => [override.workDate, override])),
-    [overrides]
-  );
+  const overridesByDate = useMemo(() => {
+    const next = new Map(overrides.map((override) => [override.workDate, override]));
+    optimisticOverrides.forEach((override, date) => {
+      next.set(date, override);
+    });
+    return next;
+  }, [optimisticOverrides, overrides]);
 
   const calendarDays = useMemo(() => {
     return listMonthDays(baseMonth.getFullYear(), baseMonth.getMonth()).map((date) => {
@@ -82,7 +90,7 @@ export function SettingsScreen({
   }, [applyHolidays, baseMonth, overridesByDate]);
 
   const saveSettings = () => {
-    startTransition(async () => {
+    startSettingsTransition(async () => {
       const result = await updateManufacturingSettings(
         Number(cutterCapacity || 0),
         Number(assemblerCapacity || 0),
@@ -97,12 +105,38 @@ export function SettingsScreen({
   };
 
   const toggleDay = (date: string, nextWorking: boolean, label: string) => {
-    startTransition(async () => {
+    setOptimisticOverrides((current) => {
+      const next = new Map(current);
+      const existing = overridesByDate.get(date);
+      next.set(date, {
+        id: existing?.id ?? `pending-${date}`,
+        workDate: date,
+        isWorking: nextWorking,
+        label,
+      });
+      return next;
+    });
+    setPendingDates((current) => [...current, date]);
+
+    startCalendarTransition(async () => {
       const result = await toggleManufacturingWorkday(date, nextWorking, label);
       if (!result.ok) {
+        setOptimisticOverrides((current) => {
+          const next = new Map(current);
+          next.delete(date);
+          return next;
+        });
+        setPendingDates((current) => current.filter((entry) => entry !== date));
         window.alert(result.error);
         return;
       }
+
+      setOptimisticOverrides((current) => {
+        const next = new Map(current);
+        next.delete(date);
+        return next;
+      });
+      setPendingDates((current) => current.filter((entry) => entry !== date));
       router.refresh();
     });
   };
@@ -182,8 +216,8 @@ export function SettingsScreen({
               </div>
             </label>
 
-            <Button onClick={saveSettings} disabled={pending}>
-              {pending ? "Saving…" : "Save Manufacturing Settings"}
+            <Button onClick={saveSettings} disabled={settingsPending}>
+              {settingsPending ? "Saving…" : "Save Manufacturing Settings"}
             </Button>
           </section>
 
@@ -229,13 +263,14 @@ export function SettingsScreen({
                   <button
                     key={day.date}
                     onClick={() => toggleDay(day.date, !day.isWorking, label)}
-                    disabled={pending}
+                    disabled={pendingDates.includes(day.date)}
                     className={[
                       "min-h-[4.75rem] rounded-2xl border p-2 text-left transition-colors",
                       day.isCurrentMonth ? "bg-card" : "bg-zinc-50",
                       day.isWorking
                         ? "border-emerald-200 bg-emerald-50"
                         : "border-border",
+                      pendingDates.includes(day.date) ? "opacity-70" : "",
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-2">

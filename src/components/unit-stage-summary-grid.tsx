@@ -106,8 +106,8 @@ export function UnitStageSummaryGrid({
                                   src={slot.item.publicUrl}
                                   alt={`${windowGroup.windowName} ${slot.title}`}
                                   fill
-                                  unoptimized
                                   sizes="(min-width: 640px) 33vw, 100vw"
+                                  unoptimized={slot.item.publicUrl.startsWith("blob:")}
                                   className="object-cover"
                                 />
                               </div>

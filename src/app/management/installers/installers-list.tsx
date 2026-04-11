@@ -3,13 +3,17 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Envelope, Phone, Buildings, CheckCircle, Plus } from "@phosphor-icons/react";
-import type { AppDataset } from "@/lib/app-dataset";
+import type { Installer, Unit } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 
-export function InstallersList({ data }: { data: AppDataset }) {
-  const { installers, units } = data;
-
+export function InstallersList({
+  installers,
+  units,
+}: {
+  installers: Installer[];
+  units: Unit[];
+}) {
   return (
     <div className="flex flex-col">
       <PageHeader

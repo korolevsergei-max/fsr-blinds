@@ -1,27 +1,19 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitSupplementalData, type UnitSupplementalData } from "@/app/actions/dataset-queries";
-import { EMPTY_MILESTONES } from "@/lib/unit-milestone-types";
+import { loadCachedUnitSupplementalData } from "@/lib/unit-route-data";
 import { UnitDetail } from "./unit-detail";
 
-export default function UnitDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data } = useAppDataset();
-  const [supplemental, setSupplemental] = useState<UnitSupplementalData | null>(null);
-
-  useEffect(() => {
-    fetchUnitSupplementalData(id).then(setSupplemental);
-  }, [id]);
+export default async function UnitDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supplemental = await loadCachedUnitSupplementalData(id);
 
   return (
     <UnitDetail
-      data={data}
-      mediaItems={supplemental?.mediaItems ?? []}
-      activityLog={supplemental?.activityLog ?? []}
-      milestones={supplemental?.milestones ?? EMPTY_MILESTONES}
+      mediaItems={supplemental.mediaItems}
+      activityLog={supplemental.activityLog}
+      milestones={supplemental.milestones}
     />
   );
 }

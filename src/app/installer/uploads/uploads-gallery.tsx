@@ -148,8 +148,8 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
                                 src={item.publicUrl}
                                 alt=""
                                 fill
-                                unoptimized
                                 sizes="(min-width: 640px) 33vw, 50vw"
+                                unoptimized={item.publicUrl.startsWith("blob:")}
                                 className="object-cover"
                               />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />

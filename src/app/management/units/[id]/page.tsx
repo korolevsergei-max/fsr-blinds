@@ -1,28 +1,19 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { useAppDataset } from "@/lib/dataset-context";
-import { fetchUnitSupplementalData, type UnitSupplementalData } from "@/app/actions/dataset-queries";
-import { EMPTY_MILESTONES } from "@/lib/unit-milestone-types";
+import { loadCachedUnitSupplementalData } from "@/lib/unit-route-data";
 import { ManagementUnitDetail } from "./management-unit-detail";
 
-export default function ManagementUnitDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { data, user } = useAppDataset();
-  const [supplemental, setSupplemental] = useState<UnitSupplementalData | null>(null);
-
-  useEffect(() => {
-    fetchUnitSupplementalData(id).then(setSupplemental);
-  }, [id]);
+export default async function ManagementUnitDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supplemental = await loadCachedUnitSupplementalData(id);
 
   return (
     <ManagementUnitDetail
-      data={data}
-      activityLog={supplemental?.activityLog ?? []}
-      mediaItems={supplemental?.mediaItems ?? []}
-      milestones={supplemental?.milestones ?? EMPTY_MILESTONES}
-      userRole={user.role}
+      activityLog={supplemental.activityLog}
+      mediaItems={supplemental.mediaItems}
+      milestones={supplemental.milestones}
     />
   );
 }
