@@ -32,9 +32,9 @@ export async function GET(request: Request) {
           .single();
 
         const path = homePathForRole(profile?.role);
-        return NextResponse.redirect(`${origin}${path}`);
+        return NextResponse.redirect(`${origin}${path === "/" ? "/management" : path}`);
       }
-      return NextResponse.redirect(`${origin}/`);
+      return NextResponse.redirect(`${origin}/management`);
     }
   }
 

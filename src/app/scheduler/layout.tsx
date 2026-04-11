@@ -61,12 +61,14 @@ async function SchedulerDataShell({
   user: AppUser;
   children: React.ReactNode;
 }) {
+  const schedulerId = await getLinkedSchedulerId(user.id);
   const data = await loadSchedulerDataset();
 
   return (
     <AppDatasetClientShell
       initialData={data}
       user={user}
+      linkedEntityId={schedulerId}
       portalDataLoader="scheduler"
     >
       {children}
