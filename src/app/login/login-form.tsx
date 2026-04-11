@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { refreshDataset } from "@/app/actions/dataset-queries";
 import { setCachedData } from "@/lib/offline-cache";
@@ -22,7 +21,6 @@ function prefetchDatasetInBackground(role?: string) {
 }
 
 export function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -30,11 +28,53 @@ export function LoginForm() {
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const supabase = useMemo(() => createClient(), []);
 
   const getAuthRedirectBaseUrl = () => {
     if (typeof window !== "undefined") return window.location.origin;
     return "http://localhost:3000";
   };
+
+  const navigateToRoleHome = (role?: string | null) => {
+    if (typeof window === "undefined") return;
+    const nextPath = homePathForRole(role);
+    window.location.assign(nextPath === "/" ? "/management" : nextPath);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const redirectIfAuthenticated = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user || cancelled) return;
+
+      const metadataRole =
+        typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined;
+      navigateToRoleHome(metadataRole);
+    };
+
+    void redirectIfAuthenticated();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const metadataRole =
+        typeof session?.user?.user_metadata?.role === "string"
+          ? session.user.user_metadata.role
+          : undefined;
+      if (session?.user) {
+        navigateToRoleHome(metadataRole);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +91,6 @@ export function LoginForm() {
     }
 
     setLoading(true);
-    const supabase = createClient();
 
     try {
       if (mode === "signup") {
@@ -68,8 +107,7 @@ export function LoginForm() {
         }
 
         if (data.session) {
-          router.push("/management");
-          router.refresh();
+          navigateToRoleHome("owner");
           return;
         }
 
@@ -95,22 +133,14 @@ export function LoginForm() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("role")
-          .eq("id", user.id)
-          .single();
-
         const metadataRole =
           typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined;
-        const resolvedRole = profile?.role ?? metadataRole;
-        const nextPath = homePathForRole(resolvedRole);
+        const resolvedRole = metadataRole;
 
         // Warm IDB cache while router navigates — fire-and-forget.
         prefetchDatasetInBackground(resolvedRole);
 
-        router.push(nextPath === "/" ? "/management" : nextPath);
-        router.refresh();
+        navigateToRoleHome(resolvedRole);
         return;
       }
 
