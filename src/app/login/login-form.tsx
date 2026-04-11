@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { refreshDataset } from "@/app/actions/dataset-queries";
 import { setCachedData } from "@/lib/offline-cache";
+import { homePathForRole } from "@/lib/role-routes";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -100,12 +101,15 @@ export function LoginForm() {
           .eq("id", user.id)
           .single();
 
-        // Warm IDB cache while router navigates — fire-and-forget.
-        // Always land on /management first because that layout can repair or
-        // infer a missing profile row before redirecting to the user's portal.
-        prefetchDatasetInBackground(profile?.role);
+        const metadataRole =
+          typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined;
+        const resolvedRole = profile?.role ?? metadataRole;
+        const nextPath = homePathForRole(resolvedRole);
 
-        router.push("/management");
+        // Warm IDB cache while router navigates — fire-and-forget.
+        prefetchDatasetInBackground(resolvedRole);
+
+        router.push(nextPath === "/" ? "/management" : nextPath);
         router.refresh();
         return;
       }

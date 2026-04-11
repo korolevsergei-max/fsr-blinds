@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { homePathForRole } from "@/lib/role-routes";
 
+function roleFromAuthMetadata(user: { user_metadata?: { role?: unknown } } | null): string | null {
+  const role = user?.user_metadata?.role;
+  return typeof role === "string" ? role : null;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -31,7 +36,7 @@ export async function GET(request: Request) {
           .eq("id", user.id)
           .single();
 
-        const path = homePathForRole(profile?.role);
+        const path = homePathForRole(profile?.role ?? roleFromAuthMetadata(user));
         return NextResponse.redirect(`${origin}${path === "/" ? "/management" : path}`);
       }
       return NextResponse.redirect(`${origin}/management`);

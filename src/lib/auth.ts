@@ -1,4 +1,5 @@
 import { cache } from "react";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
@@ -9,6 +10,66 @@ export interface AppUser {
   email: string;
   role: UserRole;
   displayName: string;
+}
+
+const VALID_USER_ROLES: UserRole[] = [
+  "owner",
+  "installer",
+  "cutter",
+  "client",
+  "scheduler",
+  "assembler",
+];
+
+function normalizeUserRole(role: unknown): UserRole | null {
+  return typeof role === "string" && VALID_USER_ROLES.includes(role as UserRole)
+    ? (role as UserRole)
+    : null;
+}
+
+function getDisplayNameFromAuthUser(user: User): string {
+  return user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "User";
+}
+
+async function inferRoleFromLinkedAccount(
+  supabase: SupabaseClient,
+  authUserId: string
+): Promise<UserRole | null> {
+  const [
+    schedulerRes,
+    assemblerRes,
+    cutterRes,
+    installerRes,
+  ] = await Promise.all([
+    supabase.from("schedulers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("assemblers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("cutters").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("installers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+  ]);
+
+  if (schedulerRes.data?.id) return "scheduler";
+  if (assemblerRes.data?.id) return "assembler";
+  if (cutterRes.data?.id) return "cutter";
+  if (installerRes.data?.id) return "installer";
+  return null;
+}
+
+async function inferRoleForAuthenticatedUser(
+  supabase: SupabaseClient,
+  user: User
+): Promise<UserRole> {
+  const metadataRole = normalizeUserRole(user.user_metadata?.role);
+  if (metadataRole) return metadataRole;
+
+  const linkedRole = await inferRoleFromLinkedAccount(supabase, user.id);
+  if (linkedRole) return linkedRole;
+
+  const { count: ownerCount } = await supabase
+    .from("user_profiles")
+    .select("*", { count: "exact", head: true })
+    .eq("role", "owner");
+
+  return (ownerCount ?? 0) === 0 ? "owner" : "installer";
 }
 
 export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
@@ -33,6 +94,8 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   if (!user) return null;
 
+  const fallbackDisplayName = getDisplayNameFromAuthUser(user);
+
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
     .select("role, display_name, email")
@@ -56,27 +119,20 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
       id: user.id,
       email: user.email ?? "",
       role: "owner",
-      displayName: user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Owner",
+      displayName: fallbackDisplayName,
     };
   }
 
-  // Profile row missing (trigger didn't fire) — auto-create it.
-  // First user in the system becomes owner, subsequent users become installer.
+  // Profile row missing (trigger didn't fire) — auto-create it using the most
+  // reliable role source we have: auth metadata, linked app tables, then
+  // owner/installer bootstrap fallback.
   if (profileError?.code === "PGRST116") {
-    const displayName =
-      user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Owner";
-
-    const { count: ownerCount } = await supabase
-      .from("user_profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("role", "owner");
-
-    const role: UserRole = (ownerCount ?? 0) === 0 ? "owner" : "installer";
+    const role = await inferRoleForAuthenticatedUser(supabase, user);
 
     await supabase.from("user_profiles").upsert({
       id: user.id,
       role,
-      display_name: displayName,
+      display_name: fallbackDisplayName,
       email: user.email ?? "",
     });
 
@@ -84,17 +140,18 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
       id: user.id,
       email: user.email ?? "",
       role,
-      displayName,
+      displayName: fallbackDisplayName,
     };
   }
 
-  // Unexpected error — still let the authenticated user through as owner so
-  // they are never locked out of their own portal.
+  // Unexpected profile lookup error — prefer inferred role over hard-coding
+  // owner so schedulers/cutters/assemblers don't get misrouted.
+  const inferredRole = await inferRoleForAuthenticatedUser(supabase, user);
   return {
     id: user.id,
     email: user.email ?? "",
-    role: "owner",
-    displayName: user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Owner",
+    role: inferredRole,
+    displayName: fallbackDisplayName,
   };
 });
 

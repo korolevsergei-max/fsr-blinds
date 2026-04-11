@@ -8,6 +8,11 @@ import {
 } from "@/lib/supabase/auth-errors";
 import { homePathForRole } from "@/lib/role-routes";
 
+function roleFromAuthMetadata(user: { user_metadata?: { role?: unknown } } | null): string | null {
+  const role = user?.user_metadata?.role;
+  return typeof role === "string" ? role : null;
+}
+
 function supabaseAuthCookieNames(request: NextRequest): string[] {
   return request.cookies.getAll().map((c) => c.name).filter(isSupabaseBrowserCookieName);
 }
@@ -127,7 +132,9 @@ export async function updateSession(request: NextRequest) {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (profile?.role === "owner")
+      const role = profile?.role ?? roleFromAuthMetadata(user);
+
+      if (role === "owner")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
@@ -135,7 +142,7 @@ export async function updateSession(request: NextRequest) {
           ),
           authInvalidated
         );
-      if (profile?.role === "cutter")
+      if (role === "cutter")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/cutter", request.url)),
@@ -143,7 +150,7 @@ export async function updateSession(request: NextRequest) {
           ),
           authInvalidated
         );
-      if (profile?.role === "assembler")
+      if (role === "assembler")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/assembler", request.url)),
@@ -151,7 +158,7 @@ export async function updateSession(request: NextRequest) {
           ),
           authInvalidated
         );
-      if (profile?.role === "installer")
+      if (role === "installer")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/installer", request.url)),
@@ -159,7 +166,7 @@ export async function updateSession(request: NextRequest) {
           ),
           authInvalidated
         );
-      if (profile?.role === "scheduler")
+      if (role === "scheduler")
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/scheduler", request.url)),
@@ -201,7 +208,7 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    const role = profile?.role;
+    const role = profile?.role ?? roleFromAuthMetadata(user);
 
     /**
      * Route installers/schedulers to their portals. Allow owner, cutter, or **missing**
@@ -263,8 +270,10 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "installer") {
-      if (profile?.role === "owner") {
+    const role = profile?.role ?? roleFromAuthMetadata(user);
+
+    if (role !== "installer") {
+      if (role === "owner") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
@@ -273,7 +282,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "cutter") {
+      if (role === "cutter") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/cutter", request.url)),
@@ -282,7 +291,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "scheduler") {
+      if (role === "scheduler") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/scheduler", request.url)),
@@ -291,7 +300,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "assembler") {
+      if (role === "assembler") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/assembler", request.url)),
@@ -317,8 +326,10 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "scheduler") {
-      if (profile?.role === "owner") {
+    const role = profile?.role ?? roleFromAuthMetadata(user);
+
+    if (role !== "scheduler") {
+      if (role === "owner") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/management", request.url)),
@@ -327,7 +338,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "cutter") {
+      if (role === "cutter") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/cutter", request.url)),
@@ -336,7 +347,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "installer") {
+      if (role === "installer") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/installer", request.url)),
@@ -345,7 +356,7 @@ export async function updateSession(request: NextRequest) {
           authInvalidated
         );
       }
-      if (profile?.role === "assembler") {
+      if (role === "assembler") {
         return finish(
           applyAuthCookieDeletions(
             NextResponse.redirect(new URL("/assembler", request.url)),
@@ -371,11 +382,13 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "cutter") {
+    const role = profile?.role ?? roleFromAuthMetadata(user);
+
+    if (role !== "cutter") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(
-            new URL(homePathForRole(profile?.role), request.url)
+            new URL(homePathForRole(role), request.url)
           ),
           deletedAuthCookieNames ?? []
         ),
@@ -391,11 +404,13 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role !== "assembler") {
+    const role = profile?.role ?? roleFromAuthMetadata(user);
+
+    if (role !== "assembler") {
       return finish(
         applyAuthCookieDeletions(
           NextResponse.redirect(
-            new URL(homePathForRole(profile?.role), request.url)
+            new URL(homePathForRole(role), request.url)
           ),
           deletedAuthCookieNames ?? []
         ),

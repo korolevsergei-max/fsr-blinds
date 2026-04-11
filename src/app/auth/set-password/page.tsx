@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 
+function roleFromAuthMetadata(user: { user_metadata?: { role?: unknown } } | null): string | null {
+  const role = user?.user_metadata?.role;
+  return typeof role === "string" ? role : null;
+}
+
 export default function SetPasswordPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -107,7 +112,7 @@ export default function SetPasswordPage() {
       .eq("id", user.id)
       .single();
 
-    router.push(homePathForRole(profile?.role));
+    router.push(homePathForRole(profile?.role ?? roleFromAuthMetadata(user)));
     router.refresh();
   };
 

@@ -94,6 +94,23 @@ function getAuthRedirectBaseUrl(): string {
   );
 }
 
+async function upsertUserProfile(
+  admin: SupabaseClient,
+  authUserId: string,
+  role: UserRole,
+  displayName: string,
+  email: string
+): Promise<string | null> {
+  const { error } = await admin.from("user_profiles").upsert({
+    id: authUserId,
+    role,
+    display_name: displayName.trim() || email.trim(),
+    email: email.trim(),
+  });
+
+  return error?.message ?? null;
+}
+
 export async function signOut(): Promise<ActionResult> {
   try {
     const supabase = await createClient();
@@ -225,6 +242,15 @@ export async function createInstallerAccount(
 
     if (insErr) return { ok: false, error: insErr.message };
 
+    const profileErr = await upsertUserProfile(
+      admin,
+      authUser.user.id,
+      "installer",
+      name,
+      email
+    );
+    if (profileErr) return { ok: false, error: profileErr };
+
     revalidatePath("/management", "layout");
     revalidatePath("/scheduler", "layout");
     return { ok: true };
@@ -299,6 +325,15 @@ export async function createCutterAccount(
     }
 
     if (cutErr) return { ok: false, error: cutErr.message };
+
+    const profileErr = await upsertUserProfile(
+      admin,
+      authUser.user.id,
+      "cutter",
+      name,
+      email
+    );
+    if (profileErr) return { ok: false, error: profileErr };
 
     revalidatePath("/management", "layout");
     return { ok: true };
@@ -506,6 +541,15 @@ export async function createSchedulerAccount(
 
     if (schErr) return { ok: false, error: schErr.message };
 
+    const profileErr = await upsertUserProfile(
+      admin,
+      authUser.user.id,
+      "scheduler",
+      name,
+      email
+    );
+    if (profileErr) return { ok: false, error: profileErr };
+
     revalidatePath("/management", "layout");
     return { ok: true };
   } catch (e) {
@@ -646,15 +690,14 @@ export async function createOwnerAccount(
     }
 
     // Upsert user_profiles so the new owner can log in immediately.
-    const supabase = await createClient();
-    const { error: profileErr } = await supabase.from("user_profiles").upsert({
-      id: authUser.user.id,
-      role: "owner",
-      display_name: displayName,
-      email,
-    });
-
-    if (profileErr) return { ok: false, error: profileErr.message };
+    const profileErr = await upsertUserProfile(
+      admin,
+      authUser.user.id,
+      "owner",
+      displayName,
+      email
+    );
+    if (profileErr) return { ok: false, error: profileErr };
 
     revalidatePath("/management/accounts", "layout");
     return { ok: true };
@@ -782,6 +825,15 @@ export async function createAssemblerAccount(
     });
 
     if (asmErr) return { ok: false, error: asmErr.message };
+
+    const profileErr = await upsertUserProfile(
+      admin,
+      authUser.user.id,
+      "assembler",
+      name,
+      email
+    );
+    if (profileErr) return { ok: false, error: profileErr };
 
     revalidatePath("/management", "layout");
     return { ok: true };
