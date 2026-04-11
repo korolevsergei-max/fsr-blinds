@@ -2,9 +2,24 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getLinkedSchedulerId, type AppUser } from "@/lib/auth";
 import { loadSchedulerDataset, getUnreadNotificationCount } from "@/lib/server-data";
+import type { AppDataset } from "@/lib/app-dataset";
 import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { SchedulerNav } from "./scheduler-nav";
 import SchedulerLoading from "./loading";
+
+function emptyDataset(): AppDataset {
+  return {
+    clients: [],
+    buildings: [],
+    units: [],
+    rooms: [],
+    windows: [],
+    installers: [],
+    schedule: [],
+    cutters: [],
+    schedulers: [],
+  };
+}
 
 export default async function SchedulerLayout({
   children,
@@ -62,7 +77,12 @@ async function SchedulerDataShell({
   children: React.ReactNode;
 }) {
   const schedulerId = await getLinkedSchedulerId(user.id);
-  const data = await loadSchedulerDataset();
+  let data = emptyDataset();
+  try {
+    data = await loadSchedulerDataset();
+  } catch (error) {
+    console.error("Failed to load scheduler dataset:", error);
+  }
 
   return (
     <AppDatasetClientShell

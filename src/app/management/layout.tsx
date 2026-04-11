@@ -2,9 +2,24 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, type AppUser } from "@/lib/auth";
 import { loadFullDataset } from "@/lib/server-data";
+import type { AppDataset } from "@/lib/app-dataset";
 import { AppDatasetClientShell } from "@/components/data/app-dataset-client-shell";
 import { ManagementNav } from "./management-nav";
 import ManagementLoading from "./loading";
+
+function emptyDataset(): AppDataset {
+  return {
+    clients: [],
+    buildings: [],
+    units: [],
+    rooms: [],
+    windows: [],
+    installers: [],
+    schedule: [],
+    cutters: [],
+    schedulers: [],
+  };
+}
 
 export default async function ManagementLayout({
   children,
@@ -55,7 +70,12 @@ async function ManagementDataShell({
   user: AppUser;
   children: React.ReactNode;
 }) {
-  const data = await loadFullDataset();
+  let data = emptyDataset();
+  try {
+    data = await loadFullDataset();
+  } catch (error) {
+    console.error("Failed to load management dataset:", error);
+  }
 
   return (
     <AppDatasetClientShell

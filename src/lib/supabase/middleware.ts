@@ -41,6 +41,14 @@ export async function updateSession(request: NextRequest) {
   /** When non-null, browser must receive these cookie clears on the final response. */
   let deletedAuthCookieNames: string[] | null = null;
   let authInvalidated = false;
+  const pathname = request.nextUrl.pathname;
+
+  // Public auth routes should never trigger a refresh-token purge. Hitting /login
+  // with no session is normal, and purging here can wipe a freshly-created session
+  // on the next paint before the app has a chance to navigate away.
+  if (pathname === "/login" || pathname.startsWith("/auth/")) {
+    return supabaseResponse;
+  }
 
   let url: string;
   let key: string;
@@ -116,12 +124,6 @@ export async function updateSession(request: NextRequest) {
       }
     }
     user = null;
-  }
-
-  const pathname = request.nextUrl.pathname;
-
-  if (pathname === "/login" || pathname.startsWith("/auth/")) {
-    return finish(supabaseResponse, authInvalidated);
   }
 
   if (pathname === "/") {

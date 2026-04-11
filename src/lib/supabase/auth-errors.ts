@@ -33,11 +33,6 @@ export function isInvalidRefreshTokenError(error: unknown): boolean {
     }
   }
 
-  if (o.status === 401 || o.status === 400) {
-    // Some versions of Supabase return raw status codes for auth failures
-    return true;
-  }
-
   return false;
 }
 
