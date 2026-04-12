@@ -1,6 +1,8 @@
 import type { AppDataset } from "./app-dataset";
 import type { RiskFlag } from "./types";
 
+export type EscalationRiskFlag = "green" | "yellow" | "red";
+
 export type UnitEscalationSummary = {
   roomId: string;
   roomName: string;
@@ -19,6 +21,18 @@ export function describeRiskFlag(flag: RiskFlag): string {
     return "Cannot proceed without escalation.";
   }
   return "No issues.";
+}
+
+export function getHighestEscalationRiskFlag(flags: readonly RiskFlag[]): EscalationRiskFlag {
+  if (flags.includes("red")) return "red";
+  if (flags.includes("yellow")) return "yellow";
+  return "green";
+}
+
+export function getRoomEscalationRiskFlag(
+  windows: ReadonlyArray<{ riskFlag: RiskFlag }>
+): EscalationRiskFlag {
+  return getHighestEscalationRiskFlag(windows.map((window) => window.riskFlag));
 }
 
 export function getUnitEscalations(

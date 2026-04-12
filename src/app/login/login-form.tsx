@@ -1,24 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { refreshDataset } from "@/app/actions/dataset-queries";
-import { setCachedData } from "@/lib/offline-cache";
-import { homePathForRole } from "@/lib/role-routes";
+import {
+  signInWithPasswordAction,
+  signUpOwnerAction,
+} from "@/app/actions/auth-actions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ArrowRight, UserPlus } from "@phosphor-icons/react";
-
-const DATASET_CACHE_KEY = "app-dataset";
-
-function prefetchDatasetInBackground(role?: string) {
-  const kind =
-    role === "scheduler" ? "scheduler" : role === "installer" ? "installer" : "full";
-  refreshDataset(kind)
-    .then((data) => setCachedData(DATASET_CACHE_KEY, data))
-    .catch(() => {/* best-effort */});
-}
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -28,53 +19,16 @@ export function LoginForm() {
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const supabase = useMemo(() => createClient(), []);
 
   const getAuthRedirectBaseUrl = () => {
     if (typeof window !== "undefined") return window.location.origin;
     return "http://localhost:3000";
   };
 
-  const navigateToRoleHome = (role?: string | null) => {
+  const navigateTo = (path?: string | null) => {
     if (typeof window === "undefined") return;
-    const nextPath = homePathForRole(role);
-    window.location.assign(nextPath === "/" ? "/management" : nextPath);
+    window.location.replace(path || "/management");
   };
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const redirectIfAuthenticated = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user || cancelled) return;
-
-      const metadataRole =
-        typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined;
-      navigateToRoleHome(metadataRole);
-    };
-
-    void redirectIfAuthenticated();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      const metadataRole =
-        typeof session?.user?.user_metadata?.role === "string"
-          ? session.user.user_metadata.role
-          : undefined;
-      if (session?.user) {
-        navigateToRoleHome(metadataRole);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,57 +48,33 @@ export function LoginForm() {
 
     try {
       if (mode === "signup") {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { display_name: name.trim() } },
-        });
+        const result = await signUpOwnerAction(name.trim(), email.trim(), password);
 
-        if (signUpError) {
-          setError(signUpError.message);
+        if (!result.ok) {
+          setError(result.error);
           setLoading(false);
           return;
         }
 
-        if (data.session) {
-          navigateToRoleHome("owner");
+        if (result.redirectTo) {
+          navigateTo(result.redirectTo);
           return;
         }
 
-        setInfo("Check your email for a confirmation link, then sign in.");
+        setInfo(result.message ?? "Check your email for a confirmation link, then sign in.");
         setMode("signin");
         setLoading(false);
         return;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        setError(signInError.message);
+      const result = await signInWithPasswordAction(email.trim(), password);
+      if (!result.ok) {
+        setError(result.error);
         setLoading(false);
         return;
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        const metadataRole =
-          typeof user.user_metadata?.role === "string" ? user.user_metadata.role : undefined;
-        const resolvedRole = metadataRole;
-
-        // Warm IDB cache while router navigates — fire-and-forget.
-        prefetchDatasetInBackground(resolvedRole);
-
-        navigateToRoleHome(resolvedRole);
-        return;
-      }
-
-      setLoading(false);
+      navigateTo(result.redirectTo);
     } catch {
       setError("Connection failed. Please try again.");
       setLoading(false);

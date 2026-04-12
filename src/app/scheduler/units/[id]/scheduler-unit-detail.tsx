@@ -15,7 +15,7 @@ import {
   CalendarCheck,
   ArrowRight,
 } from "@phosphor-icons/react";
-import { getRoomsByUnit } from "@/lib/app-dataset";
+import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
@@ -28,6 +28,7 @@ import { CompleteByHighlightCard } from "@/components/units/complete-by-highligh
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { getRoomEscalationRiskFlag } from "@/lib/window-issues";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -325,39 +326,54 @@ export function SchedulerUnitDetail({
               No rooms added yet
             </div>
           ) : (
-            rooms.map((room, i) => (
-              <motion.div
-                key={room.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 + i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <Link
-                  href={`/scheduler/units/${id}/rooms/${room.id}`}
-                  className="bg-accent text-white px-4 py-3 rounded-[12px] shadow-sm flex items-center justify-between active:scale-[0.98] hover:opacity-90 transition-all"
+            rooms.map((room, i) => {
+              const roomEscalation = getRoomEscalationRiskFlag(
+                getWindowsByRoom(datasetData!, room.id)
+              );
+              const roomCardClass =
+                roomEscalation === "red"
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : roomEscalation === "yellow"
+                    ? "bg-amber-500 text-white hover:bg-amber-600"
+                    : "bg-accent text-white hover:opacity-90";
+              const progressTrackClass =
+                roomEscalation === "green" ? "bg-white/20" : "bg-white/30";
+              const progressFillClass = roomEscalation === "green" ? "bg-white" : "bg-white/95";
+
+              return (
+                <motion.div
+                  key={room.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 + i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  <div>
-                    <p className="text-[13px] font-semibold">{room.name}</p>
-                    <p className="text-[11px] text-white/80 font-mono">
-                      {room.completedWindows}/{room.windowCount} measured
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-16 bg-white/20 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-white rounded-full"
-                        style={{
-                          width: room.windowCount > 0
-                            ? `${(room.completedWindows / room.windowCount) * 100}%`
-                            : "0%",
-                        }}
-                      />
+                  <Link
+                    href={`/scheduler/units/${id}/rooms/${room.id}`}
+                    className={`px-4 py-3 rounded-[12px] shadow-sm flex items-center justify-between active:scale-[0.98] transition-all ${roomCardClass}`}
+                  >
+                    <div>
+                      <p className="text-[13px] font-semibold">{room.name}</p>
+                      <p className="text-[11px] text-white/80 font-mono">
+                        {room.completedWindows}/{room.windowCount} measured
+                      </p>
                     </div>
-                    <ArrowRight size={13} />
-                  </div>
-                </Link>
-              </motion.div>
-            ))
+                    <div className="flex items-center gap-2">
+                      <div className={`h-1.5 w-16 rounded-full overflow-hidden ${progressTrackClass}`}>
+                        <div
+                          className={`h-full rounded-full ${progressFillClass}`}
+                          style={{
+                            width: room.windowCount > 0
+                              ? `${(room.completedWindows / room.windowCount) * 100}%`
+                              : "0%",
+                          }}
+                        />
+                      </div>
+                      <ArrowRight size={13} />
+                    </div>
+                  </Link>
+                </motion.div>
+              );
+            })
           )}
         </motion.div>
 

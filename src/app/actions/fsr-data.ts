@@ -19,6 +19,11 @@ import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
 import { emitNotification } from "@/lib/emit-notification";
 import {
+  buildUnitProgressNotificationBody,
+  buildWindowEscalationNotificationBody,
+  type UnitNotificationContext,
+} from "@/lib/notification-copy";
+import {
   NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
   NOTIF_INSTALLATION_DATE_SET,
   NOTIF_DATES_CHANGED,
@@ -132,6 +137,92 @@ function formatStagePhotoLabel(
 ): string {
   const base = customLabel.trim() || UNIT_PHOTO_STAGE_LABELS[stage];
   return total > 1 ? `${base} ${index + 1}` : base;
+}
+
+const PROGRESS_TITLES: Partial<Record<UnitStatus, string>> = {
+  measured: "All windows measured",
+  bracketed: "All windows bracketed",
+  measured_and_bracketed: "All windows measured & bracketed",
+  installed: "All windows installed",
+};
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function loadUnitNotificationContext(
+  supabase: AdminClient,
+  unitId: string
+): Promise<UnitNotificationContext | null> {
+  const { data: unitRow } = await supabase
+    .from("units")
+    .select("client_name, building_name, unit_number")
+    .eq("id", unitId)
+    .maybeSingle();
+
+  if (!unitRow) return null;
+
+  return {
+    clientName: unitRow.client_name ?? "",
+    buildingName: unitRow.building_name ?? "",
+    unitNumber: unitRow.unit_number ?? "",
+  };
+}
+
+async function emitUnitProgressNotification(
+  supabase: AdminClient,
+  schedulerId: string,
+  unitId: string,
+  unitStatus: UnitStatus
+): Promise<void> {
+  const title = PROGRESS_TITLES[unitStatus];
+  if (!title) return;
+
+  const context = await loadUnitNotificationContext(supabase, unitId);
+  if (!context) return;
+
+  await emitNotification({
+    recipientRole: "scheduler",
+    recipientId: schedulerId,
+    type: NOTIF_UNIT_PROGRESS_UPDATE,
+    title,
+    body: buildUnitProgressNotificationBody(context, unitStatus),
+    relatedUnitId: unitId,
+  });
+}
+
+async function emitWindowEscalationNotification(
+  supabase: AdminClient,
+  schedulerId: string,
+  {
+    unitId,
+    roomId,
+    windowLabel,
+    riskFlag,
+  }: {
+    unitId: string;
+    roomId: string;
+    windowLabel: string;
+    riskFlag: Exclude<RiskFlag, "green" | "complete">;
+  }
+): Promise<void> {
+  const [context, roomRes] = await Promise.all([
+    loadUnitNotificationContext(supabase, unitId),
+    supabase.from("rooms").select("name").eq("id", roomId).maybeSingle(),
+  ]);
+
+  if (!context) return;
+
+  await emitNotification({
+    recipientRole: "scheduler",
+    recipientId: schedulerId,
+    type: NOTIF_UNIT_ESCALATION,
+    title: `${riskFlag === "red" ? "🔴 Red" : "🟡 Yellow"} flag on window`,
+    body: buildWindowEscalationNotificationBody(context, {
+      roomName: roomRes.data?.name ?? "Room",
+      windowLabel,
+      riskFlag,
+    }),
+    relatedUnitId: unitId,
+  });
 }
 
 async function refreshRoomAggregates(
@@ -1175,23 +1266,7 @@ export async function deleteWindow(
       if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          const progressTitles: Record<string, string> = {
-            measured: "All windows measured",
-            bracketed: "All windows bracketed",
-            measured_and_bracketed: "All windows measured & bracketed",
-            installed: "All windows installed",
-          };
-          const title = progressTitles[unitStatus];
-          if (title) {
-            await emitNotification({
-              recipientRole: "scheduler",
-              recipientId: schedulerId,
-              type: NOTIF_UNIT_PROGRESS_UPDATE,
-              title,
-              body: `Unit status updated to "${unitStatus}".`,
-              relatedUnitId: unitId,
-            });
-          }
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
         }
       }
     });
@@ -1408,13 +1483,11 @@ export async function createWindowWithPhoto(
       if (riskFlag === "yellow" || riskFlag === "red") {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          await emitNotification({
-            recipientRole: "scheduler",
-            recipientId: schedulerId,
-            type: NOTIF_UNIT_ESCALATION,
-            title: `${riskFlag === "red" ? "🔴 Red" : "🟡 Yellow"} flag on window`,
-            body: `${label} flagged ${riskFlag} by installer.`,
-            relatedUnitId: unitId,
+          await emitWindowEscalationNotification(db, schedulerId, {
+            unitId,
+            roomId,
+            windowLabel: label,
+            riskFlag,
           });
         }
       }
@@ -1422,23 +1495,7 @@ export async function createWindowWithPhoto(
       if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          const progressTitles: Record<string, string> = {
-            measured: "All windows measured",
-            bracketed: "All windows bracketed",
-            measured_and_bracketed: "All windows measured & bracketed",
-            installed: "All windows installed",
-          };
-          const title = progressTitles[unitStatus];
-          if (title) {
-            await emitNotification({
-              recipientRole: "scheduler",
-              recipientId: schedulerId,
-              type: NOTIF_UNIT_PROGRESS_UPDATE,
-              title,
-              body: `Unit status updated to "${unitStatus}".`,
-              relatedUnitId: unitId,
-            });
-          }
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
         }
       }
     });
@@ -1648,13 +1705,11 @@ export async function updateWindowWithOptionalPhoto(
       if (riskFlag === "yellow" || riskFlag === "red") {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          await emitNotification({
-            recipientRole: "scheduler",
-            recipientId: schedulerId,
-            type: NOTIF_UNIT_ESCALATION,
-            title: `${riskFlag === "red" ? "🔴 Red" : "🟡 Yellow"} flag on window`,
-            body: `${label} flagged ${riskFlag} by installer.`,
-            relatedUnitId: unitId,
+          await emitWindowEscalationNotification(db, schedulerId, {
+            unitId,
+            roomId,
+            windowLabel: label,
+            riskFlag,
           });
         }
       }
@@ -1662,23 +1717,7 @@ export async function updateWindowWithOptionalPhoto(
       if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          const progressTitles: Record<string, string> = {
-            measured: "All windows measured",
-            bracketed: "All windows bracketed",
-            measured_and_bracketed: "All windows measured & bracketed",
-            installed: "All windows installed",
-          };
-          const title = progressTitles[unitStatus];
-          if (title) {
-            await emitNotification({
-              recipientRole: "scheduler",
-              recipientId: schedulerId,
-              type: NOTIF_UNIT_PROGRESS_UPDATE,
-              title,
-              body: `Unit status updated to "${unitStatus}".`,
-              relatedUnitId: unitId,
-            });
-          }
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
         }
       }
     });
@@ -1818,23 +1857,7 @@ export async function uploadWindowPostBracketingPhoto(
       if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          const progressTitles: Record<string, string> = {
-            measured: "All windows measured",
-            bracketed: "All windows bracketed",
-            measured_and_bracketed: "All windows measured & bracketed",
-            installed: "All windows installed",
-          };
-          const title = progressTitles[unitStatus];
-          if (title) {
-            await emitNotification({
-              recipientRole: "scheduler",
-              recipientId: schedulerId,
-              type: NOTIF_UNIT_PROGRESS_UPDATE,
-              title,
-              body: `Unit status updated to "${unitStatus}".`,
-              relatedUnitId: unitId,
-            });
-          }
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
         }
       }
     });
@@ -1987,23 +2010,7 @@ export async function uploadWindowInstalledPhoto(
       if (unitStatus !== prevStatus) {
         const schedulerId = await getSchedulerForUnit(db, unitId);
         if (schedulerId) {
-          const progressTitles: Record<string, string> = {
-            measured: "All windows measured",
-            bracketed: "All windows bracketed",
-            measured_and_bracketed: "All windows measured & bracketed",
-            installed: "All windows installed",
-          };
-          const title = progressTitles[unitStatus];
-          if (title) {
-            await emitNotification({
-              recipientRole: "scheduler",
-              recipientId: schedulerId,
-              type: NOTIF_UNIT_PROGRESS_UPDATE,
-              title,
-              body: `Unit status updated to "${unitStatus}".`,
-              relatedUnitId: unitId,
-            });
-          }
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
         }
       }
     });

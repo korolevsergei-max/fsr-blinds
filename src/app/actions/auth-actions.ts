@@ -6,9 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { UserRole } from "@/lib/auth";
 import { requireOwner, requireOwnerOrScheduler, getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
+import { homePathForRole } from "@/lib/role-routes";
 
 export type ActionResult =
   | { ok: true; tempPassword?: string }
+  | { ok: false; error: string };
+
+export type AuthFlowResult =
+  | { ok: true; redirectTo?: string; message?: string }
   | { ok: false; error: string };
 
 async function assertOwnerForAccountActions(): Promise<ActionResult | null> {
@@ -119,6 +124,106 @@ export async function signOut(): Promise<ActionResult> {
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Sign out failed" };
+  }
+}
+
+export async function signInWithPasswordAction(
+  email: string,
+  password: string
+): Promise<AuthFlowResult> {
+  try {
+    const supabase = await createClient();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    const authUser = data.user;
+    if (!authUser) {
+      return { ok: false, error: "Sign in succeeded but no user was returned." };
+    }
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    const metadataRole =
+      typeof authUser.user_metadata?.role === "string"
+        ? authUser.user_metadata.role
+        : null;
+    const role = profile?.role ?? metadataRole;
+    const redirectTo = homePathForRole(role) === "/" ? "/management" : homePathForRole(role);
+
+    revalidatePath("/", "layout");
+
+    return { ok: true, redirectTo };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Sign in failed",
+    };
+  }
+}
+
+export async function signUpOwnerAction(
+  name: string,
+  email: string,
+  password: string
+): Promise<AuthFlowResult> {
+  try {
+    const supabase = await createClient();
+    const normalizedEmail = email.trim().toLowerCase();
+    const displayName = name.trim();
+
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+          role: "owner",
+        },
+      },
+    });
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    if (data.user?.id) {
+      const admin = createAdminClient();
+      await upsertUserProfile(
+        admin,
+        data.user.id,
+        "owner",
+        displayName,
+        normalizedEmail
+      );
+    }
+
+    revalidatePath("/", "layout");
+
+    if (data.session) {
+      return { ok: true, redirectTo: "/management" };
+    }
+
+    return {
+      ok: true,
+      message: "Check your email for a confirmation link, then sign in.",
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Account creation failed",
+    };
   }
 }
 

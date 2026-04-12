@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -120,35 +121,51 @@ export function AppDatasetProvider({
   );
 }
 
-function getDatasetContextValue(store: DatasetStore): DatasetContextValue {
-  const snapshot = store.getSnapshot();
-  return {
-    ...snapshot,
-    patchData: store.patchData,
-    setData: store.setData,
-  };
-}
-
 function useDatasetStoreValue<T>(
   store: DatasetStore,
   selector: (value: DatasetContextValue) => T
 ): T {
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     store.subscribe,
-    () => selector(getDatasetContextValue(store)),
-    () => selector(getDatasetContextValue(store))
+    store.getSnapshot,
+    store.getSnapshot
   );
+
+  const value = useMemo<DatasetContextValue>(
+    () => ({
+      ...snapshot,
+      patchData: store.patchData,
+      setData: store.setData,
+    }),
+    [snapshot, store]
+  );
+
+  return useMemo(() => selector(value), [selector, value]);
 }
 
 function useOptionalDatasetStoreValue<T>(
   store: DatasetStore | null,
   selector: (value: DatasetContextValue) => T
 ): T | null {
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     store?.subscribe ?? EMPTY_SUBSCRIBE,
-    () => (store ? selector(getDatasetContextValue(store)) : null),
-    () => (store ? selector(getDatasetContextValue(store)) : null)
+    () => (store ? store.getSnapshot() : null),
+    () => (store ? store.getSnapshot() : null)
   );
+
+  const value = useMemo<DatasetContextValue | null>(
+    () =>
+      store && snapshot
+        ? {
+            ...snapshot,
+            patchData: store.patchData,
+            setData: store.setData,
+          }
+        : null,
+    [snapshot, store]
+  );
+
+  return useMemo(() => (value ? selector(value) : null), [selector, value]);
 }
 
 export function useDatasetSelector<T>(

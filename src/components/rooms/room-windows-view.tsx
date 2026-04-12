@@ -11,6 +11,7 @@ import type { UnitStageMediaItem } from "@/lib/server-data";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import { WindowStageNav } from "@/components/window-stage-nav";
+import { getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
 type ImageOrientation = "portrait" | "landscape" | "square";
@@ -191,6 +192,14 @@ export function RoomWindowsView({
         </p>
 
         {windowsList.map((win, i) => {
+          const escalationFlag = getHighestEscalationRiskFlag([win.riskFlag]);
+          const cardTone =
+            escalationFlag === "red"
+              ? "border-red-300 bg-red-50"
+              : escalationFlag === "yellow"
+                ? "border-amber-300 bg-amber-50"
+                : "border-border bg-white";
+
           const stageMedia = windowStageMediaMap.get(win.id) ?? {};
           const stageOptions: { key: WindowStageKey; label: string; url: string }[] = [];
           const preUrl = stageMedia.pre ?? win.photoUrl ?? "";
@@ -239,9 +248,7 @@ export function RoomWindowsView({
                   }
                 }}
                 className={`rounded-2xl border p-4 transition-all ${
-                  win.riskFlag === "red"
-                    ? "border-red-300 bg-red-50"
-                    : "border-border bg-white"
+                  cardTone
                 } ${
                   galleryCount > 0
                     ? "cursor-pointer hover:border-zinc-300 hover:shadow-[var(--shadow-sm)]"

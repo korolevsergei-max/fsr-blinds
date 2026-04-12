@@ -20,6 +20,7 @@ export function AppDatasetClientShell({
   user,
   linkedEntityId,
   portalDataLoader,
+  eagerRefreshOnMount = false,
   children,
 }: {
   initialData: AppDataset;
@@ -28,6 +29,8 @@ export function AppDatasetClientShell({
   linkedEntityId?: string | null;
   /** Which server action to call for full refresh. Defaults to refreshDataset (full). */
   portalDataLoader?: "full" | "scheduler" | "installer";
+  /** Trigger an immediate client-side refresh after mount. */
+  eagerRefreshOnMount?: boolean;
   children: ReactNode;
 }) {
   const loaderKind = portalDataLoader ?? "full";
@@ -35,7 +38,11 @@ export function AppDatasetClientShell({
 
   return (
     <AppDatasetProvider initialData={initialData} user={user} linkedEntityId={linkedEntityId}>
-      <RealtimeBridge loaderKind={loaderKind} cacheKey={cacheKey} />
+      <RealtimeBridge
+        loaderKind={loaderKind}
+        cacheKey={cacheKey}
+        eagerRefreshOnMount={eagerRefreshOnMount}
+      />
       {children}
     </AppDatasetProvider>
   );
@@ -45,28 +52,34 @@ export function AppDatasetClientShell({
 function RealtimeBridge({
   loaderKind,
   cacheKey,
+  eagerRefreshOnMount,
 }: {
   loaderKind: "full" | "scheduler" | "installer";
   cacheKey: string;
+  eagerRefreshOnMount: boolean;
 }) {
   const { data, patchData, setData } = useAppDataset();
   const cacheWriteTimerRef = useRef<number | null>(null);
+  const eagerRefreshStartedRef = useRef(false);
+  const canUseOfflineCache = loaderKind !== "full";
 
   // Wire up Supabase Realtime subscriptions
   useRealtimeSync(patchData, loaderKind);
 
   // On mount: seed from IDB if server provided empty data (offline / first-render fallback).
   useEffect(() => {
+    if (!canUseOfflineCache) return;
     if (data.units.length === 0 && data.clients.length === 0) {
       getCachedData<typeof data>(cacheKey).then((cached) => {
         if (cached) setData(cached);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKey]);
+  }, [cacheKey, canUseOfflineCache]);
 
   // Persist dataset to IDB whenever it changes, but debounce bursts of realtime patches.
   useEffect(() => {
+    if (!canUseOfflineCache) return;
     if (cacheWriteTimerRef.current !== null) {
       window.clearTimeout(cacheWriteTimerRef.current);
     }
@@ -82,7 +95,16 @@ function RealtimeBridge({
         cacheWriteTimerRef.current = null;
       }
     };
-  }, [cacheKey, data]);
+  }, [cacheKey, data, canUseOfflineCache]);
+
+  useEffect(() => {
+    if (!eagerRefreshOnMount || eagerRefreshStartedRef.current) return;
+    eagerRefreshStartedRef.current = true;
+
+    refreshDataset(loaderKind).then((freshData) => {
+      if (freshData) setData(freshData);
+    });
+  }, [eagerRefreshOnMount, loaderKind, setData]);
 
   // Refresh when the tab returns from background after 60s+
   const setDataRef = useRef(setData);

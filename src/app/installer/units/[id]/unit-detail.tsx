@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Info, WarningCircle, UserGear, CalendarCheck, Wrench, Buildings, Robot, ClockCounterClockwise } from "@phosphor-icons/react";
-import { getRoomsByUnit } from "@/lib/app-dataset";
+import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { UNIT_STATUS_LABELS, type UnitActivityLog } from "@/lib/types";
@@ -22,6 +22,7 @@ import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { getRoomEscalationRiskFlag } from "@/lib/window-issues";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -436,24 +437,38 @@ export function UnitDetail({
               Rooms
             </h3>
             <div className="flex flex-col gap-2">
-              {rooms.map((room) => (
-                <Link key={room.id} href={`/installer/units/${unit.id}/rooms/${room.id}`}>
-                  <div className="flex items-center justify-between bg-accent text-white px-4 py-3.5 rounded-[12px] shadow-sm hover:opacity-90 transition-all duration-200 active:scale-[0.99]">
-                    <div>
-                      <p className="text-[14px] font-semibold">{room.name}</p>
-                      <p className="text-[11px] text-white/80 mt-0.5">
-                        {room.completedWindows}/{room.windowCount} measured •{" "}
-                        {Math.min(
-                          bracketedWindowIdsByRoom.get(room.id)?.size ?? 0,
-                          room.windowCount
-                        )}
-                        /{room.windowCount} bracketed
-                      </p>
+              {rooms.map((room) => {
+                const roomEscalation = getRoomEscalationRiskFlag(
+                  getWindowsByRoom(datasetData!, room.id)
+                );
+                const roomCardClass =
+                  roomEscalation === "red"
+                    ? "bg-red-600 text-white hover:bg-red-700"
+                    : roomEscalation === "yellow"
+                      ? "bg-amber-500 text-white hover:bg-amber-600"
+                      : "bg-accent text-white hover:opacity-90";
+
+                return (
+                  <Link key={room.id} href={`/installer/units/${unit.id}/rooms/${room.id}`}>
+                    <div
+                      className={`flex items-center justify-between px-4 py-3.5 rounded-[12px] shadow-sm transition-all duration-200 active:scale-[0.99] ${roomCardClass}`}
+                    >
+                      <div>
+                        <p className="text-[14px] font-semibold">{room.name}</p>
+                        <p className="text-[11px] text-white/80 mt-0.5">
+                          {room.completedWindows}/{room.windowCount} measured •{" "}
+                          {Math.min(
+                            bracketedWindowIdsByRoom.get(room.id)?.size ?? 0,
+                            room.windowCount
+                          )}
+                          /{room.windowCount} bracketed
+                        </p>
+                      </div>
+                      <ArrowRight size={15} />
                     </div>
-                    <ArrowRight size={15} />
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           </motion.div>
         )}

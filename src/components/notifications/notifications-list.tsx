@@ -223,7 +223,7 @@ export function NotificationsList({
                   onClick={() => handleRead(notif)}
                   disabled={pending}
                   className={[
-                    "w-full text-left rounded-2xl border p-4 transition-all active:scale-[0.99]",
+                    "w-full text-left rounded-2xl border p-3.5 transition-all active:scale-[0.99]",
                     notif.read
                       ? "border-border bg-white"
                       : "border-accent/20 bg-accent/3",
@@ -236,7 +236,7 @@ export function NotificationsList({
                       <div className="flex items-center gap-2">
                         <p
                           className={[
-                            "text-sm tracking-tight",
+                            "text-[13px] leading-tight tracking-tight",
                             notif.read
                               ? "font-medium text-zinc-600"
                               : "font-bold text-foreground",
@@ -254,12 +254,12 @@ export function NotificationsList({
                       </div>
 
                       {notif.body && (
-                        <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                        <p className="mt-1 text-[12px] leading-snug text-zinc-600">
                           {notif.body}
                         </p>
                       )}
 
-                      <div className="flex items-center gap-2 mt-2 text-[11px] text-zinc-400">
+                      <div className="mt-2.5 flex items-center gap-2 text-[10px] text-zinc-400">
                         <span>{formatDate(notif.createdAt)}</span>
                         {notif.read && (
                           <span className="flex items-center gap-0.5 text-emerald-500">

@@ -12,6 +12,7 @@ import { emitNotification } from "@/lib/emit-notification";
 import { NOTIF_MFG_BEHIND_SCHEDULE } from "@/lib/notification-types";
 import { loadManufacturingSettings, reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { addWorkingDays } from "@/lib/manufacturing-calendar";
+import { buildManufacturingRiskNotificationBody, type UnitNotificationContext } from "@/lib/notification-copy";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -170,7 +171,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
     // Load all measured units that have an installation date
     const { data: units } = await supabase
       .from("units")
-      .select("id, installation_date, window_count")
+      .select("id, installation_date, window_count, client_name, building_name, unit_number")
       .in("status", ["measured", "measured_and_bracketed"])
       .not("installation_date", "is", null);
 
@@ -236,12 +237,17 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
           .eq("unit_id", unit.id)
           .maybeSingle();
         if (assignment?.scheduler_id) {
+          const context: UnitNotificationContext = {
+            clientName: unit.client_name ?? "",
+            buildingName: unit.building_name ?? "",
+            unitNumber: unit.unit_number ?? "",
+          };
           await emitNotification({
             recipientRole: "scheduler",
             recipientId: assignment.scheduler_id,
             type: NOTIF_MFG_BEHIND_SCHEDULE,
             title: flag === "red" ? "🔴 Blinds at risk for install" : "🟡 Manufacturing behind schedule",
-            body: `Ready-by target in ${daysUntil} day(s) — blinds are not QC-approved yet.`,
+            body: buildManufacturingRiskNotificationBody(context, daysUntil),
             relatedUnitId: unit.id,
           });
         }

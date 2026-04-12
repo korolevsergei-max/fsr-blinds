@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, type AppUser } from "@/lib/auth";
 import { loadFullDataset } from "@/lib/server-data";
@@ -19,6 +20,14 @@ function emptyDataset(): AppDataset {
     cutters: [],
     schedulers: [],
   };
+}
+
+function shouldDeferInitialDatasetForUserAgent(userAgent: string): boolean {
+  const ua = userAgent.toLowerCase();
+  const isiOSFamily =
+    /iphone|ipad|ipod/.test(ua) || (ua.includes("macintosh") && ua.includes("mobile"));
+  const isAndroidFamily = ua.includes("android");
+  return isiOSFamily || isAndroidFamily;
 }
 
 export default async function ManagementLayout({
@@ -70,17 +79,26 @@ async function ManagementDataShell({
   user: AppUser;
   children: React.ReactNode;
 }) {
+  const headerStore = await headers();
+  const deferInitialDataset = shouldDeferInitialDatasetForUserAgent(
+    headerStore.get("user-agent") ?? ""
+  );
   let data = emptyDataset();
-  try {
-    data = await loadFullDataset();
-  } catch (error) {
-    console.error("Failed to load management dataset:", error);
+  let eagerRefreshOnMount = true;
+  if (!deferInitialDataset) {
+    try {
+      data = await loadFullDataset();
+      eagerRefreshOnMount = false;
+    } catch (error) {
+      console.error("Failed to load management dataset:", error);
+    }
   }
 
   return (
     <AppDatasetClientShell
       initialData={data}
       user={user}
+      eagerRefreshOnMount={eagerRefreshOnMount}
     >
       {children}
     </AppDatasetClientShell>

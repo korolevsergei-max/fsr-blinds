@@ -1,6 +1,15 @@
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
+import { homePathForRole } from "@/lib/role-routes";
 import { LoginForm } from "./login-form";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const user = await getCurrentUser();
+  if (user) {
+    const nextPath = homePathForRole(user.role);
+    redirect(nextPath === "/" ? "/management" : nextPath);
+  }
+
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
       <div className="flex-1 flex flex-col justify-between px-6 py-14 max-w-md mx-auto w-full">
