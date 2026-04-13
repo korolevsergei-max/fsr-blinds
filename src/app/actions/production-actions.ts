@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import {
@@ -32,6 +33,29 @@ function revalidateAll() {
   revalidatePath("/assembler", "layout");
   revalidatePath("/qc", "layout");
   revalidatePath("/management", "layout");
+}
+
+function scheduleManufacturingFollowUp(args: {
+  unitId: string;
+  windowId?: string;
+  resolvedPushbackFor?: "cutter" | "assembler" | "qc" | null;
+  scheduleReason: "mark_cut" | "mark_assembled" | "mark_qc";
+}) {
+  after(async () => {
+    const followUpSupabase = await createClient();
+
+    if (args.windowId && args.resolvedPushbackFor) {
+      await notifyManufacturingPushbackResolved(followUpSupabase, {
+        unitId: args.unitId,
+        windowId: args.windowId,
+        targetRole: args.resolvedPushbackFor,
+      });
+    }
+
+    await recomputeUnitStatus(followUpSupabase, args.unitId);
+    await reflowManufacturingSchedules(args.scheduleReason);
+    revalidateAll();
+  });
 }
 
 async function loadManufacturingNotificationContext(
@@ -171,17 +195,12 @@ export async function markWindowCut(
       resolvedByUserId: user.id,
     });
 
-    if (resolvedPushback) {
-      await notifyManufacturingPushbackResolved(supabase, {
-        unitId,
-        windowId,
-        targetRole: "cutter",
-      });
-    }
-
-    await recomputeUnitStatus(supabase, unitId);
-    await reflowManufacturingSchedules("mark_cut");
-    revalidateAll();
+    scheduleManufacturingFollowUp({
+      unitId,
+      windowId,
+      resolvedPushbackFor: resolvedPushback ? "cutter" : null,
+      scheduleReason: "mark_cut",
+    });
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark window as cut." };
@@ -229,19 +248,14 @@ export async function markWindowAssembled(
       resolvedByUserId: user.id,
     });
 
-    if (resolvedPushback && currentRow?.unit_id) {
-      await notifyManufacturingPushbackResolved(supabase, {
+    if (currentRow?.unit_id) {
+      scheduleManufacturingFollowUp({
         unitId: currentRow.unit_id,
         windowId,
-        targetRole: "assembler",
+        resolvedPushbackFor: resolvedPushback ? "assembler" : null,
+        scheduleReason: "mark_assembled",
       });
     }
-
-    if (currentRow?.unit_id) {
-      await recomputeUnitStatus(supabase, currentRow.unit_id);
-    }
-    await reflowManufacturingSchedules("mark_assembled");
-    revalidateAll();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark window as assembled." };
@@ -284,10 +298,12 @@ export async function markWindowQCApproved(
     if (error) return { ok: false, error: error.message };
 
     if (currentRow?.unit_id) {
-      await recomputeUnitStatus(supabase, currentRow.unit_id);
+      scheduleManufacturingFollowUp({
+        unitId: currentRow.unit_id,
+        resolvedPushbackFor: null,
+        scheduleReason: "mark_qc",
+      });
     }
-    await reflowManufacturingSchedules("mark_qc");
-    revalidateAll();
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark QC approved." };

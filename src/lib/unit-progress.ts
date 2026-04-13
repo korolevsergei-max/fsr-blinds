@@ -33,6 +33,8 @@ export async function recomputeUnitStatus(
       newStatus
     );
   }
+
+  await supabase.from("schedule_entries").update({ status: newStatus }).eq("unit_id", unitId);
 }
 
 export function deriveStatusFromCoverage(

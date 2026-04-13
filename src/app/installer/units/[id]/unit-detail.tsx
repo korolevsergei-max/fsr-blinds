@@ -149,6 +149,10 @@ export function UnitDetail({
   const datasetData = data ?? datasetCtx?.data;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
+  const unitWindows =
+    datasetData && unit
+      ? rooms.flatMap((room) => getWindowsByRoom(datasetData, room.id))
+      : [];
   const escalations = unit && datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const escalationCount = escalations.length;
   const bracketedWindowIdsByRoom = new Map<string, Set<string>>();
@@ -186,7 +190,10 @@ export function UnitDetail({
       ? "measured"
       : "not_started";
 
-  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
+  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems, {
+    rooms,
+    windows: unitWindows,
+  });
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -421,7 +428,14 @@ export function UnitDetail({
             layout="detail"
             density="comfortable"
             title="Installation progress"
-            mediaViewerSlot={<UnitStageMediaViewer items={mediaItems} />}
+            mediaViewerSlot={
+              <UnitStageMediaViewer
+                items={mediaItems}
+                milestones={milestones}
+                rooms={rooms}
+                windows={unitWindows}
+              />
+            }
           />
         </motion.div>
 

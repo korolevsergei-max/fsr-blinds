@@ -31,7 +31,7 @@ export function ScheduleEntryCard({
   const isMeasurement = entry.taskType === "measurement";
   const isBracketing = entry.taskType === "bracketing";
   const Icon = isMeasurement || isBracketing ? Wrench : Hammer;
-  const taskLabel = isMeasurement ? "Measure" : isBracketing ? "Bracket" : "Install";
+  const taskLabel = isMeasurement ? "Measure" : isBracketing ? "Bracket" : "Installed";
 
   const tone = isOverdue
     ? {

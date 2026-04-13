@@ -213,6 +213,10 @@ export function ManagementUnitDetail({
   const resolvedUserRole = userRole ?? (datasetCtx?.user.role as UserRole | undefined);
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
+  const unitWindows =
+    datasetData && unit
+      ? rooms.flatMap((room) => getWindowsByRoom(datasetData, room.id))
+      : [];
 
   const unitId = unit?.id;
   const unitCreatedAt = unit?.createdAt;
@@ -295,7 +299,10 @@ export function ManagementUnitDetail({
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
 
-  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
+  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems, {
+    rooms,
+    windows: unitWindows,
+  });
   const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
 
   return (
@@ -428,7 +435,14 @@ export function ManagementUnitDetail({
             milestones={milestones}
             layout="detail"
             title="Progress"
-            mediaViewerSlot={<UnitStageMediaViewer items={mediaItems} />}
+            mediaViewerSlot={
+              <UnitStageMediaViewer
+                items={mediaItems}
+                milestones={milestones}
+                rooms={rooms}
+                windows={unitWindows}
+              />
+            }
           />
         </motion.div>
 

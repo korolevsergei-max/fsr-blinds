@@ -1,13 +1,12 @@
-import { loadCachedUnitSupplementalData } from "@/lib/unit-route-data";
+"use client";
+
+import { useParams } from "next/navigation";
+import { useUnitSupplementalData } from "@/lib/use-unit-supplemental";
 import { SchedulerUnitDetail } from "./scheduler-unit-detail";
 
-export default async function SchedulerUnitPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const supplemental = await loadCachedUnitSupplementalData(id);
+export default function SchedulerUnitPage() {
+  const { id } = useParams<{ id: string }>();
+  const supplemental = useUnitSupplementalData(id);
 
   return (
     <SchedulerUnitDetail

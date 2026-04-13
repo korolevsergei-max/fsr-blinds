@@ -1,12 +1,11 @@
-import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
+"use client";
+
+import { useParams } from "next/navigation";
+import { useUnitMediaAndMilestones } from "@/lib/use-unit-supplemental";
 import { RoomDetail } from "./room-detail";
 
-export default async function InstallerRoomDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string; roomId: string }>;
-}) {
-  const { id } = await params;
-  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
+export default function InstallerRoomDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const { mediaItems, milestones } = useUnitMediaAndMilestones(id);
   return <RoomDetail mediaItems={mediaItems} milestones={milestones} />;
 }

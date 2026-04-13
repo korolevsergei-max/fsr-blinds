@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -22,7 +22,15 @@ function formatDim(val: number | null): string {
   return `${val}"`;
 }
 
-function QcWindowCard({ window, roomName }: { window: AssemblerWindow; roomName: string }) {
+function QcWindowCard({
+  window,
+  roomName,
+  onApproveQC,
+}: {
+  window: AssemblerWindow;
+  roomName: string;
+  onApproveQC: (windowId: string) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const production = window.production;
@@ -40,9 +48,13 @@ function QcWindowCard({ window, roomName }: { window: AssemblerWindow; roomName:
   };
 
   function handleApproveQC() {
+    onApproveQC(window.id);
     startTransition(async () => {
-      await markWindowQCApproved(window.id);
-      router.refresh();
+      const result = await markWindowQCApproved(window.id);
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to approve QC.");
+        router.refresh();
+      }
     });
   }
 
@@ -141,9 +153,51 @@ function QcWindowCard({ window, roomName }: { window: AssemblerWindow; roomName:
 
 export function QcUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
-  const { unit, rooms, windows } = detail;
+  const { unit, rooms } = detail;
+  const [windows, setWindows] = useState(detail.windows);
+
+  const handleApproveQC = (windowId: string) => {
+    setWindows((prev) =>
+      prev.map((windowItem) =>
+        windowItem.id === windowId
+          ? {
+              ...windowItem,
+              production: {
+                ...(windowItem.production ?? {
+                  id: "",
+                  windowId,
+                  unitId: unit.id,
+                  cutByCutterId: null,
+                  cutAt: null,
+                  cutNotes: "",
+                  assembledByAssemblerId: null,
+                  assembledAt: null,
+                  assembledNotes: "",
+                  qcApprovedByAssemblerId: null,
+                  qcApprovedByQcId: null,
+                  qcApprovedAt: null,
+                  qcNotes: "",
+                  issueStatus: "none" as const,
+                  issueReason: "",
+                  issueNotes: "",
+                  issueReportedByRole: null,
+                  issueReportedAt: null,
+                  issueResolvedAt: null,
+                  createdAt: new Date().toISOString(),
+                }),
+                status: "qc_approved" as const,
+                qcApprovedAt: new Date().toISOString(),
+              },
+            }
+          : windowItem
+      )
+    );
+  };
 
   const total = windows.length;
+  const qcApprovedCount = windows.filter(
+    (windowItem) => windowItem.production?.status === "qc_approved"
+  ).length;
 
   return (
     <div className="px-4 pt-4 pb-6 space-y-5">
@@ -167,12 +221,12 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
           <span className="text-secondary font-medium">QC Progress</span>
-          <span className="text-tertiary">{unit.qcApprovedCount}/{total} QC&apos;d</span>
+          <span className="text-tertiary">{qcApprovedCount}/{total} QC&apos;d</span>
         </div>
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-green-500 transition-all"
-            style={{ width: total > 0 ? `${(unit.qcApprovedCount / total) * 100}%` : "0%" }}
+            style={{ width: total > 0 ? `${(qcApprovedCount / total) * 100}%` : "0%" }}
           />
         </div>
         {unit.installationDate && (
@@ -189,7 +243,12 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
               {room.name}
             </p>
             {roomWindows.map((win) => (
-              <QcWindowCard key={win.id} window={win} roomName={room.name} />
+              <QcWindowCard
+                key={win.id}
+                window={win}
+                roomName={room.name}
+                onApproveQC={handleApproveQC}
+              />
             ))}
           </div>
         );

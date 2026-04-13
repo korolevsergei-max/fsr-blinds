@@ -312,7 +312,7 @@ export function normalizeScheduleEntries(
         ownerName: existing?.ownerName ?? null,
         taskType: "measurement",
         date: unit.measurementDate,
-        status: existing?.status ?? "not_started",
+        status: unit.status,
       });
     }
 
@@ -328,7 +328,7 @@ export function normalizeScheduleEntries(
         ownerName: existing?.ownerName ?? null,
         taskType: "bracketing",
         date: unit.bracketingDate,
-        status: existing?.status ?? "not_started",
+        status: unit.status,
       });
     }
 
@@ -344,7 +344,7 @@ export function normalizeScheduleEntries(
         ownerName: existing?.ownerName ?? null,
         taskType: "installation",
         date: unit.installationDate,
-        status: existing?.status ?? "not_started",
+        status: unit.status,
       });
     }
   }

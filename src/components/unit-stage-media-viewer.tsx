@@ -5,53 +5,65 @@ import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Camera,
+  CaretLeft,
+  CaretRight,
   ImageSquare,
   Images,
   X,
 } from "@phosphor-icons/react";
-import {
-  UNIT_PHOTO_STAGES,
-  UNIT_PHOTO_STAGE_LABELS,
-} from "@/lib/types";
+import type { Room, Window } from "@/lib/types";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
+import {
+  buildUnitMediaOverview,
+  type UnitEvidencePhoto,
+} from "@/lib/unit-media";
 import { Button } from "@/components/ui/button";
 import { UnitStageSummaryGrid } from "@/components/unit-stage-summary-grid";
-import { countDisplayableUnitPhotos } from "@/lib/unit-media";
+
+type ActiveImageState = {
+  photos: UnitEvidencePhoto[];
+  index: number;
+};
 
 export function UnitStageMediaViewer({
   items,
+  milestones,
+  rooms,
+  windows,
   triggerClassName = "",
 }: {
   items: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
+  rooms: Room[];
+  windows: Window[];
   triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [activeImage, setActiveImage] = useState<{
-    url: string;
-    title: string;
-  } | null>(null);
-  const visiblePhotoCount = useMemo(() => countDisplayableUnitPhotos(items), [items]);
+  const [activeImage, setActiveImage] = useState<ActiveImageState | null>(null);
 
-  const groupedItems = useMemo(() => {
-    const groups = new Map<typeof UNIT_PHOTO_STAGES[number], UnitStageMediaItem[]>();
-    for (const stage of UNIT_PHOTO_STAGES) {
-      groups.set(
-        stage,
-        items
-          .filter((item) => item.stage === stage)
-          .sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-      );
-    }
-    return groups;
-  }, [items]);
-
-  const emptyStages = UNIT_PHOTO_STAGES.filter(
-    (stage) => (groupedItems.get(stage) ?? []).length === 0
+  const overview = useMemo(
+    () => buildUnitMediaOverview({ items, rooms, windows }),
+    [items, rooms, windows]
   );
-  const missingStages = emptyStages.filter((stage) => stage !== "scheduled_bracketing");
+
+  const visiblePhotoCount = overview.summary.totalDisplayablePhotos;
+  const activePhoto = activeImage ? activeImage.photos[activeImage.index] : null;
+  const canStep = activeImage ? activeImage.photos.length > 1 : false;
+
+  const closeViewer = () => {
+    setActiveImage(null);
+    setOpen(false);
+  };
+
+  const stepLightbox = (direction: -1 | 1) => {
+    setActiveImage((current) => {
+      if (!current) return current;
+      const nextIndex =
+        (current.index + direction + current.photos.length) % current.photos.length;
+      return { ...current, index: nextIndex };
+    });
+  };
 
   return (
     <>
@@ -79,7 +91,7 @@ export function UnitStageMediaViewer({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setOpen(false)}
+              onClick={closeViewer}
             />
 
             <motion.div
@@ -87,24 +99,24 @@ export function UnitStageMediaViewer({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col overflow-hidden rounded-t-[2rem] border border-border bg-white shadow-2xl sm:inset-6 sm:mx-auto sm:max-w-5xl sm:rounded-[2rem]"
+              className="fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col overflow-hidden rounded-t-[2rem] border border-border bg-white shadow-2xl sm:inset-6 sm:mx-auto sm:max-w-6xl sm:rounded-[2rem]"
             >
               <div className="flex items-center gap-3 border-b border-border px-5 py-4">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/8 text-accent">
                   <ImageSquare size={22} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-foreground tracking-tight">
-                    Unit Images
+                  <p className="text-sm font-bold tracking-tight text-foreground">
+                    Unit photo evidence
                   </p>
                   <p className="text-xs text-muted">
-                    Compare before, measured, and installed photo sets.
+                    Audit measurement, post-bracketing, installed, and room-finished proof.
                   </p>
                 </div>
                 <button
                   type="button"
                   aria-label="Close image viewer"
-                  onClick={() => setOpen(false)}
+                  onClick={closeViewer}
                   className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white text-zinc-500 transition-colors hover:text-foreground"
                 >
                   <X size={18} />
@@ -112,54 +124,36 @@ export function UnitStageMediaViewer({
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 py-5">
-                {items.length === 0 ? (
+                {overview.summary.totalWindows === 0 && overview.summary.roomFinishedPhotos === 0 ? (
                   <div className="flex min-h-full flex-col items-center justify-center gap-3 rounded-[1.75rem] border border-dashed border-border bg-surface px-6 py-12 text-center">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
                       <Camera size={28} />
                     </div>
                     <p className="text-sm font-semibold text-foreground">
-                      No stage photos yet
+                      No photo evidence yet
                     </p>
                     <p className="max-w-sm text-sm leading-relaxed text-muted">
-                      Photos added during scheduled bracketing, measurement, and installation
-                      will appear here for quick comparison.
+                      Measurement, post-bracketing, installation, and room-finished photos will appear here once this unit starts moving through the workflow.
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-6 pb-3">
-                    <UnitStageSummaryGrid items={items} />
-
-                    {missingStages.length > 0 && (
-                      <section className="overflow-hidden rounded-[1.75rem] border border-border bg-white">
-                        <div className="border-b border-border bg-surface px-4 py-3.5">
-                          <p className="text-sm font-bold text-foreground">Missing Photo Sets</p>
-                          <p className="mt-1 text-xs text-muted">
-                            These stages do not have photos yet.
-                          </p>
-                        </div>
-                        <div className="px-4 py-4 flex flex-wrap gap-2">
-                          {missingStages.map((stage) => (
-                            <span
-                              key={stage}
-                              className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600"
-                            >
-                              {UNIT_PHOTO_STAGE_LABELS[stage]}
-                            </span>
-                          ))}
-                        </div>
-                      </section>
-                    )}
+                  <div className="pb-3">
+                    <UnitStageSummaryGrid
+                      overview={overview}
+                      measuredWindowsCount={milestones.measuredCount}
+                      onOpenLightbox={(photos, index) => setActiveImage({ photos, index })}
+                    />
                   </div>
                 )}
               </div>
 
               <AnimatePresence>
-                {activeImage && (
+                {activePhoto && activeImage && (
                   <>
                     <motion.button
                       type="button"
                       aria-label="Close photo preview"
-                      className="fixed inset-0 z-[60] bg-zinc-950/75"
+                      className="fixed inset-0 z-[60] bg-zinc-950/80"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
@@ -172,23 +166,51 @@ export function UnitStageMediaViewer({
                       transition={{ duration: 0.18 }}
                       className="fixed inset-4 z-[70] flex flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950 sm:inset-8"
                     >
-                      <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2.5">
-                        <p className="line-clamp-1 text-sm font-semibold text-white">
-                          {activeImage.title}
-                        </p>
-                        <button
-                          type="button"
-                          aria-label="Close photo preview"
-                          onClick={() => setActiveImage(null)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-200"
-                        >
-                          <X size={16} />
-                        </button>
+                      <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="line-clamp-1 text-sm font-semibold text-white">
+                            {activePhoto.title}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-400">
+                            {activePhoto.caption}
+                            {canStep ? ` • ${activeImage.index + 1} of ${activeImage.photos.length}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {canStep && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label="Previous photo"
+                                onClick={() => stepLightbox(-1)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-200"
+                              >
+                                <CaretLeft size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Next photo"
+                                onClick={() => stepLightbox(1)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-200"
+                              >
+                                <CaretRight size={16} />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            aria-label="Close photo preview"
+                            onClick={() => setActiveImage(null)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-200"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
                       </div>
                       <div className="relative flex-1 bg-black">
                         <Image
-                          src={activeImage.url}
-                          alt={activeImage.title}
+                          src={activePhoto.publicUrl}
+                          alt={activePhoto.title}
                           fill
                           unoptimized
                           sizes="100vw"

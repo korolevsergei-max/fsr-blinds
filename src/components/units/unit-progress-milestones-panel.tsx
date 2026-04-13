@@ -93,7 +93,6 @@ export function UnitProgressMilestonesPanel({
   className?: string;
 }) {
   const { allMeasured, allBracketed, allManufactured, allInstalled } = milestones;
-  const ready = allMeasured && allBracketed && allManufactured;
 
   const schedM = formatWhen(unit.measurementDate);
   const schedB = formatWhen(unit.bracketingDate);
@@ -183,18 +182,12 @@ export function UnitProgressMilestonesPanel({
             subtitle={
               milestones.totalWindows > 0
                 ? milestones.manufacturedByLegacyInstalledFallback
-                  ? "Installed legacy unit treated as manufactured complete"
+                  ? "Marked complete based on existing installation records"
                   : `${milestones.manufacturedCount}/${milestones.totalWindows} windows QC approved`
                 : "No windows yet"
             }
             met={allManufactured}
             completed={showDates ? doneMf : undefined}
-          />
-          <Row
-            density={density}
-            title="Ready for installation"
-            subtitle="Requires measurements, bracketing, and manufacturing for every window"
-            met={ready}
           />
           <Row
             density={density}

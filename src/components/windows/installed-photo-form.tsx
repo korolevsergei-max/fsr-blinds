@@ -18,6 +18,10 @@ import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload"
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
+import {
+  removeUnitStageMediaItem,
+  upsertUnitStageMediaItem,
+} from "@/lib/use-unit-supplemental";
 
 export function InstalledPhotoForm({
   data,
@@ -133,6 +137,7 @@ export function InstalledPhotoForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
+        removeUnitStageMediaItem(unit.id, existingInstalled.id);
         datasetCtx?.patchData((prev) =>
           reconcileUnitDerivedState(
             {
@@ -240,6 +245,22 @@ export function InstalledPhotoForm({
             }
           )
         );
+
+        if (result.mediaId && result.photoUrl) {
+          upsertUnitStageMediaItem(unit.id, {
+            id: result.mediaId,
+            publicUrl: result.photoUrl,
+            label: `${windowItem.label} — Installed`,
+            unitId: unit.id,
+            roomId: room.id,
+            roomName: room.name,
+            windowId: windowItem.id,
+            windowLabel: windowItem.label,
+            uploadKind: "window_measure",
+            stage: "installed_pending_approval",
+            createdAt: new Date().toISOString(),
+          });
+        }
 
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       } catch {

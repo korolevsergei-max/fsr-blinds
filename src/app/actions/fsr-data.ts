@@ -231,15 +231,17 @@ async function refreshRoomAggregates(
   supabase: Awaited<ReturnType<typeof createClient>>,
   roomId: string
 ) {
-  const { count: wc } = await supabase
-    .from("windows")
-    .select("*", { count: "exact", head: true })
-    .eq("room_id", roomId);
-  const { count: mc } = await supabase
-    .from("windows")
-    .select("*", { count: "exact", head: true })
-    .eq("room_id", roomId)
-    .eq("measured", true);
+  const [{ count: wc }, { count: mc }] = await Promise.all([
+    supabase
+      .from("windows")
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", roomId),
+    supabase
+      .from("windows")
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", roomId)
+      .eq("measured", true),
+  ]);
   await supabase
     .from("rooms")
     .update({
@@ -267,15 +269,17 @@ async function refreshUnitAggregates(
       .in("room_id", roomIds);
     windowTotal = w ?? 0;
   }
-  const { count: mediaCount } = await supabase
-    .from("media_uploads")
-    .select("*", { count: "exact", head: true })
-    .eq("unit_id", unitId);
+  const [{ count: mediaCount }, { count: rc }] = await Promise.all([
+    supabase
+      .from("media_uploads")
+      .select("*", { count: "exact", head: true })
+      .eq("unit_id", unitId),
+    supabase
+      .from("rooms")
+      .select("*", { count: "exact", head: true })
+      .eq("unit_id", unitId),
+  ]);
   photoTotal = mediaCount ?? 0;
-  const { count: rc } = await supabase
-    .from("rooms")
-    .select("*", { count: "exact", head: true })
-    .eq("unit_id", unitId);
   await supabase
     .from("units")
     .update({
@@ -293,6 +297,7 @@ type UnitMutationSuccess = {
   unitStatus: UnitStatus;
   roomId?: string;
   windowId?: string;
+  mediaId?: string;
   photoUrl?: string | null;
   photoCountDelta?: number;
 };
@@ -304,12 +309,15 @@ async function finalizeUnitMutation(
   unitId: string,
   roomIds: string[] = []
 ): Promise<UnitStatus> {
-  for (const roomId of [...new Set(roomIds.filter(Boolean))]) {
-    await refreshRoomAggregates(supabase, roomId);
-  }
+  const uniqueRoomIds = [...new Set(roomIds.filter(Boolean))];
+  await Promise.all(
+    uniqueRoomIds.map((roomId) => refreshRoomAggregates(supabase, roomId))
+  );
 
-  await refreshUnitAggregates(supabase, unitId);
-  await recomputeUnitStatus(supabase, unitId);
+  await Promise.all([
+    refreshUnitAggregates(supabase, unitId),
+    recomputeUnitStatus(supabase, unitId),
+  ]);
 
   const { data: unit } = await supabase
     .from("units")
@@ -317,7 +325,9 @@ async function finalizeUnitMutation(
     .eq("id", unitId)
     .single();
 
-  revalidateUnit(unitId);
+  after(() => {
+    revalidateUnit(unitId);
+  });
   return (unit?.status as UnitStatus | undefined) ?? "not_started";
 }
 
@@ -503,7 +513,7 @@ export async function bulkAssignUnits(
 
     const { data: unitRows } = await supabase
       .from("units")
-      .select("id, unit_number, building_name, client_name")
+      .select("id, unit_number, building_name, client_name, status")
       .in("id", scopedUnitIds);
 
     for (const unit of unitRows ?? []) {
@@ -520,6 +530,7 @@ export async function bulkAssignUnits(
             .from("schedule_entries")
             .update({
               task_date: measurementDate,
+              status: unit.status,
               owner_user_id: owner.id,
               owner_name: owner.displayName,
             })
@@ -535,7 +546,7 @@ export async function bulkAssignUnits(
             owner_name: owner.displayName,
             task_type: "measurement",
             task_date: measurementDate,
-            status: "not_started",
+            status: unit.status,
             risk_flag: "green",
           });
         }
@@ -554,6 +565,7 @@ export async function bulkAssignUnits(
             .from("schedule_entries")
             .update({
               task_date: bracketingDate,
+              status: unit.status,
               owner_user_id: owner.id,
               owner_name: owner.displayName,
             })
@@ -569,7 +581,7 @@ export async function bulkAssignUnits(
             owner_name: owner.displayName,
             task_type: "bracketing",
             task_date: bracketingDate,
-            status: "not_started",
+            status: unit.status,
             risk_flag: "green",
           });
         }
@@ -588,6 +600,7 @@ export async function bulkAssignUnits(
             .from("schedule_entries")
             .update({
               task_date: installationDate,
+              status: unit.status,
               owner_user_id: owner.id,
               owner_name: owner.displayName,
             })
@@ -603,7 +616,7 @@ export async function bulkAssignUnits(
             owner_name: owner.displayName,
             task_type: "installation",
             task_date: installationDate,
-            status: "not_started",
+            status: unit.status,
             risk_flag: "green",
           });
         }
@@ -705,6 +718,7 @@ export async function updateUnitAssignment(
           unit_number: string;
           building_name: string;
           client_name: string;
+          status: string;
         }
       | null
       | undefined;
@@ -713,7 +727,7 @@ export async function updateUnitAssignment(
       if (unitMeta !== undefined) return unitMeta;
       const { data } = await supabase
         .from("units")
-        .select("unit_number, building_name, client_name")
+        .select("unit_number, building_name, client_name, status")
         .eq("id", unitId)
         .single();
       unitMeta = data ?? null;
@@ -775,6 +789,7 @@ export async function updateUnitAssignment(
 
     // Upsert measurement schedule entry
     if (measurementDate) {
+      const nextUnitMeta = await ensureUnitMeta();
       const { data: existingMeasurement } = await supabase
         .from("schedule_entries")
         .select("id")
@@ -787,12 +802,12 @@ export async function updateUnitAssignment(
           .from("schedule_entries")
           .update({
             task_date: measurementDate,
+            status: nextUnitMeta?.status ?? "not_started",
             owner_user_id: owner.id,
             owner_name: owner.displayName,
           })
           .eq("id", existingMeasurement.id);
       } else {
-        const nextUnitMeta = await ensureUnitMeta();
         await supabase.from("schedule_entries").insert({
           id: `sch-${crypto.randomUUID().slice(0, 8)}`,
           unit_id: unitId,
@@ -803,7 +818,7 @@ export async function updateUnitAssignment(
           owner_name: owner.displayName,
           task_type: "measurement",
           task_date: measurementDate,
-          status: "not_started",
+          status: nextUnitMeta?.status ?? "not_started",
           risk_flag: "green",
         });
       }
@@ -816,6 +831,7 @@ export async function updateUnitAssignment(
     }
 
     if (bracketingDate) {
+      const nextUnitMeta = await ensureUnitMeta();
       const { data: existingBracketing } = await supabase
         .from("schedule_entries")
         .select("id")
@@ -828,12 +844,12 @@ export async function updateUnitAssignment(
           .from("schedule_entries")
           .update({
             task_date: bracketingDate,
+            status: nextUnitMeta?.status ?? "not_started",
             owner_user_id: owner.id,
             owner_name: owner.displayName,
           })
           .eq("id", existingBracketing.id);
       } else {
-        const nextUnitMeta = await ensureUnitMeta();
         await supabase.from("schedule_entries").insert({
           id: `sch-${crypto.randomUUID().slice(0, 8)}`,
           unit_id: unitId,
@@ -844,7 +860,7 @@ export async function updateUnitAssignment(
           owner_name: owner.displayName,
           task_type: "bracketing",
           task_date: bracketingDate,
-          status: "not_started",
+          status: nextUnitMeta?.status ?? "not_started",
           risk_flag: "green",
         });
       }
@@ -856,6 +872,7 @@ export async function updateUnitAssignment(
         .eq("task_type", "bracketing");
     }
     if (installationDate) {
+      const nextUnitMeta = await ensureUnitMeta();
       const { data: existingInstallation } = await supabase
         .from("schedule_entries")
         .select("id")
@@ -868,13 +885,12 @@ export async function updateUnitAssignment(
           .from("schedule_entries")
           .update({
             task_date: installationDate,
+            status: nextUnitMeta?.status ?? "not_started",
             owner_user_id: owner.id,
             owner_name: owner.displayName,
           })
           .eq("id", existingInstallation.id);
       } else {
-        const nextUnitMeta = await ensureUnitMeta();
-
         await supabase.from("schedule_entries").insert({
           id: `sch-${crypto.randomUUID().slice(0, 8)}`,
           unit_id: unitId,
@@ -885,7 +901,7 @@ export async function updateUnitAssignment(
           owner_name: owner.displayName,
           task_type: "installation",
           task_date: installationDate,
-          status: "not_started",
+          status: nextUnitMeta?.status ?? "not_started",
           risk_flag: "green",
         });
       }
@@ -1819,6 +1835,8 @@ export async function uploadWindowPostBracketingPhoto(
       return { ok: false, error: windowUpdateError.message };
     }
 
+    let mediaId: string | undefined;
+    let photoUrl: string | null = null;
     if (hasPhoto && photo instanceof File) {
       const ext =
         (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
@@ -1837,9 +1855,11 @@ export async function uploadWindowPostBracketingPhoto(
       const {
         data: { publicUrl },
       } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      photoUrl = publicUrl;
 
+      mediaId = `med-${crypto.randomUUID()}`;
       const { error: mediaError } = await supabase.from("media_uploads").insert({
-        id: `med-${crypto.randomUUID()}`,
+        id: mediaId,
         storage_path: path,
         public_url: publicUrl,
         upload_kind: "window_measure",
@@ -1883,6 +1903,8 @@ export async function uploadWindowPostBracketingPhoto(
       unitStatus,
       roomId,
       windowId,
+      mediaId,
+      photoUrl,
       photoCountDelta: hasPhoto ? 1 : 0,
     };
   } catch (e) {
@@ -1972,6 +1994,8 @@ export async function uploadWindowInstalledPhoto(
       return { ok: false, error: windowUpdateError.message };
     }
 
+    let mediaId: string | undefined;
+    let photoUrl: string | null = null;
     if (hasPhoto && photo instanceof File) {
       const ext =
         (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
@@ -1990,9 +2014,11 @@ export async function uploadWindowInstalledPhoto(
       const {
         data: { publicUrl },
       } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      photoUrl = publicUrl;
 
+      mediaId = `med-${crypto.randomUUID()}`;
       const { error: mediaError } = await supabase.from("media_uploads").insert({
-        id: `med-${crypto.randomUUID()}`,
+        id: mediaId,
         storage_path: path,
         public_url: publicUrl,
         upload_kind: "window_measure",
@@ -2036,6 +2062,8 @@ export async function uploadWindowInstalledPhoto(
       unitStatus,
       roomId,
       windowId,
+      mediaId,
+      photoUrl,
       photoCountDelta: hasPhoto ? 1 : 0,
     };
   } catch (e) {
