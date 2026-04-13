@@ -130,6 +130,38 @@ export interface ManufacturingScheduleState {
   unscheduledItems: ManufacturingWindowItem[];
 }
 
+export type ManufacturingDashboardCategory =
+  | "today"
+  | "returned"
+  | "at_risk"
+  | "behind";
+
+export interface ManufacturingDashboardUnitCard {
+  unitId: string;
+  unitNumber: string;
+  buildingName: string;
+  clientName: string;
+  installationDate: string | null;
+  scheduledCount: number;
+  blindTypeGroups: Array<{
+    blindType: ManufacturingWindowItem["blindType"];
+    windows: ManufacturingWindowItem[];
+  }>;
+}
+
+export interface ManufacturingDashboardSection {
+  category: ManufacturingDashboardCategory;
+  label: string;
+  count: number;
+  units: ManufacturingDashboardUnitCard[];
+}
+
+export interface ManufacturingDashboardState {
+  counts: Record<ManufacturingDashboardCategory, number>;
+  sections: ManufacturingDashboardSection[];
+  unitsByCategory: Record<ManufacturingDashboardCategory, ManufacturingDashboardUnitCard[]>;
+}
+
 function getManufacturingRoleDate(
   item: ManufacturingWindowItem,
   role: "cutter" | "assembler" | "qc",
@@ -152,6 +184,107 @@ function isVisibleForManufacturingRole(
   if (role === "cutter") return item.productionStatus === "pending";
   if (role === "assembler") return item.productionStatus === "cut";
   return item.productionStatus === "assembled";
+}
+
+function compareNullableDate(a: string | null, b: string | null) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return a.localeCompare(b);
+}
+
+function compareDashboardItems(a: ManufacturingWindowItem, b: ManufacturingWindowItem) {
+  const installCompare = compareNullableDate(a.installationDate, b.installationDate);
+  if (installCompare !== 0) return installCompare;
+
+  const readyCompare = compareNullableDate(a.targetReadyDate, b.targetReadyDate);
+  if (readyCompare !== 0) return readyCompare;
+
+  const unitCompare = a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
+  if (unitCompare !== 0) return unitCompare;
+
+  const roomCompare = a.roomName.localeCompare(b.roomName, undefined, { numeric: true });
+  if (roomCompare !== 0) return roomCompare;
+
+  return a.label.localeCompare(b.label, undefined, { numeric: true });
+}
+
+function groupDashboardUnits(items: ManufacturingWindowItem[]): ManufacturingDashboardUnitCard[] {
+  const unitMap = new Map<string, ManufacturingDashboardUnitCard>();
+
+  for (const item of [...items].sort(compareDashboardItems)) {
+    const existing = unitMap.get(item.unitId);
+    if (!existing) {
+      unitMap.set(item.unitId, {
+        unitId: item.unitId,
+        unitNumber: item.unitNumber,
+        buildingName: item.buildingName,
+        clientName: item.clientName,
+        installationDate: item.installationDate,
+        scheduledCount: 1,
+        blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
+      });
+      continue;
+    }
+
+    existing.scheduledCount += 1;
+    const group = existing.blindTypeGroups.find((entry) => entry.blindType === item.blindType);
+    if (group) {
+      group.windows.push(item);
+    } else {
+      existing.blindTypeGroups.push({ blindType: item.blindType, windows: [item] });
+    }
+  }
+
+  return [...unitMap.values()]
+    .map((unit) => ({
+      ...unit,
+      blindTypeGroups: unit.blindTypeGroups
+        .map((group) => ({
+          ...group,
+          windows: [...group.windows].sort(compareDashboardItems),
+        }))
+        .sort((a, b) => a.blindType.localeCompare(b.blindType)),
+    }))
+    .sort((a, b) => {
+      const installCompare = compareNullableDate(a.installationDate, b.installationDate);
+      if (installCompare !== 0) return installCompare;
+      return a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
+    });
+}
+
+function getDaysUntilInstall(installationDate: string | null, todayKey: string) {
+  if (!installationDate) return null;
+  const install = new Date(`${installationDate}T00:00:00`).getTime();
+  const today = new Date(`${todayKey}T00:00:00`).getTime();
+  return Math.floor((install - today) / (1000 * 60 * 60 * 24));
+}
+
+function getManufacturingDashboardCategory(
+  item: ManufacturingWindowItem,
+  role: "cutter" | "assembler" | "qc",
+  currentWorkDate: string
+): ManufacturingDashboardCategory | null {
+  if (!isVisibleForManufacturingRole(item, role)) return null;
+
+  if (item.issueStatus === "open" && item.escalation?.targetRole === role) {
+    return "returned";
+  }
+
+  const daysUntilInstall = getDaysUntilInstall(item.installationDate, currentWorkDate);
+  if (daysUntilInstall !== null && daysUntilInstall <= 0) {
+    return "behind";
+  }
+  if (daysUntilInstall !== null && daysUntilInstall >= 1 && daysUntilInstall <= 3) {
+    return "at_risk";
+  }
+
+  const roleDate = getManufacturingRoleDate(item, role, currentWorkDate);
+  if (roleDate === currentWorkDate) {
+    return "today";
+  }
+
+  return null;
 }
 
 export function buildManufacturingScheduleState(args: {
@@ -247,5 +380,72 @@ export function buildManufacturingScheduleState(args: {
     datedEntriesByDate,
     issueItems,
     unscheduledItems,
+  };
+}
+
+export function buildManufacturingDashboardState(args: {
+  schedule: ManufacturingRoleSchedule;
+  role: "cutter" | "assembler" | "qc";
+  today: Date;
+  clientFilter: string[];
+  buildingFilter: string[];
+  installDateFilter: ScheduleInstallDateFilter;
+}): ManufacturingDashboardState {
+  const {
+    schedule,
+    role,
+    today,
+    clientFilter,
+    buildingFilter,
+    installDateFilter,
+  } = args;
+
+  const currentWorkDate = schedule.currentWorkDate ?? formatDateKey(today);
+  const categories: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today"];
+  const categoryLabels: Record<ManufacturingDashboardCategory, string> = {
+    today: "Today",
+    returned: "Returned",
+    at_risk: "At Risk",
+    behind: "Behind",
+  };
+
+  const itemsByCategory = {
+    today: [] as ManufacturingWindowItem[],
+    returned: [] as ManufacturingWindowItem[],
+    at_risk: [] as ManufacturingWindowItem[],
+    behind: [] as ManufacturingWindowItem[],
+  };
+
+  for (const item of schedule.allItems) {
+    if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) continue;
+    if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
+    if (!matchesInstallDateFilter(item.installationDate, installDateFilter, today)) continue;
+
+    const category = getManufacturingDashboardCategory(item, role, currentWorkDate);
+    if (!category) continue;
+    itemsByCategory[category].push(item);
+  }
+
+  const counts = {
+    today: itemsByCategory.today.length,
+    returned: itemsByCategory.returned.length,
+    at_risk: itemsByCategory.at_risk.length,
+    behind: itemsByCategory.behind.length,
+  };
+
+  return {
+    counts,
+    sections: categories.map((category) => ({
+      category,
+      label: categoryLabels[category],
+      count: counts[category],
+      units: groupDashboardUnits(itemsByCategory[category]),
+    })),
+    unitsByCategory: {
+      today: groupDashboardUnits(itemsByCategory.today),
+      returned: groupDashboardUnits(itemsByCategory.returned),
+      at_risk: groupDashboardUnits(itemsByCategory.at_risk),
+      behind: groupDashboardUnits(itemsByCategory.behind),
+    },
   };
 }

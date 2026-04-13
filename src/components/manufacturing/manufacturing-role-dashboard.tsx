@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { SignOut } from "@phosphor-icons/react";
 import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { signOut } from "@/app/actions/auth-actions";
-import { ManufacturingScheduleView } from "@/components/schedule/manufacturing-schedule-view";
+import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
 
 export function ManufacturingRoleDashboard({
   role,
@@ -46,13 +46,9 @@ export function ManufacturingRoleDashboard({
         </button>
       </div>
 
-      <ManufacturingScheduleView
-        schedulesByRole={{
-          cutter: role === "cutter" ? schedule : { ...schedule },
-          assembler: role === "assembler" ? schedule : { ...schedule },
-          qc: role === "qc" ? schedule : { ...schedule },
-        }}
+      <ManufacturingRolePipelineDashboard
         role={role}
+        schedule={schedule}
         unitHrefBase={`/${role}/units`}
       />
     </div>

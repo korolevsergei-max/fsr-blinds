@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  CalendarBlank,
   CheckCircle,
-  Factory,
+  FunnelSimple,
   WarningCircle,
+  X,
 } from "@phosphor-icons/react";
 import type {
   ManufacturingRoleSchedule,
@@ -15,6 +15,12 @@ import type {
 } from "@/lib/manufacturing-scheduler";
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
 import { StickyDayRail } from "@/components/schedule/sticky-day-rail";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import {
+  SCHEDULE_INSTALL_DATE_FILTER_LABELS,
+  matchesInstallDateFilter,
+  type ScheduleInstallDateFilter,
+} from "@/lib/schedule-ui";
 import {
   shiftWindowManufacturingSchedule,
   returnWindowToAssembler,
@@ -73,6 +79,14 @@ type QueueActionResult = {
   targetDate?: string;
 };
 
+type QueueStatusFilter =
+  | "returned"
+  | "issues"
+  | "overdue"
+  | "today"
+  | "next_day"
+  | "unscheduled";
+
 function getWindowPriority(
   role: "cutter" | "assembler" | "qc",
   item: ManufacturingWindowItem
@@ -93,6 +107,34 @@ function countActionReadyWindows(
   windows: ManufacturingWindowItem[]
 ) {
   return windows.filter((item) => getWindowPriority(role, item) < 3).length;
+}
+
+function isReturnedToRole(
+  item: ManufacturingWindowItem,
+  role: "cutter" | "assembler" | "qc"
+) {
+  return item.issueStatus === "open" && item.escalation?.targetRole === role;
+}
+
+function matchesQueueStatusFilter(args: {
+  item: ManufacturingWindowItem;
+  role: "cutter" | "assembler" | "qc";
+  statusFilters: QueueStatusFilter[];
+  todayKey: string;
+  bucketDate: string | null;
+  bucketLabel: string;
+}) {
+  const { item, role, statusFilters, todayKey, bucketDate, bucketLabel } = args;
+  if (statusFilters.length === 0) return true;
+
+  return statusFilters.some((filter) => {
+    if (filter === "returned") return isReturnedToRole(item, role);
+    if (filter === "issues") return item.issueStatus === "open";
+    if (filter === "overdue") return Boolean(item.installationDate && item.installationDate < todayKey);
+    if (filter === "today") return bucketDate === todayKey;
+    if (filter === "next_day") return bucketLabel === "Next Working Day";
+    return bucketLabel === "Unscheduled";
+  });
 }
 
 function sortWindows(
@@ -193,11 +235,40 @@ export function ManufacturingRoleQueue({
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [stickyTop, setStickyTop] = useState(188);
+  const [clientFilter, setClientFilter] = useState<string[]>([]);
+  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
+  const [installDateFilter, setInstallDateFilter] = useState<ScheduleInstallDateFilter>("all");
+  const [statusFilters, setStatusFilters] = useState<QueueStatusFilter[]>([]);
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
     setLocalSchedule(normalizeSchedule(schedule, role));
   }, [role, schedule]);
+
+  useEffect(() => {
+    const node = headerRef.current;
+    if (!node) return;
+
+    const updateHeight = () => {
+      const next = Math.ceil(node.getBoundingClientRect().height);
+      if (next > 0) {
+        setStickyTop(next);
+      }
+    };
+
+    updateHeight();
+
+    const observer = new ResizeObserver(() => updateHeight());
+    observer.observe(node);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, []);
 
   const runWindowAction = (
     windowId: string,
@@ -305,32 +376,179 @@ export function ManufacturingRoleQueue({
   const title =
     role === "cutter" ? "Cutting queue" : role === "assembler" ? "Assembly queue" : "QC queue";
 
+  const clientOptions = [
+    { value: "all", label: "All clients" },
+    ...[
+      ...new Map(
+        localSchedule.allItems.map((item) => [item.clientId, { value: item.clientId, label: item.clientName }])
+      ).values(),
+    ],
+  ];
+
+  const buildingOptions = [
+    { value: "all", label: "All buildings" },
+    ...[
+      ...new Map(
+        localSchedule.allItems
+          .filter((item) => clientFilter.length === 0 || clientFilter.includes(item.clientId))
+          .map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
+      ).values(),
+    ],
+  ];
+
+  const installDateOptions = Object.entries(SCHEDULE_INSTALL_DATE_FILTER_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  }));
+
+  const queueStatusOptions = [
+    { value: "all", label: "All queue states" },
+    { value: "returned", label: "Returned" },
+    { value: "issues", label: "Issues" },
+    { value: "overdue", label: "Overdue" },
+    { value: "today", label: "Today" },
+    { value: "next_day", label: "Next day" },
+    { value: "unscheduled", label: "Unscheduled" },
+  ];
+
+  const activeFilterCount = [
+    clientFilter.length > 0,
+    buildingFilter.length > 0,
+    installDateFilter !== "all",
+    statusFilters.length > 0,
+  ].filter(Boolean).length;
+
+  const visibleBuckets = localSchedule.buckets
+    .map((bucket) => {
+      const units = bucket.units
+        .map((unit) => {
+          const blindTypeGroups = unit.blindTypeGroups
+            .map((group) => ({
+              ...group,
+              windows: group.windows.filter((item) => {
+                if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) return false;
+                if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) return false;
+                if (!matchesInstallDateFilter(item.installationDate, installDateFilter, new Date())) return false;
+                return matchesQueueStatusFilter({
+                  item,
+                  role,
+                  statusFilters,
+                  todayKey,
+                  bucketDate: bucket.date,
+                  bucketLabel: bucket.label,
+                });
+              }),
+            }))
+            .filter((group) => group.windows.length > 0);
+
+          if (blindTypeGroups.length === 0) return null;
+
+          return {
+            ...unit,
+            blindTypeGroups,
+            scheduledCount: blindTypeGroups.reduce((sum, group) => sum + group.windows.length, 0),
+          };
+        })
+        .filter((unit): unit is NonNullable<typeof unit> => Boolean(unit));
+
+      return {
+        ...bucket,
+        units,
+        scheduledCount: units.reduce((sum, unit) => sum + unit.scheduledCount, 0),
+      };
+    })
+    .filter((bucket) => bucket.units.length > 0);
+
   return (
-    <div className="px-4 pt-4 pb-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-secondary transition-colors hover:bg-surface"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
-          <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
-            {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
-          </p>
+    <div
+      className="pb-6"
+      style={{ ["--schedule-sticky-top" as string]: `${stickyTop}px` }}
+    >
+      <div
+        ref={headerRef}
+        className="sticky top-0 z-30 border-b border-border bg-card/95 px-4 pt-4 pb-4 backdrop-blur-md"
+      >
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-secondary transition-colors hover:bg-surface"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
+            <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
+              {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0 text-zinc-400">
+            <FunnelSimple size={14} />
+            {activeFilterCount > 0 && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </div>
+          <FilterDropdown
+            multiple
+            label="Client"
+            values={clientFilter}
+            options={clientOptions}
+            onChange={(values) => {
+              setClientFilter(values);
+              setBuildingFilter([]);
+            }}
+          />
+          <FilterDropdown
+            multiple
+            label="Building"
+            values={buildingFilter}
+            options={buildingOptions}
+            onChange={setBuildingFilter}
+          />
+          <FilterDropdown
+            label="Installation Date"
+            value={installDateFilter}
+            options={installDateOptions}
+            onChange={(value) => setInstallDateFilter(value as ScheduleInstallDateFilter)}
+          />
+          <FilterDropdown
+            multiple
+            label="Queue State"
+            values={statusFilters}
+            options={queueStatusOptions}
+            onChange={(values) => setStatusFilters(values as QueueStatusFilter[])}
+          />
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setClientFilter([]);
+                setBuildingFilter([]);
+                setInstallDateFilter("all");
+                setStatusFilters([]);
+              }}
+              className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
+            >
+              <X size={11} weight="bold" />
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-        <SummaryCard label="Today" value={localSchedule.todayCount} tone="emerald" />
-        <SummaryCard label="Next day" value={localSchedule.tomorrowCount} tone="blue" />
-        <SummaryCard label="Issues" value={localSchedule.issueCount} tone="amber" />
-        <SummaryCard label="Unscheduled" value={localSchedule.unscheduledCount} tone="zinc" />
-      </div>
-
-      <div className="space-y-4 pt-4">
-        {localSchedule.buckets.map((bucket) => (
+      <div className="space-y-4 px-4 pt-4">
+        {visibleBuckets.length === 0 ? (
+          <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/70 px-4 py-8 text-center">
+            <p className="text-sm font-semibold text-foreground">No queue items in this scope</p>
+            <p className="mt-1 text-[12px] text-tertiary">
+              Try clearing filters or selecting a different queue state.
+            </p>
+          </div>
+        ) : visibleBuckets.map((bucket) => (
           <section key={`${bucket.label}-${bucket.date ?? "special"}`} className="relative">
             {(() => {
               const dayParts = getBucketDayParts(bucket.date);
@@ -370,11 +588,25 @@ export function ManufacturingRoleQueue({
                 {bucket.units.map((unit) => (
                   <div
                     key={`${bucket.label}-${unit.unitId}`}
-                    className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card"
+                    className={[
+                      "overflow-hidden rounded-[var(--radius-lg)] border bg-card",
+                      unit.blindTypeGroups.some((group) =>
+                        group.windows.some((item) => isReturnedToRole(item, role))
+                      )
+                        ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]"
+                        : "border-border",
+                    ].join(" ")}
                   >
                     <button
                       onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
-                      className="w-full border-b border-border/70 px-4 py-4 text-left"
+                      className={[
+                        "w-full border-b px-4 py-4 text-left",
+                        unit.blindTypeGroups.some((group) =>
+                          group.windows.some((item) => isReturnedToRole(item, role))
+                        )
+                          ? "border-red-100 bg-red-50/60"
+                          : "border-border/70",
+                      ].join(" ")}
                     >
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
                         <div>
@@ -408,10 +640,14 @@ export function ManufacturingRoleQueue({
                           <div className="divide-y divide-border/60">
                             {group.windows.map((item) => {
                               const busy = isPending && busyWindowId === item.windowId;
+                              const returnedToRole = isReturnedToRole(item, role);
                               return (
                                 <article
                                   key={item.windowId}
-                                  className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start"
+                                  className={[
+                                    "grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start",
+                                    returnedToRole ? "rounded-[var(--radius-md)] bg-red-50/70 px-3 -mx-3" : "",
+                                  ].join(" ")}
                                 >
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
@@ -421,16 +657,23 @@ export function ManufacturingRoleQueue({
                                       <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
                                         {item.roomName}
                                       </span>
+                                      {returnedToRole && (
+                                        <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-700">
+                                          Returned
+                                        </span>
+                                      )}
                                     </div>
 
                                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
                                       <span>{formatReadyDate(item.targetReadyDate)}</span>
                                       {item.issueStatus === "open" && (
-                                        <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                                        <span className={`inline-flex items-center gap-1 font-medium ${returnedToRole ? "text-red-700" : "text-amber-700"}`}>
                                           <WarningCircle size={13} weight="fill" />
-                                          {item.escalation
-                                            ? `${item.escalation.sourceRole} -> ${item.escalation.targetRole}: ${item.issueReason || "Escalation open"}`
-                                            : item.issueReason || "Issue open"}
+                                          {returnedToRole
+                                            ? `Returned ${item.escalation?.sourceRole ?? "upstream"} -> ${item.escalation?.targetRole ?? role}`
+                                            : item.escalation
+                                              ? `${item.escalation.sourceRole} -> ${item.escalation.targetRole}: ${item.issueReason || "Escalation open"}`
+                                              : item.issueReason || "Issue open"}
                                         </span>
                                       )}
                                     </div>
@@ -441,9 +684,12 @@ export function ManufacturingRoleQueue({
                                       </p>
                                     )}
                                     {item.issueStatus === "open" && item.issueNotes && (
-                                      <p className="mt-2 max-w-[65ch] text-[12px] leading-6 text-amber-800">
-                                        {item.issueNotes}
-                                      </p>
+                                      <div className={`mt-3 max-w-[65ch] rounded-[var(--radius-md)] border px-3 py-3 text-[12px] leading-6 ${returnedToRole ? "border-red-200 bg-white/90 text-red-800" : "border-amber-200 bg-amber-50/80 text-amber-800"}`}>
+                                        <p className="font-semibold">
+                                          {item.issueReason || (returnedToRole ? "Returned for rework" : "Issue open")}
+                                        </p>
+                                        <p className="mt-1">{item.issueNotes}</p>
+                                      </div>
                                     )}
 
                                     <div className="mt-4 flex flex-wrap gap-2.5">
@@ -736,40 +982,5 @@ function StatusChip({
       {icon}
       {label}
     </span>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "emerald" | "blue" | "amber" | "zinc";
-}) {
-  const Icon =
-    tone === "emerald"
-      ? CheckCircle
-      : tone === "blue"
-      ? CalendarBlank
-      : tone === "amber"
-      ? WarningCircle
-      : Factory;
-  const classes = {
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    blue: "border-blue-200 bg-blue-50 text-blue-700",
-    amber: "border-amber-200 bg-amber-50 text-amber-700",
-    zinc: "border-border bg-card text-zinc-700",
-  };
-
-  return (
-    <div className={`rounded-[22px] border px-3.5 py-3 ${classes[tone]}`}>
-      <div className="flex items-center gap-2">
-        <Icon size={16} weight="fill" />
-        <span className="text-[11px] font-medium uppercase tracking-[0.05em]">{label}</span>
-      </div>
-      <p className="mt-2 font-mono text-[1.45rem] font-bold tracking-[-0.04em]">{value}</p>
-    </div>
   );
 }
