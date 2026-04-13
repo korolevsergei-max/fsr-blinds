@@ -1,4 +1,4 @@
-import { loadCachedUnitMedia } from "@/lib/unit-route-data";
+import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
 import { RoomDetail } from "./room-detail";
 
 export default async function SchedulerRoomDetailPage({
@@ -7,6 +7,6 @@ export default async function SchedulerRoomDetailPage({
   params: Promise<{ id: string; roomId: string }>;
 }) {
   const { id } = await params;
-  const mediaItems = await loadCachedUnitMedia(id);
-  return <RoomDetail mediaItems={mediaItems} />;
+  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
+  return <RoomDetail mediaItems={mediaItems} milestones={milestones} />;
 }

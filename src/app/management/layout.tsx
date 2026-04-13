@@ -19,6 +19,7 @@ function emptyDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingEscalations: [],
   };
 }
 

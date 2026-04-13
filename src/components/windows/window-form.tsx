@@ -19,6 +19,7 @@ import {
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { type BlindType, type ChainSide, type RiskFlag, type UnitActivityLog } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
@@ -75,10 +76,12 @@ function buildWindowActivityDescription(log: UnitActivityLog): string {
 export function WindowForm({
   data,
   activityLog,
+  milestones,
   routeBasePath = "/installer/units",
 }: {
   data?: AppDataset;
   activityLog: UnitActivityLog[];
+  milestones: UnitMilestoneCoverage;
   routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
@@ -396,6 +399,7 @@ export function WindowForm({
             active="before"
             isMeasured={existingWindow.measured}
             isBracketed={existingWindow.bracketed}
+            isManufactured={milestones.allManufactured}
             isInstalled={existingWindow.installed}
             routeBasePath={routeBasePath}
           />

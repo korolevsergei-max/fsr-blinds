@@ -17,21 +17,21 @@ import { getFloor } from "@/lib/app-dataset";
 // ─── Types ─────────────────────────────────────────────────────────────────
 
 type ReportUnit = Unit & {
-  todayBadge: "M" | "B" | "MB" | "I" | "";
+  todayBadge: "M" | "B" | "MF" | "I" | "";
   projectedColor:
     | "measured"
     | "bracketed"
-    | "measured_and_bracketed"
+    | "manufactured"
     | "installed"
     | "none";
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Corner badge from persisted unit status (parallel measured/bracketed model). */
-function getTodayBadge(status: string): "M" | "B" | "MB" | "I" | "" {
+/** Corner badge from persisted unit status. */
+function getTodayBadge(status: string): "M" | "B" | "MF" | "I" | "" {
   if (status === "installed") return "I";
-  if (status === "measured_and_bracketed") return "MB";
+  if (status === "manufactured") return "MF";
   if (status === "bracketed") return "B";
   if (status === "measured") return "M";
   return "";
@@ -45,8 +45,8 @@ function getProjectedColor(
   const m = Boolean(unit.measurementDate && unit.measurementDate <= d);
   const b = Boolean(unit.bracketingDate && unit.bracketingDate <= d);
   const i = Boolean(unit.installationDate && unit.installationDate <= d);
+  if (unit.status === "manufactured") return "manufactured";
   if (i) return "installed";
-  if (m && b) return "measured_and_bracketed";
   if (b) return "bracketed";
   if (m) return "measured";
   return "none";
@@ -81,10 +81,10 @@ const COLOR_MAP = {
     printBg: "#FFE5D9",
     printBorder: "#F4845F",
   },
-  measured_and_bracketed: {
+  manufactured: {
     bg: "bg-[#EEF2FF]",
     border: "border-[#6366F1]",
-    label: "Measured & Bracketed",
+    label: "Manufactured",
     dot: "#6366F1",
     printBg: "#EEF2FF",
     printBorder: "#6366F1",
@@ -107,11 +107,11 @@ const COLOR_MAP = {
   },
 } as const;
 
-/** Letter badge background colors — M=yellow, B=salmon, MB=indigo, I=green */
-const BADGE_COLOR: Record<"M" | "B" | "MB" | "I", string> = {
+/** Letter badge background colors — M=yellow, B=salmon, MF=indigo, I=green */
+const BADGE_COLOR: Record<"M" | "B" | "MF" | "I", string> = {
   M: "#F5C518",
   B: "#F4845F",
-  MB: "#6366F1",
+  MF: "#6366F1",
   I: "#27AE60",
 };
 
@@ -218,7 +218,7 @@ function ReportPreviewModal({
                     [
                       "measured",
                       "bracketed",
-                      "measured_and_bracketed",
+                      "manufactured",
                       "installed",
                     ] as const
                   ).map(
@@ -293,7 +293,7 @@ function ReportPreviewModal({
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
                 Today&apos;s Status Badge:
               </p>
-              {(["M", "B", "MB", "I"] as const).map((letter) => (
+              {(["M", "B", "MF", "I"] as const).map((letter) => (
                 <div key={letter} className="flex items-center gap-1.5">
                   <span className="min-w-5 h-5 px-1 rounded-full bg-zinc-100 border border-zinc-200 text-[8px] font-bold text-zinc-700 flex items-center justify-center leading-none">
                     {letter}
@@ -303,8 +303,8 @@ function ReportPreviewModal({
                       ? "Measured"
                       : letter === "B"
                         ? "Bracketed"
-                        : letter === "MB"
-                          ? "Measured & Bracketed"
+                        : letter === "MF"
+                          ? "Manufactured"
                           : "Installed"}
                   </span>
                 </div>
@@ -670,7 +670,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
                   [
                     "measured",
                     "bracketed",
-                    "measured_and_bracketed",
+                    "manufactured",
                     "installed",
                   ] as const
                 ).map((key) => (
@@ -711,7 +711,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
             {/* Badge legend */}
             <div className="px-4 pb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-[11px] text-muted">Today&apos;s badge:</p>
-              {(["M", "B", "MB", "I"] as const).map((letter) => (
+              {(["M", "B", "MF", "I"] as const).map((letter) => (
                 <div key={letter} className="flex items-center gap-1">
                   <span className="min-w-5 h-5 px-0.5 rounded-full bg-foreground/10 border border-border text-[8px] font-bold text-foreground flex items-center justify-center leading-none">
                     {letter}
@@ -721,8 +721,8 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
                       ? "Measured"
                       : letter === "B"
                         ? "Bracketed"
-                        : letter === "MB"
-                          ? "M & B"
+                        : letter === "MF"
+                          ? "Manufactured"
                           : "Installed"}
                   </span>
                 </div>

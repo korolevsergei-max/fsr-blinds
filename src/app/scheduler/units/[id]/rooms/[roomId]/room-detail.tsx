@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, ArrowRight } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
@@ -14,9 +15,11 @@ import { useAppDatasetMaybe } from "@/lib/dataset-context";
 export function RoomDetail({
   data,
   mediaItems,
+  milestones,
 }: {
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const datasetCtx = useAppDatasetMaybe();
@@ -52,6 +55,7 @@ export function RoomDetail({
           data={datasetData}
           mediaItems={mediaItems}
           roomId={roomId}
+          isManufacturedComplete={milestones.allManufactured}
           getEditHref={(winId) =>
             `/scheduler/units/${id}/rooms/${roomId}/windows/new?edit=${winId}`
           }

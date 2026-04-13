@@ -5,9 +5,11 @@ export type UnitCoverageCounts = {
   totalWindows: number;
   measuredCount: number;
   bracketedCount: number;
+  manufacturedCount: number;
   installedCount: number;
   allMeasured: boolean;
   allBracketed: boolean;
+  allManufactured: boolean;
   allInstalled: boolean;
 };
 
@@ -15,18 +17,23 @@ export function deriveUnitStatusFromCounts({
   totalWindows,
   measuredCount,
   bracketedCount,
+  manufacturedCount,
   installedCount,
 }: Pick<
   UnitCoverageCounts,
-  "totalWindows" | "measuredCount" | "bracketedCount" | "installedCount"
+  "totalWindows" | "measuredCount" | "bracketedCount" | "manufacturedCount" | "installedCount"
 >): UnitStatus {
   if (totalWindows === 0) return "not_started";
   if (installedCount >= totalWindows) return "installed";
-  if (measuredCount >= totalWindows && bracketedCount >= totalWindows) {
-    return "measured_and_bracketed";
+  if (
+    manufacturedCount >= totalWindows &&
+    measuredCount >= totalWindows &&
+    bracketedCount >= totalWindows
+  ) {
+    return "manufactured";
   }
-  if (measuredCount >= totalWindows) return "measured";
   if (bracketedCount >= totalWindows) return "bracketed";
+  if (measuredCount >= totalWindows) return "measured";
   return "not_started";
 }
 
@@ -41,15 +48,18 @@ export function getUnitCoverageFromDataset(
   const totalWindows = windows.length;
   const measuredCount = windows.filter((windowItem) => windowItem.measured).length;
   const bracketedCount = windows.filter((windowItem) => windowItem.bracketed).length;
+  const manufacturedCount = 0;
   const installedCount = windows.filter((windowItem) => windowItem.installed).length;
 
   return {
     totalWindows,
     measuredCount,
     bracketedCount,
+    manufacturedCount,
     installedCount,
     allMeasured: totalWindows > 0 && measuredCount >= totalWindows,
     allBracketed: totalWindows > 0 && bracketedCount >= totalWindows,
+    allManufactured: false,
     allInstalled: totalWindows > 0 && installedCount >= totalWindows,
   };
 }

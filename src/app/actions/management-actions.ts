@@ -16,6 +16,11 @@ import {
   NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
   NOTIF_COMPLETE_BY_DATE_CHANGED,
 } from "@/lib/notification-types";
+import {
+  buildCompleteByDateChangedNotificationBody,
+  buildUnitAssignedNotificationBody,
+  type UnitNotificationContext,
+} from "@/lib/notification-copy";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -93,6 +98,25 @@ async function loadBuildingClientId(
     .eq("id", buildingId)
     .maybeSingle();
   return data?.client_id ?? null;
+}
+
+async function loadUnitNotificationContext(
+  unitId: string
+): Promise<UnitNotificationContext | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("units")
+    .select("client_name, building_name, unit_number")
+    .eq("id", unitId)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    clientName: data.client_name ?? "",
+    buildingName: data.building_name ?? "",
+    unitNumber: data.unit_number ?? "",
+  };
 }
 
 export async function createClient_(
@@ -322,7 +346,37 @@ export async function createUnit(
   earliestBracketingDate: string,
   earliestInstallationDate: string,
   completeByDate: string | null = null
-): Promise<ActionResult & { id?: string }> {
+): Promise<
+  ActionResult & {
+    id?: string;
+    unit?: {
+      id: string;
+      buildingId: string;
+      clientId: string;
+      clientName: string;
+      buildingName: string;
+      unitNumber: string;
+      status: "not_started";
+      assignedInstallerId: null;
+      assignedInstallerName: null;
+      assignedSchedulerId: null;
+      assignedSchedulerName: null;
+      measurementDate: null;
+      bracketingDate: null;
+      installationDate: null;
+      earliestBracketingDate: string | null;
+      earliestInstallationDate: string | null;
+      completeByDate: string | null;
+      roomCount: 0;
+      windowCount: 0;
+      photosUploaded: 0;
+      notesCount: 0;
+      createdAt: string;
+      assignedAt: null;
+      manufacturingRiskFlag: "green";
+    };
+  }
+> {
   try {
     const owner = await requireOwner();
     const supabase = await createClient();
@@ -339,6 +393,7 @@ export async function createUnit(
       .single();
 
     const id = `unit-${crypto.randomUUID().slice(0, 8)}`;
+    const createdAt = new Date().toISOString();
     const { error } = await supabase.from("units").insert({
       id,
       building_id: buildingId,
@@ -355,6 +410,7 @@ export async function createUnit(
       window_count: 0,
       photos_uploaded: 0,
       notes_count: 0,
+      created_at: createdAt,
     });
     if (error) return { ok: false, error: error.message };
 
@@ -378,7 +434,36 @@ export async function createUnit(
     await supabase.from("schedule_entries").insert(bracketEntry);
 
     revalidateUnitRoutes(id, { buildingId, clientId });
-    return { ok: true, id };
+    return {
+      ok: true,
+      id,
+      unit: {
+        id,
+        buildingId,
+        clientId,
+        clientName: client?.name ?? "",
+        buildingName: building?.name ?? "",
+        unitNumber: unitNumber.trim(),
+        status: "not_started",
+        assignedInstallerId: null,
+        assignedInstallerName: null,
+        assignedSchedulerId: null,
+        assignedSchedulerName: null,
+        measurementDate: null,
+        bracketingDate: null,
+        installationDate: null,
+        earliestBracketingDate: earliestBracketingDate || null,
+        earliestInstallationDate: earliestInstallationDate || null,
+        completeByDate: completeByDate || null,
+        roomCount: 0,
+        windowCount: 0,
+        photosUploaded: 0,
+        notesCount: 0,
+        createdAt,
+        assignedAt: null,
+        manufacturingRiskFlag: "green",
+      },
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to create unit" };
   }
@@ -455,14 +540,17 @@ export async function updateUnitCompleteByDate(
         .eq("unit_id", unitId)
         .maybeSingle();
       if (assignment?.scheduler_id) {
+        const context = await loadUnitNotificationContext(unitId);
         await emitNotification({
           recipientRole: "scheduler",
           recipientId: assignment.scheduler_id,
           type: NOTIF_COMPLETE_BY_DATE_CHANGED,
           title: "Complete-by date updated",
-          body: nextDate
-            ? `New deadline: ${nextDate}`
-            : "Complete-by date removed.",
+          body: context
+            ? buildCompleteByDateChangedNotificationBody(context, nextDate)
+            : nextDate
+              ? `Complete by: ${nextDate}`
+              : "Complete-by date removed.",
           relatedUnitId: unitId,
         });
       }
@@ -611,20 +699,20 @@ export async function assignUnitsToScheduler(
       });
     }
 
-    // ─── Notification to scheduler ───────────────────────────────────────────
-    const unitLabel =
-      unitIds.length === 1
-        ? "A unit has been added to your queue"
-        : `${unitIds.length} units added to your queue`;
-    await emitNotification({
-      recipientRole: "scheduler",
-      recipientId: schedulerId,
-      type: NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
-      title: unitLabel,
-      body: `Assigned by ${displayName}`,
-      relatedUnitId: unitIds.length === 1 ? unitIds[0] : null,
-    });
-    // ─────────────────────────────────────────────────────────────────────────
+    // Emit one alert per unit so each item can deep-link to a specific queue addition.
+    for (const unitId of unitIds) {
+      const context = await loadUnitNotificationContext(unitId);
+      await emitNotification({
+        recipientRole: "scheduler",
+        recipientId: schedulerId,
+        type: NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
+        title: "Unit added to your queue",
+        body: context
+          ? buildUnitAssignedNotificationBody(context, displayName)
+          : `Assigned by ${displayName}`,
+        relatedUnitId: unitId,
+      });
+    }
 
     const unitsMeta = await loadUnitsRouteMeta(supabase, unitIds);
     revalidateManyUnitRoutes(unitsMeta);

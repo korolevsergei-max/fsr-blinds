@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Info, WarningCircle, UserGear, CalendarCheck, Wrench, Buildings, Robot, ClockCounterClockwise } from "@phosphor-icons/react";
+import { ArrowRight, Info, WarningCircle, UserGear, CalendarCheck, Wrench, Buildings, Robot, ClockCounterClockwise, ShieldCheck } from "@phosphor-icons/react";
 import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -22,13 +22,14 @@ import { getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
-import { getRoomEscalationRiskFlag } from "@/lib/window-issues";
+import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag } from "@/lib/window-issues";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
   scheduler: <CalendarCheck size={14} className="text-sky-500" />,
   installer: <Wrench size={14} className="text-teal-500" />,
   cutter: <Buildings size={14} className="text-orange-500" />,
+  qc: <ShieldCheck size={14} className="text-emerald-600" />,
   system: <Robot size={14} className="text-zinc-400" />,
 };
 
@@ -37,6 +38,7 @@ const ACTOR_COLORS: Record<string, string> = {
   scheduler: "bg-sky-50 border-sky-100",
   installer: "bg-teal-50 border-teal-100",
   cutter: "bg-orange-50 border-orange-100",
+  qc: "bg-emerald-50 border-emerald-100",
   system: "bg-zinc-50 border-zinc-100",
 };
 
@@ -147,10 +149,8 @@ export function UnitDetail({
   const datasetData = data ?? datasetCtx?.data;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
-  const roomIds = new Set(rooms.map((room) => room.id));
-  const escalationCount = (datasetData?.windows ?? []).filter(
-    (window) => roomIds.has(window.roomId) && window.riskFlag !== "green"
-  ).length;
+  const escalations = unit && datasetData ? getUnitEscalations(datasetData, unit.id) : [];
+  const escalationCount = escalations.length;
   const bracketedWindowIdsByRoom = new Map<string, Set<string>>();
   for (const item of mediaItems) {
     if (
@@ -178,16 +178,15 @@ export function UnitDetail({
       ? "not_started"
       : milestones.allInstalled
       ? "installed"
-      : milestones.allMeasured && milestones.allBracketed
-      ? "measured_and_bracketed"
-      : milestones.allMeasured
-      ? "measured"
+      : milestones.allMeasured && milestones.allBracketed && milestones.allManufactured
+      ? "manufactured"
       : milestones.allBracketed
       ? "bracketed"
+      : milestones.allMeasured
+      ? "measured"
       : "not_started";
 
   const displayPhotoCount = countDisplayableUnitPhotos(mediaItems);
-  const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -441,12 +440,7 @@ export function UnitDetail({
                 const roomEscalation = getRoomEscalationRiskFlag(
                   getWindowsByRoom(datasetData!, room.id)
                 );
-                const roomCardClass =
-                  roomEscalation === "red"
-                    ? "bg-red-600 text-white hover:bg-red-700"
-                    : roomEscalation === "yellow"
-                      ? "bg-amber-500 text-white hover:bg-amber-600"
-                      : "bg-accent text-white hover:opacity-90";
+                const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
 
                 return (
                   <Link key={room.id} href={`/installer/units/${unit.id}/rooms/${room.id}`}>

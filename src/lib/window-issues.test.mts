@@ -1,7 +1,117 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getHighestEscalationRiskFlag, getRoomEscalationRiskFlag } from "./window-issues.ts";
+import type { AppDataset } from "./app-dataset";
+import {
+  getHighestEscalationRiskFlag,
+  getRoomEscalationRiskFlag,
+  getUnitEscalations,
+} from "./window-issues.ts";
+
+function createDataset(): AppDataset {
+  return {
+    clients: [],
+    buildings: [],
+    installers: [],
+    schedule: [],
+    cutters: [],
+    schedulers: [],
+    manufacturingEscalations: [
+      {
+        id: "esc-1",
+        windowId: "window-2",
+        unitId: "unit-1",
+        sourceRole: "assembler",
+        targetRole: "cutter",
+        escalationType: "pushback",
+        status: "open",
+        reason: "Fabric defect",
+        notes: "Left panel needs to be recut.",
+        openedByUserId: "user-1",
+        openedAt: "2026-04-12T10:00:00.000Z",
+        resolvedByUserId: null,
+        resolvedAt: null,
+        createdAt: "2026-04-12T10:00:00.000Z",
+      },
+    ],
+    units: [
+      {
+        id: "unit-1",
+        buildingId: "building-1",
+        clientId: "client-1",
+        clientName: "Client One",
+        buildingName: "Building One",
+        unitNumber: "101",
+        status: "bracketed",
+        assignedInstallerId: null,
+        assignedInstallerName: null,
+        assignedSchedulerId: null,
+        assignedSchedulerName: null,
+        measurementDate: null,
+        bracketingDate: null,
+        installationDate: null,
+        earliestBracketingDate: null,
+        earliestInstallationDate: null,
+        completeByDate: null,
+        roomCount: 1,
+        windowCount: 2,
+        photosUploaded: 0,
+        notesCount: 0,
+        createdAt: null,
+        assignedAt: null,
+      },
+    ],
+    rooms: [
+      {
+        id: "room-1",
+        unitId: "unit-1",
+        name: "Living",
+        windowCount: 2,
+        completedWindows: 0,
+      },
+    ],
+    windows: [
+      {
+        id: "window-1",
+        roomId: "room-1",
+        label: "North",
+        blindType: "screen",
+        chainSide: "left",
+        riskFlag: "yellow",
+        width: null,
+        height: null,
+        depth: null,
+        blindWidth: null,
+        blindHeight: null,
+        blindDepth: null,
+        notes: "Bracket misalignment.",
+        photoUrl: null,
+        measured: false,
+        bracketed: false,
+        installed: false,
+      },
+      {
+        id: "window-2",
+        roomId: "room-1",
+        label: "South",
+        blindType: "screen",
+        chainSide: "right",
+        riskFlag: "green",
+        width: null,
+        height: null,
+        depth: null,
+        blindWidth: null,
+        blindHeight: null,
+        blindDepth: null,
+        notes: "",
+        photoUrl: null,
+        measured: false,
+        bracketed: false,
+        installed: false,
+      },
+    ],
+  };
+}
 
 test("getHighestEscalationRiskFlag returns green when all flags are non-escalated", () => {
   assert.equal(getHighestEscalationRiskFlag(["green"]), "green");
@@ -28,4 +138,17 @@ test("getRoomEscalationRiskFlag uses room window flags with red precedence", () 
     getRoomEscalationRiskFlag([{ riskFlag: "yellow" }, { riskFlag: "red" }]),
     "red"
   );
+});
+
+test("getUnitEscalations includes open manufacturing pushbacks alongside field escalations", () => {
+  const escalations = getUnitEscalations(createDataset(), "unit-1");
+
+  assert.equal(escalations.length, 2);
+  assert.equal(escalations[0]?.issueType, "manufacturing_pushback");
+  assert.equal(escalations[0]?.sourceRole, "assembler");
+  assert.equal(escalations[0]?.targetRole, "cutter");
+  assert.equal(escalations[0]?.reason, "Fabric defect");
+  assert.equal(escalations[0]?.note, "Left panel needs to be recut.");
+  assert.equal(escalations[1]?.issueType, "manufacturing");
+  assert.equal(escalations[1]?.note, "Bracket misalignment.");
 });

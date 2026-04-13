@@ -55,6 +55,7 @@ export function SettingsScreen({
   const [monthOffset, setMonthOffset] = useState(0);
   const [cutterCapacity, setCutterCapacity] = useState(String(settings.cutterDailyCapacity));
   const [assemblerCapacity, setAssemblerCapacity] = useState(String(settings.assemblerDailyCapacity));
+  const [qcCapacity, setQcCapacity] = useState(String(settings.qcDailyCapacity));
   const [applyHolidays, setApplyHolidays] = useState(settings.applyOntarioHolidays);
   const [optimisticOverrides, setOptimisticOverrides] = useState<Map<string, ManufacturingCalendarOverride>>(
     () => new Map()
@@ -94,6 +95,7 @@ export function SettingsScreen({
       const result = await updateManufacturingSettings(
         Number(cutterCapacity || 0),
         Number(assemblerCapacity || 0),
+        Number(qcCapacity || 0),
         applyHolidays
       );
       if (!result.ok) {
@@ -180,24 +182,30 @@ export function SettingsScreen({
         <div className="px-4 py-4 space-y-5">
           <section className="rounded-2xl border border-border bg-card p-4 space-y-4">
             <div>
-              <p className="text-sm font-semibold text-foreground">Capacity</p>
+              <p className="text-sm font-semibold text-foreground">Daily Capacity</p>
               <p className="text-xs text-tertiary mt-1">
-                Changes here immediately reflow all future cutter and assembler schedules.
+                Changes here immediately reflow all future cutter, assembler, and QC schedules.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Input
-                label="Cutter Daily Capacity"
+                label="Cutting"
                 inputMode="numeric"
                 value={cutterCapacity}
                 onChange={(event) => setCutterCapacity(event.target.value)}
               />
               <Input
-                label="Assembler Daily Capacity"
+                label="Assembling"
                 inputMode="numeric"
                 value={assemblerCapacity}
                 onChange={(event) => setAssemblerCapacity(event.target.value)}
+              />
+              <Input
+                label="QC"
+                inputMode="numeric"
+                value={qcCapacity}
+                onChange={(event) => setQcCapacity(event.target.value)}
               />
             </div>
 

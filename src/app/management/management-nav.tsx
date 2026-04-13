@@ -34,7 +34,7 @@ export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
   return (
     <nav
       aria-label="Management navigation"
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/98 backdrop-blur-lg lg:border-r"
+      className="fixed bottom-0 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 border-t border-border bg-card/98 backdrop-blur-lg"
     >
       <div className="mx-auto flex max-w-lg items-center justify-between px-1 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {navItems.map(({ href, label, Icon }) => {

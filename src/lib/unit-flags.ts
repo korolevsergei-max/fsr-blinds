@@ -42,7 +42,7 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
     if (
       unit.status === "measured" ||
       unit.status === "bracketed" ||
-      unit.status === "measured_and_bracketed"
+      unit.status === "manufactured"
     ) {
       flags.push("missing_installation_date");
     }

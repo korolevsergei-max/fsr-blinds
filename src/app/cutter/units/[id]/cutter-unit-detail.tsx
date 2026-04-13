@@ -140,6 +140,7 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
                   assembledAt: null,
                   assembledNotes: "",
                   qcApprovedByAssemblerId: null,
+                  qcApprovedByQcId: null,
                   qcApprovedAt: null,
                   qcNotes: "",
                   issueStatus: "none" as const,

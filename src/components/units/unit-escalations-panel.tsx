@@ -2,7 +2,10 @@
 
 import { WarningCircle } from "@phosphor-icons/react";
 import { RiskBadge } from "@/components/ui/risk-badge";
-import type { UnitEscalationSummary } from "@/lib/window-issues";
+import {
+  formatManufacturingRoleLabel,
+  type UnitEscalationSummary,
+} from "@/lib/window-issues";
 
 export function UnitEscalationsPanel({
   escalations,
@@ -33,9 +36,23 @@ export function UnitEscalationsPanel({
                 <p className="text-sm font-semibold text-foreground">
                   {item.roomName} · {item.windowLabel}
                 </p>
-                <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.note}</p>
+                {item.issueType === "manufacturing_pushback" ? (
+                  <>
+                    <p className="mt-1 text-[11px] font-semibold text-amber-900">
+                      {(item.sourceRole ? formatManufacturingRoleLabel(item.sourceRole) : "Manufacturing")} to{" "}
+                      {(item.targetRole ? formatManufacturingRoleLabel(item.targetRole) : "Manufacturing")}
+                      {item.reason ? ` · ${item.reason}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.note}</p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-600">{item.note}</p>
+                )}
               </div>
-              <RiskBadge flag={item.riskFlag} kind={item.issueType} />
+              <RiskBadge
+                flag={item.riskFlag}
+                kind={item.issueType === "client_approval" ? "client_approval" : "manufacturing"}
+              />
             </div>
           </div>
         ))}

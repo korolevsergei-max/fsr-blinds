@@ -5,6 +5,7 @@ import type {
   ManufacturingIssueStatus,
   ManufacturingSettings,
   ProductionStatus,
+  WindowManufacturingEscalation,
   WindowManufacturingSchedule,
 } from "@/lib/types";
 import {
@@ -13,11 +14,13 @@ import {
   isWorkingDay,
   listMonthDays,
 } from "@/lib/manufacturing-calendar";
+import { loadOpenManufacturingEscalationsByWindow } from "@/lib/manufacturing-escalations";
 
 type SettingsRow = {
   id: string;
   cutter_daily_capacity: number;
   assembler_daily_capacity: number;
+  qc_daily_capacity: number;
   apply_ontario_holidays: boolean;
 };
 
@@ -35,6 +38,7 @@ type ScheduleRow = {
   target_ready_date: string | null;
   scheduled_cut_date: string | null;
   scheduled_assembly_date: string | null;
+  scheduled_qc_date: string | null;
   manual_priority: number | null;
   is_schedule_locked: boolean | null;
   lock_reason: string | null;
@@ -46,6 +50,8 @@ type ScheduleRow = {
 
 type UnitRow = {
   id: string;
+  building_id: string;
+  client_id: string;
   unit_number: string;
   building_name: string;
   client_name: string;
@@ -98,6 +104,8 @@ export type ManufacturingCalendarDay = {
 export interface ManufacturingWindowItem {
   windowId: string;
   unitId: string;
+  buildingId: string;
+  clientId: string;
   unitNumber: string;
   buildingName: string;
   clientName: string;
@@ -116,8 +124,14 @@ export interface ManufacturingWindowItem {
   productionStatus: ProductionStatus;
   issueStatus: ManufacturingIssueStatus;
   issueReason: string;
+  issueNotes: string;
+  escalation: WindowManufacturingEscalation | null;
+  cutAt: string | null;
+  assembledAt: string | null;
+  qcApprovedAt: string | null;
   scheduledCutDate: string | null;
   scheduledAssemblyDate: string | null;
+  scheduledQcDate: string | null;
   isScheduleLocked: boolean;
   overCapacityOverride: boolean;
 }
@@ -146,37 +160,41 @@ export interface ManufacturingDayBucket {
 
 export interface ManufacturingRoleSchedule {
   settings: ManufacturingSettings;
+  currentWorkDate: string;
   todayCount: number;
   tomorrowCount: number;
   upcomingCount: number;
   issueCount: number;
   overdueCount: number;
   unscheduledCount: number;
+  allItems: ManufacturingWindowItem[];
   buckets: ManufacturingDayBucket[];
 }
 
 function getQueueWindowPriority(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   item: ManufacturingWindowItem
 ) {
   if (item.issueStatus === "open") return 0;
   if (role === "cutter") {
     return item.productionStatus === "pending" ? 1 : 2;
   }
-  if (item.productionStatus === "cut") return 1;
-  if (item.productionStatus === "assembled") return 2;
+  if (role === "assembler") {
+    return item.productionStatus === "cut" ? 1 : 2;
+  }
+  if (item.productionStatus === "assembled") return 1;
   return 3;
 }
 
 function countQueueReadyWindows(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   windows: ManufacturingWindowItem[]
 ) {
   return windows.filter((item) => getQueueWindowPriority(role, item) < 3).length;
 }
 
 function sortQueueWindows(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   windows: ManufacturingWindowItem[]
 ) {
   return [...windows].sort((a, b) => {
@@ -208,6 +226,7 @@ function mapSettings(row: SettingsRow | null): ManufacturingSettings {
     id: row?.id ?? "default",
     cutterDailyCapacity: row?.cutter_daily_capacity ?? 30,
     assemblerDailyCapacity: row?.assembler_daily_capacity ?? 30,
+    qcDailyCapacity: row?.qc_daily_capacity ?? 30,
     applyOntarioHolidays: row?.apply_ontario_holidays ?? false,
   };
 }
@@ -229,6 +248,7 @@ function mapSchedule(row: ScheduleRow): WindowManufacturingSchedule {
     targetReadyDate: row.target_ready_date,
     scheduledCutDate: row.scheduled_cut_date,
     scheduledAssemblyDate: row.scheduled_assembly_date,
+    scheduledQcDate: row.scheduled_qc_date,
     manualPriority: row.manual_priority ?? 0,
     isScheduleLocked: row.is_schedule_locked ?? false,
     lockReason: row.lock_reason ?? "",
@@ -315,8 +335,8 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
 
   const { data: unitRows } = await supabase
     .from("units")
-    .select("id, unit_number, building_name, client_name, installation_date, status")
-    .in("status", ["measured", "measured_and_bracketed"])
+    .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, status")
+    .in("status", ["measured", "bracketed", "manufactured", "measured_and_bracketed"])
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
 
@@ -368,11 +388,13 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     targetReadyDate: string | null;
     production: ProductionRow | null;
     existing: WindowManufacturingSchedule | null;
+    scheduledQcDate: string | null;
     scheduledAssemblyDate: string | null;
     scheduledCutDate: string | null;
   };
 
   const candidatesByUnit = new Map<string, Candidate[]>();
+  const qcLoad = new Map<string, number>();
   const assemblyLoad = new Map<string, number>();
   const cutLoad = new Map<string, number>();
   const upserts = new Map<string, Record<string, unknown>>();
@@ -393,31 +415,36 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       ? addWorkingDays(unit.installation_date, -3, settings, overrides)
       : null;
 
+    let scheduledQcDate = existing?.scheduledQcDate ?? targetReadyDate;
     let scheduledAssemblyDate = existing?.scheduledAssemblyDate ?? null;
     let scheduledCutDate = existing?.scheduledCutDate ?? null;
 
+    if (production?.status === "cut" || production?.status === "assembled" || production?.status === "qc_approved") {
+      scheduledCutDate = production.cut_at?.slice(0, 10) ?? scheduledCutDate;
+    }
     if (production?.status === "assembled") {
       scheduledAssemblyDate = production.assembled_at?.slice(0, 10) ?? scheduledAssemblyDate;
     }
     if (production?.status === "qc_approved") {
+      scheduledQcDate = production.qc_approved_at?.slice(0, 10) ?? scheduledQcDate;
       scheduledAssemblyDate =
-        production.qc_approved_at?.slice(0, 10) ??
         production.assembled_at?.slice(0, 10) ??
         scheduledAssemblyDate;
     }
-    if (production && production.status !== "pending") {
-      scheduledCutDate = production.cut_at?.slice(0, 10) ?? scheduledCutDate;
+
+    if (scheduledQcDate && production?.status !== "qc_approved" && scheduledQcDate < currentWorkDate) {
+      scheduledQcDate = currentWorkDate;
     }
-    if (production?.issue_status === "open") {
-      scheduledAssemblyDate = null;
-      scheduledCutDate = null;
-    } else {
-      if (scheduledAssemblyDate && scheduledAssemblyDate < currentWorkDate) {
-        scheduledAssemblyDate = currentWorkDate;
-      }
-      if (scheduledCutDate && scheduledCutDate < currentWorkDate) {
-        scheduledCutDate = currentWorkDate;
-      }
+    if (
+      scheduledAssemblyDate &&
+      production?.status !== "assembled" &&
+      production?.status !== "qc_approved" &&
+      scheduledAssemblyDate < currentWorkDate
+    ) {
+      scheduledAssemblyDate = currentWorkDate;
+    }
+    if (scheduledCutDate && (production?.status ?? "pending") === "pending" && scheduledCutDate < currentWorkDate) {
+      scheduledCutDate = currentWorkDate;
     }
 
     const candidate: Candidate = {
@@ -426,11 +453,15 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       targetReadyDate,
       production,
       existing,
+      scheduledQcDate,
       scheduledAssemblyDate,
       scheduledCutDate,
     };
     candidatesByUnit.get(unit.id)?.push(candidate);
 
+    if (existing?.isScheduleLocked && scheduledQcDate && production?.status !== "qc_approved") {
+      pushLoad(qcLoad, scheduledQcDate);
+    }
     if (existing?.isScheduleLocked && scheduledAssemblyDate && production?.status !== "qc_approved") {
       pushLoad(assemblyLoad, scheduledAssemblyDate);
     }
@@ -439,12 +470,12 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     }
   }
 
-  const assemblyCandidates = [...candidatesByUnit.values()]
+  const qcCandidates = [...candidatesByUnit.values()]
     .map((items) =>
       items
         .filter((item) => {
           const status = item.production?.status ?? "pending";
-          return status !== "assembled" && status !== "qc_approved" && item.production?.issue_status !== "open";
+          return status !== "qc_approved";
         })
         .sort((a, b) => buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window)))
     )
@@ -456,7 +487,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       return a[0].unit.unit_number.localeCompare(b[0].unit.unit_number);
     });
 
-  for (const group of assemblyCandidates) {
+  for (const group of qcCandidates) {
     const unlocked = group.filter((item) => !item.existing?.isScheduleLocked);
     if (unlocked.length === 0) continue;
 
@@ -465,6 +496,79 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
 
     const sameDay = findLatestWorkingDayWithCapacity(
       latestDate,
+      settings.qcDailyCapacity,
+      qcLoad,
+      settings,
+      overrides,
+      unlocked.length,
+      currentWorkDate
+    );
+
+    if (sameDay) {
+      for (const item of unlocked) {
+        item.scheduledQcDate = sameDay;
+        pushLoad(qcLoad, sameDay);
+      }
+      continue;
+    }
+
+    const remaining = [...unlocked];
+    let cursor = latestDate < currentWorkDate ? currentWorkDate : latestDate;
+    while (remaining.length > 0) {
+      if (!isWorkingDay(cursor, settings, overrides)) {
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
+        continue;
+      }
+      const used = qcLoad.get(cursor) ?? 0;
+      const available = Math.max(0, settings.qcDailyCapacity - used);
+      if (available === 0) {
+        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+        if (nextCursor < currentWorkDate) break;
+        cursor = nextCursor;
+        continue;
+      }
+      const take = remaining.splice(0, available);
+      for (const item of take) {
+        item.scheduledQcDate = cursor;
+        pushLoad(qcLoad, cursor);
+      }
+      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
+      if (nextCursor < currentWorkDate) break;
+      cursor = nextCursor;
+    }
+  }
+
+  const assemblyCandidateGroups = [...candidatesByUnit.values()]
+    .flatMap((items) => {
+      const readyForAssembly = items.filter((item) => {
+        const status = item.production?.status ?? "pending";
+        return status !== "assembled" && status !== "qc_approved";
+      });
+      const byQcDate = new Map<string, Candidate[]>();
+      for (const item of readyForAssembly) {
+        const key = item.scheduledQcDate ?? "__unscheduled__";
+        const list = byQcDate.get(key) ?? [];
+        list.push(item);
+        byQcDate.set(key, list);
+      }
+      return [...byQcDate.entries()]
+        .filter(([qcDate, rows]) => qcDate !== "__unscheduled__" && rows.length > 0)
+        .map(([qcDate, rows]) => ({
+          qcDate,
+          rows: rows.sort((a, b) => buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window))),
+        }));
+    })
+    .sort((a, b) => a.qcDate.localeCompare(b.qcDate));
+
+  for (const group of assemblyCandidateGroups) {
+    const unlocked = group.rows.filter((item) => !item.existing?.isScheduleLocked);
+    if (unlocked.length === 0) continue;
+
+    const latestAssemblyDate = addWorkingDays(group.qcDate, -1, settings, overrides);
+    const sameDay = findLatestWorkingDayWithCapacity(
+      latestAssemblyDate,
       settings.assemblerDailyCapacity,
       assemblyLoad,
       settings,
@@ -482,7 +586,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     }
 
     const remaining = [...unlocked];
-    let cursor = latestDate < currentWorkDate ? currentWorkDate : latestDate;
+    let cursor = latestAssemblyDate < currentWorkDate ? currentWorkDate : latestAssemblyDate;
     while (remaining.length > 0) {
       if (!isWorkingDay(cursor, settings, overrides)) {
         const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
@@ -511,7 +615,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
 
   const cutCandidateGroups = [...candidatesByUnit.values()]
     .flatMap((items) => {
-      const pending = items.filter((item) => (item.production?.status ?? "pending") === "pending" && item.production?.issue_status !== "open");
+      const pending = items.filter((item) => (item.production?.status ?? "pending") === "pending");
       const byAssemblyDate = new Map<string, Candidate[]>();
       for (const item of pending) {
         const key = item.scheduledAssemblyDate ?? "__unscheduled__";
@@ -590,6 +694,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         target_ready_date: item.targetReadyDate,
         scheduled_cut_date: item.scheduledCutDate,
         scheduled_assembly_date: item.scheduledAssemblyDate,
+        scheduled_qc_date: item.scheduledQcDate,
         manual_priority: existing?.manualPriority ?? 0,
         is_schedule_locked: existing?.isScheduleLocked ?? false,
         lock_reason: existing?.lockReason ?? "",
@@ -600,14 +705,6 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         moved_by_user_id: existing?.movedByUserId,
         moved_at: existing?.movedAt,
       });
-
-      if (production?.issue_status === "open") {
-        const row = upserts.get(item.window.id);
-        if (row) {
-          row.scheduled_cut_date = null;
-          row.scheduled_assembly_date = null;
-        }
-      }
     }
   }
 
@@ -642,7 +739,7 @@ export async function buildManufacturingCalendarMonth(
 }
 
 export async function loadManufacturingRoleSchedule(
-  role: "cutter" | "assembler"
+  role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
   await reflowManufacturingSchedules("load_queue");
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
@@ -650,20 +747,24 @@ export async function loadManufacturingRoleSchedule(
   const { data: scheduleRows } = await supabase
     .from("window_manufacturing_schedule")
     .select("*")
-    .order(role === "cutter" ? "scheduled_cut_date" : "scheduled_assembly_date", {
-      ascending: true,
-      nullsFirst: false,
-    });
+    .order(
+      role === "cutter"
+        ? "scheduled_cut_date"
+        : role === "assembler"
+          ? "scheduled_assembly_date"
+          : "scheduled_qc_date",
+      { ascending: true, nullsFirst: false }
+    );
 
   const schedules = (scheduleRows as ScheduleRow[] | null) ?? [];
   const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
   const windowIds = [...new Set(schedules.map((row) => row.window_id))];
 
-  const [unitRows, windowRows, productionRows] = await Promise.all([
+  const [unitRows, windowRows, productionRows, escalationByWindow] = await Promise.all([
     unitIds.length > 0
       ? supabase
           .from("units")
-          .select("id, unit_number, building_name, client_name, installation_date, status")
+          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, status")
           .in("id", unitIds)
       : Promise.resolve({ data: [] as UnitRow[] }),
     windowIds.length > 0
@@ -675,7 +776,7 @@ export async function loadManufacturingRoleSchedule(
     windowIds.length > 0
       ? supabase
           .from("window_production_status")
-          .select("window_id, status, issue_status, issue_reason")
+          .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at")
           .in("window_id", windowIds)
       : Promise.resolve({
           data: [] as Array<{
@@ -683,8 +784,13 @@ export async function loadManufacturingRoleSchedule(
             status: ProductionStatus;
             issue_status: ManufacturingIssueStatus;
             issue_reason: string | null;
+            issue_notes: string | null;
+            cut_at: string | null;
+            assembled_at: string | null;
+            qc_approved_at: string | null;
           }>,
         }),
+    loadOpenManufacturingEscalationsByWindow(supabase, windowIds),
   ]);
 
   const windows = (windowRows.data as WindowRow[] | null) ?? [];
@@ -694,7 +800,12 @@ export async function loadManufacturingRoleSchedule(
     : { data: [] as Array<{ id: string; name: string }> };
 
   const items: ManufacturingWindowItem[] = [];
-  const roleDateKey = role === "cutter" ? "scheduledCutDate" : "scheduledAssemblyDate";
+  const roleDateKey =
+    role === "cutter"
+      ? "scheduledCutDate"
+      : role === "assembler"
+        ? "scheduledAssemblyDate"
+        : "scheduledQcDate";
   const unitsById = new Map(((unitRows.data as UnitRow[] | null) ?? []).map((unit) => [unit.id, unit]));
   const windowsById = new Map(windows.map((window) => [window.id, window]));
   const roomsById = new Map((((roomRows.data as Array<{ id: string; name: string }> | null) ?? [])).map((room) => [room.id, room]));
@@ -704,9 +815,14 @@ export async function loadManufacturingRoleSchedule(
       status: ProductionStatus;
       issue_status: ManufacturingIssueStatus;
       issue_reason: string | null;
+      issue_notes: string | null;
+      cut_at: string | null;
+      assembled_at: string | null;
+      qc_approved_at: string | null;
     }> | null) ?? []))).map((production) => [production.window_id, production])
   );
 
+  const allItems: ManufacturingWindowItem[] = [];
   for (const row of schedules) {
     const unit = unitsById.get(row.unit_id);
     const window = windowsById.get(row.window_id);
@@ -715,17 +831,13 @@ export async function loadManufacturingRoleSchedule(
     const roomName = roomsById.get(window.room_id)?.name ?? "Room";
     const productionStatus = production?.status ?? "pending";
     const issueStatus = production?.issue_status ?? "none";
+    const escalation = escalationByWindow.get(row.window_id) ?? null;
 
-    if (role === "cutter" && productionStatus !== "pending" && issueStatus !== "open") {
-      continue;
-    }
-    if (role === "assembler" && productionStatus === "qc_approved" && issueStatus !== "open") {
-      continue;
-    }
-
-    items.push({
+    const item: ManufacturingWindowItem = {
       windowId: row.window_id,
       unitId: row.unit_id,
+      buildingId: unit.building_id,
+      clientId: unit.client_id,
       unitNumber: unit.unit_number,
       buildingName: unit.building_name,
       clientName: unit.client_name,
@@ -744,16 +856,40 @@ export async function loadManufacturingRoleSchedule(
       productionStatus,
       issueStatus,
       issueReason: production?.issue_reason ?? "",
+      issueNotes: production?.issue_notes ?? "",
+      escalation,
+      cutAt: production?.cut_at ?? null,
+      assembledAt: production?.assembled_at ?? null,
+      qcApprovedAt: production?.qc_approved_at ?? null,
       scheduledCutDate: row.scheduled_cut_date,
       scheduledAssemblyDate: row.scheduled_assembly_date,
+      scheduledQcDate: row.scheduled_qc_date,
       isScheduleLocked: row.is_schedule_locked ?? false,
       overCapacityOverride: row.over_capacity_override ?? false,
-    });
+    };
+    allItems.push(item);
+
+    if (role === "cutter" && productionStatus !== "pending") {
+      continue;
+    }
+    if (role === "assembler" && productionStatus !== "cut") {
+      continue;
+    }
+    if (role === "qc" && productionStatus !== "assembled") {
+      continue;
+    }
+
+    items.push(item);
   }
 
   const today = currentWorkDate;
   const tomorrow = addWorkingDays(today, 1, settings, overrides);
-  const capacity = role === "cutter" ? settings.cutterDailyCapacity : settings.assemblerDailyCapacity;
+  const capacity =
+    role === "cutter"
+      ? settings.cutterDailyCapacity
+      : role === "assembler"
+        ? settings.assemblerDailyCapacity
+        : settings.qcDailyCapacity;
 
   const byBucket = new Map<string, ManufacturingWindowItem[]>();
   for (const item of items) {
@@ -763,12 +899,6 @@ export async function loadManufacturingRoleSchedule(
       const list = byBucket.get("__issues__") ?? [];
       list.push(item);
       byBucket.set("__issues__", list);
-      continue;
-    }
-    if (role === "assembler" && item.productionStatus === "assembled") {
-      const list = byBucket.get("__qc__") ?? [];
-      list.push(item);
-      byBucket.set("__qc__", list);
       continue;
     }
     if (!date) {
@@ -783,7 +913,7 @@ export async function loadManufacturingRoleSchedule(
   }
 
   const orderedKeys = [...byBucket.keys()].sort((a, b) => {
-    const specialOrder = ["__issues__", "__qc__", "__unscheduled__"];
+    const specialOrder = ["__issues__", "__unscheduled__"];
     const aIdx = specialOrder.indexOf(a);
     const bIdx = specialOrder.indexOf(b);
     if (aIdx >= 0 || bIdx >= 0) {
@@ -859,8 +989,6 @@ export async function loadManufacturingRoleSchedule(
       label:
         key === "__issues__"
           ? "Issues"
-          : key === "__qc__"
-          ? "Ready for QC"
           : key === "__unscheduled__"
           ? "Unscheduled"
           : key === today
@@ -884,6 +1012,7 @@ export async function loadManufacturingRoleSchedule(
 
   return {
     settings,
+    currentWorkDate,
     todayCount: buckets.find((bucket) => bucket.date === today)?.scheduledCount ?? 0,
     tomorrowCount: buckets.find((bucket) => bucket.date === tomorrow)?.scheduledCount ?? 0,
     upcomingCount: datedBuckets
@@ -892,6 +1021,7 @@ export async function loadManufacturingRoleSchedule(
     issueCount,
     overdueCount,
     unscheduledCount,
+    allItems,
     buckets,
   };
 }

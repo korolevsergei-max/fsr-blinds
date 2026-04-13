@@ -9,9 +9,8 @@ import { getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { EmptyState } from "@/components/ui/empty-state";
-import { RiskBadge } from "@/components/ui/risk-badge";
 import { WindowStageNav } from "@/components/window-stage-nav";
-import { getHighestEscalationRiskFlag } from "@/lib/window-issues";
+import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
 type ImageOrientation = "portrait" | "landscape" | "square";
@@ -41,6 +40,7 @@ interface RoomWindowsViewProps {
   addWindowHref?: string;
   /** When provided, renders a Delete button per window with confirmation. */
   onDeleteWindow?: (windowId: string) => Promise<void>;
+  isManufacturedComplete?: boolean;
 }
 
 const STAGE_META: Record<
@@ -60,6 +60,7 @@ export function RoomWindowsView({
   getStageNavProps,
   addWindowHref,
   onDeleteWindow,
+  isManufacturedComplete = false,
 }: RoomWindowsViewProps) {
   const windowsList = getWindowsByRoom(data, roomId);
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
@@ -193,12 +194,7 @@ export function RoomWindowsView({
 
         {windowsList.map((win, i) => {
           const escalationFlag = getHighestEscalationRiskFlag([win.riskFlag]);
-          const cardTone =
-            escalationFlag === "red"
-              ? "border-red-300 bg-red-50"
-              : escalationFlag === "yellow"
-                ? "border-amber-300 bg-amber-50"
-                : "border-border bg-white";
+          const cardTone = getEscalationSurfaceClasses(escalationFlag, "card");
 
           const stageMedia = windowStageMediaMap.get(win.id) ?? {};
           const stageOptions: { key: WindowStageKey; label: string; url: string }[] = [];
@@ -265,6 +261,7 @@ export function RoomWindowsView({
                       {...getStageNavProps(win.id)}
                       isMeasured={win.measured}
                       isBracketed={win.bracketed}
+                      isManufactured={isManufacturedComplete}
                       isInstalled={win.installed}
                       active={
                         win.installed
@@ -329,7 +326,6 @@ export function RoomWindowsView({
                       </span>
                     </div>
                   </div>
-                  <RiskBadge flag={win.riskFlag} />
                 </div>
 
                 {postBracketingWindowIds.has(win.id) && !stageMedia.installed && (

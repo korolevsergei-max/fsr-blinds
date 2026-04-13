@@ -19,6 +19,7 @@ export default async function SchedulerNewWindowPage({
       <WindowForm
         key={formKey}
         activityLog={supplemental.activityLog}
+        milestones={supplemental.milestones}
         routeBasePath="/scheduler/units"
       />
     </Suspense>

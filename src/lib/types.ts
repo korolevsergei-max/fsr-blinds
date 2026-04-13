@@ -2,7 +2,7 @@ export const UNIT_STATUSES = [
   "not_started",
   "measured",
   "bracketed",
-  "measured_and_bracketed",
+  "manufactured",
   "installed",
 ] as const;
 
@@ -12,16 +12,16 @@ export const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
   not_started: "Not Yet Started",
   measured: "Measured",
   bracketed: "Bracketed",
-  measured_and_bracketed: "Measured & Bracketed",
+  manufactured: "Manufactured",
   installed: "Installed",
 };
 
-/** Progress depth for simple comparisons (measured and bracketed are parallel at 1). */
+/** Progress depth for simple comparisons (measured and bracketed remain parallel at 1). */
 export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
   not_started: 0,
   measured: 1,
   bracketed: 1,
-  measured_and_bracketed: 2,
+  manufactured: 2,
   installed: 3,
 };
 
@@ -70,6 +70,7 @@ export interface WindowProductionStatus {
   assembledAt: string | null;
   assembledNotes: string;
   qcApprovedByAssemblerId: string | null;
+  qcApprovedByQcId: string | null;
   qcApprovedAt: string | null;
   qcNotes: string;
   issueStatus: ManufacturingIssueStatus;
@@ -85,6 +86,7 @@ export interface ManufacturingSettings {
   id: string;
   cutterDailyCapacity: number;
   assemblerDailyCapacity: number;
+  qcDailyCapacity: number;
   applyOntarioHolidays: boolean;
 }
 
@@ -102,6 +104,7 @@ export interface WindowManufacturingSchedule {
   targetReadyDate: string | null;
   scheduledCutDate: string | null;
   scheduledAssemblyDate: string | null;
+  scheduledQcDate: string | null;
   manualPriority: number;
   isScheduleLocked: boolean;
   lockReason: string;
@@ -245,6 +248,31 @@ export interface Assembler {
   email: string;
   phone: string;
   authUserId: string | null;
+}
+
+export interface Qc {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  authUserId: string | null;
+}
+
+export interface WindowManufacturingEscalation {
+  id: string;
+  windowId: string;
+  unitId: string;
+  sourceRole: "cutter" | "assembler" | "qc";
+  targetRole: "cutter" | "assembler" | "qc";
+  escalationType: "pushback" | "blocker";
+  status: "open" | "resolved";
+  reason: string;
+  notes: string;
+  openedByUserId: string | null;
+  openedAt: string;
+  resolvedByUserId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
 }
 
 export interface ScheduleEntry {

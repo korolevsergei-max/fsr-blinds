@@ -92,14 +92,15 @@ export function UnitProgressMilestonesPanel({
   mediaViewerSlot?: React.ReactNode;
   className?: string;
 }) {
-  const { allMeasured, allBracketed, allInstalled } = milestones;
-  const ready = allMeasured && allBracketed;
+  const { allMeasured, allBracketed, allManufactured, allInstalled } = milestones;
+  const ready = allMeasured && allBracketed && allManufactured;
 
   const schedM = formatWhen(unit.measurementDate);
   const schedB = formatWhen(unit.bracketingDate);
   const schedI = formatWhen(unit.installationDate);
   const doneM = formatWhen(milestones.measuredCompletedAt);
   const doneB = formatWhen(milestones.bracketedCompletedAt);
+  const doneMf = formatWhen(milestones.manufacturedCompletedAt);
   const doneI = formatWhen(milestones.installedCompletedAt);
 
   const showDates = layout === "detail";
@@ -178,8 +179,21 @@ export function UnitProgressMilestonesPanel({
         <div className={density === "comfortable" ? "space-y-4" : "space-y-3"}>
           <Row
             density={density}
+            title="Manufacturing complete"
+            subtitle={
+              milestones.totalWindows > 0
+                ? milestones.manufacturedByLegacyInstalledFallback
+                  ? "Installed legacy unit treated as manufactured complete"
+                  : `${milestones.manufacturedCount}/${milestones.totalWindows} windows QC approved`
+                : "No windows yet"
+            }
+            met={allManufactured}
+            completed={showDates ? doneMf : undefined}
+          />
+          <Row
+            density={density}
             title="Ready for installation"
-            subtitle="Requires measurements and bracketing for every window"
+            subtitle="Requires measurements, bracketing, and manufacturing for every window"
             met={ready}
           />
           <Row

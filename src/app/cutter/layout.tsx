@@ -23,6 +23,9 @@ export default async function CutterLayout({
   if (user.role === "assembler") {
     redirect("/assembler");
   }
+  if (user.role === "qc") {
+    redirect("/qc");
+  }
   if (user.role !== "cutter") {
     redirect("/login");
   }

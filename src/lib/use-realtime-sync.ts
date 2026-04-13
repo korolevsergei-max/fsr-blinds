@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { refreshDataset } from "@/app/actions/dataset-queries";
 import type { AppDataset } from "./app-dataset";
 import {
   mapClient,
@@ -27,6 +28,7 @@ import {
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 type PatchFn = (updater: (prev: AppDataset) => AppDataset) => void;
+type SetDataFn = (next: AppDataset) => void;
 type LoaderKind = "full" | "scheduler" | "installer";
 
 type PgPayload<T = Record<string, unknown>> = {
@@ -103,10 +105,16 @@ function applySchedulerAssignment(
   return changed ? { ...prev, units } : prev;
 }
 
-export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
+export function useRealtimeSync(
+  patchData: PatchFn,
+  setData: SetDataFn,
+  loaderKind: LoaderKind
+) {
   const patchRef = useRef(patchData);
+  const setDataRef = useRef(setData);
   useEffect(() => {
     patchRef.current = patchData;
+    setDataRef.current = setData;
   });
 
   useEffect(() => {
@@ -115,6 +123,22 @@ export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
     const shouldTrackMetaTables = loaderKind !== "installer";
     const shouldTrackStaffLists = loaderKind === "full" || loaderKind === "scheduler";
     const shouldTrackManufacturingLists = loaderKind === "full";
+    let schedulerRefreshTimer: number | null = null;
+
+    function scheduleScopedRefresh() {
+      if (loaderKind !== "scheduler") return;
+      if (schedulerRefreshTimer !== null) {
+        window.clearTimeout(schedulerRefreshTimer);
+      }
+      schedulerRefreshTimer = window.setTimeout(() => {
+        schedulerRefreshTimer = null;
+        refreshDataset("scheduler").then((freshData) => {
+          if (freshData) {
+            setDataRef.current(freshData);
+          }
+        });
+      }, 120);
+    }
 
     function sub<Row>(
       table: string,
@@ -190,6 +214,7 @@ export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
           }
           return { ...prev, installers: upsert(prev.installers, mapInstaller(p.new as InstallerRow)) };
         });
+        scheduleScopedRefresh();
       });
     }
 
@@ -239,6 +264,7 @@ export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
             (p.new as SchedulerAssignmentRow).scheduler_id
           );
         });
+        scheduleScopedRefresh();
       });
     }
 
@@ -256,6 +282,9 @@ export function useRealtimeSync(patchData: PatchFn, loaderKind: LoaderKind) {
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
+      if (schedulerRefreshTimer !== null) {
+        window.clearTimeout(schedulerRefreshTimer);
+      }
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, [loaderKind]);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppDataset } from "./app-dataset";
+import { canUploadInstallationPhotos } from "./unit-install-guard.ts";
 import {
   deriveUnitStatusFromCounts,
   getUnitCoverageFromDataset,
@@ -19,6 +20,7 @@ function createDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingEscalations: [],
     units: [
       {
         id: "unit-1",
@@ -27,7 +29,7 @@ function createDataset(): AppDataset {
         clientName: "Client One",
         buildingName: "Building One",
         unitNumber: "101",
-        status: "measured_and_bracketed",
+        status: "bracketed",
         assignedInstallerId: null,
         assignedInstallerName: null,
         assignedSchedulerId: null,
@@ -162,6 +164,7 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       totalWindows: 0,
       measuredCount: 0,
       bracketedCount: 0,
+      manufacturedCount: 0,
       installedCount: 0,
     }),
     "not_started"
@@ -172,6 +175,7 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       totalWindows: 3,
       measuredCount: 3,
       bracketedCount: 1,
+      manufacturedCount: 0,
       installedCount: 0,
     }),
     "measured"
@@ -182,6 +186,7 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       totalWindows: 3,
       measuredCount: 1,
       bracketedCount: 3,
+      manufacturedCount: 0,
       installedCount: 0,
     }),
     "bracketed"
@@ -192,9 +197,21 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       totalWindows: 3,
       measuredCount: 3,
       bracketedCount: 3,
+      manufacturedCount: 3,
       installedCount: 0,
     }),
-    "measured_and_bracketed"
+    "manufactured"
+  );
+
+  assert.equal(
+    deriveUnitStatusFromCounts({
+      totalWindows: 3,
+      measuredCount: 2,
+      bracketedCount: 3,
+      manufacturedCount: 3,
+      installedCount: 0,
+    }),
+    "bracketed"
   );
 
   assert.equal(
@@ -202,10 +219,19 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       totalWindows: 3,
       measuredCount: 3,
       bracketedCount: 3,
+      manufacturedCount: 3,
       installedCount: 3,
     }),
     "installed"
   );
+});
+
+test("installation upload gate only opens after manufacturing is complete", () => {
+  assert.equal(canUploadInstallationPhotos("not_started"), false);
+  assert.equal(canUploadInstallationPhotos("measured"), false);
+  assert.equal(canUploadInstallationPhotos("bracketed"), false);
+  assert.equal(canUploadInstallationPhotos("manufactured"), true);
+  assert.equal(canUploadInstallationPhotos("installed"), true);
 });
 
 test("getUnitCoverageFromDataset counts only windows that belong to the target unit", () => {
@@ -216,9 +242,11 @@ test("getUnitCoverageFromDataset counts only windows that belong to the target u
     totalWindows: 2,
     measuredCount: 2,
     bracketedCount: 2,
+    manufacturedCount: 0,
     installedCount: 1,
     allMeasured: true,
     allBracketed: true,
+    allManufactured: false,
     allInstalled: false,
   });
 });

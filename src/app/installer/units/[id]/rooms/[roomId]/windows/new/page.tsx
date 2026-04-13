@@ -16,7 +16,7 @@ export default async function InstallerNewWindowPage({
 
   return (
     <Suspense fallback={<div className="p-6 text-center text-muted text-sm">Loading form…</div>}>
-      <WindowForm key={formKey} activityLog={supplemental.activityLog} />
+      <WindowForm key={formKey} activityLog={supplemental.activityLog} milestones={supplemental.milestones} />
     </Suspense>
   );
 }

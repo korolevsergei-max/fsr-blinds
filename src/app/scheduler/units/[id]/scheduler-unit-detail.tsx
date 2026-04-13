@@ -14,6 +14,7 @@ import {
   UserGear,
   CalendarCheck,
   ArrowRight,
+  ShieldCheck,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -24,17 +25,19 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
+import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
-import { getRoomEscalationRiskFlag } from "@/lib/window-issues";
+import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag, getUnitEscalations } from "@/lib/window-issues";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
   scheduler: <CalendarCheck size={14} className="text-sky-500" />,
   installer: <Wrench size={14} className="text-teal-500" />,
   cutter: <Buildings size={14} className="text-orange-500" />,
+  qc: <ShieldCheck size={14} className="text-emerald-600" />,
   system: <Robot size={14} className="text-zinc-400" />,
 };
 
@@ -43,6 +46,7 @@ const ACTOR_COLORS: Record<string, string> = {
   scheduler: "bg-sky-50 border-sky-100",
   installer: "bg-teal-50 border-teal-100",
   cutter: "bg-orange-50 border-orange-100",
+  qc: "bg-emerald-50 border-emerald-100",
   system: "bg-zinc-50 border-zinc-100",
 };
 
@@ -167,10 +171,15 @@ export function SchedulerUnitDetail({
   const { id } = useParams<{ id: string }>();
   const datasetCtx = useAppDatasetMaybe();
   const datasetData = data ?? datasetCtx?.data;
+  const isHydratingInitialData = datasetCtx?.isHydratingInitialData ?? false;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = datasetData ? getRoomsByUnit(datasetData, id) : [];
 
   const today = new Date().toISOString().split("T")[0];
+
+  if (!unit && isHydratingInitialData) {
+    return <div className="p-6 text-center text-muted">Loading unit…</div>;
+  }
 
   if (!unit) {
     return <div className="p-6 text-center text-muted">Unit not found</div>;
@@ -182,15 +191,16 @@ export function SchedulerUnitDetail({
       ? "not_started"
       : milestones.allInstalled
       ? "installed"
-      : milestones.allMeasured && milestones.allBracketed
-      ? "measured_and_bracketed"
-      : milestones.allMeasured
-      ? "measured"
+      : milestones.allMeasured && milestones.allBracketed && milestones.allManufactured
+      ? "manufactured"
       : milestones.allBracketed
       ? "bracketed"
+      : milestones.allMeasured
+      ? "measured"
       : "not_started";
 
   const flags = computeUnitFlags(unit, today);
+  const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
 
   const isPastDue = (dateStr: string | null | undefined) =>
     dateStr ? dateStr < today : false;
@@ -306,6 +316,14 @@ export function SchedulerUnitDetail({
           </div>
         </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <UnitEscalationsPanel escalations={escalations} />
+        </motion.div>
+
         {/* Rooms overview */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -330,12 +348,7 @@ export function SchedulerUnitDetail({
               const roomEscalation = getRoomEscalationRiskFlag(
                 getWindowsByRoom(datasetData!, room.id)
               );
-              const roomCardClass =
-                roomEscalation === "red"
-                  ? "bg-red-600 text-white hover:bg-red-700"
-                  : roomEscalation === "yellow"
-                    ? "bg-amber-500 text-white hover:bg-amber-600"
-                    : "bg-accent text-white hover:opacity-90";
+              const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
               const progressTrackClass =
                 roomEscalation === "green" ? "bg-white/20" : "bg-white/30";
               const progressFillClass = roomEscalation === "green" ? "bg-white" : "bg-white/95";
@@ -384,8 +397,18 @@ export function SchedulerUnitDetail({
           transition={{ delay: 0.22, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3 pt-2 pb-4"
         >
-          <Link href={`/scheduler/units/${unit.id}/rooms`}>
+          <Link href={`/scheduler/units/${unit.id}/dates`}>
             <Button fullWidth size="lg">
+              Edit dates
+            </Button>
+          </Link>
+          <Link href={`/scheduler/units/${unit.id}/assign`}>
+            <Button variant="secondary" fullWidth size="lg">
+              Assign installer
+            </Button>
+          </Link>
+          <Link href={`/scheduler/units/${unit.id}/rooms`}>
+            <Button variant="secondary" fullWidth size="lg">
               Manage rooms
             </Button>
           </Link>

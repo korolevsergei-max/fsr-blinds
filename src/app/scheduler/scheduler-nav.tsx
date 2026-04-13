@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ChartBar, Buildings, CalendarBlank, UsersFour, Bell } from "@phosphor-icons/react";
+import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   { href: "/scheduler", label: "Dashboard", Icon: ChartBar },
@@ -14,15 +16,60 @@ const navItems = [
 
 export function SchedulerNav({
   unreadNotifications = 0,
+  recipientId,
 }: {
   unreadNotifications?: number;
+  recipientId?: string | null;
 }) {
   const pathname = usePathname();
+  const [liveUnreadCount, setLiveUnreadCount] = useState(unreadNotifications);
+
+  useEffect(() => {
+    setLiveUnreadCount(unreadNotifications);
+  }, [unreadNotifications]);
+
+  useEffect(() => {
+    if (!recipientId) return;
+
+    const supabase = createClient();
+    const notificationsChannel = supabase
+      .channel(`scheduler-nav-notifications-${recipientId}`)
+      .on(
+        "postgres_changes" as "system",
+        { event: "INSERT", schema: "public", table: "notifications" } as unknown as { event: "system" },
+        (payload) => {
+          const next = payload.new as { recipient_role: string; recipient_id: string };
+          if (next.recipient_role === "scheduler" && next.recipient_id === recipientId) {
+            setLiveUnreadCount((count) => count + 1);
+          }
+        }
+      )
+      .subscribe();
+
+    const readsChannel = supabase
+      .channel(`scheduler-nav-reads-${recipientId}`)
+      .on(
+        "postgres_changes" as "system",
+        { event: "INSERT", schema: "public", table: "notification_reads" } as unknown as { event: "system" },
+        (payload) => {
+          const next = payload.new as { user_role: string; user_id: string };
+          if (next.user_role === "scheduler" && next.user_id === recipientId) {
+            setLiveUnreadCount((count) => Math.max(0, count - 1));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(notificationsChannel);
+      void supabase.removeChannel(readsChannel);
+    };
+  }, [recipientId]);
 
   return (
     <nav
       aria-label="Scheduler navigation"
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/98 backdrop-blur-lg lg:border-r"
+      className="fixed bottom-0 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 border-t border-border bg-card/98 backdrop-blur-lg"
     >
       <div className="mx-auto flex max-w-lg items-center justify-between px-1 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {navItems.map(({ href, label, Icon }) => {
@@ -30,7 +77,7 @@ export function SchedulerNav({
             pathname === href ||
             (href !== "/scheduler" && pathname.startsWith(href));
           const showBadge =
-            href === "/scheduler/notifications" && unreadNotifications > 0;
+            href === "/scheduler/notifications" && liveUnreadCount > 0;
 
           return (
             <Link
@@ -53,7 +100,7 @@ export function SchedulerNav({
                 </div>
                 {showBadge && (
                   <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full bg-danger text-white text-[8px] font-bold leading-none">
-                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    {liveUnreadCount > 9 ? "9+" : liveUnreadCount}
                   </span>
                 )}
               </div>

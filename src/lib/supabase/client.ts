@@ -1,8 +1,23 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseEnv } from "@/lib/supabase/env";
+import { AUTH_COOKIE_PURGE_FLAG } from "@/lib/supabase/auth-errors";
+import { clearSupabaseBrowserAuthState } from "@/lib/supabase/browser-cookies";
 
 let browserSingleton: SupabaseClient | null = null;
+
+function documentHasCookie(name: string): boolean {
+  if (typeof document === "undefined") return false;
+  const encodedName = `${encodeURIComponent(name)}=`;
+  return document.cookie.split(";").some((part) => part.trim().startsWith(encodedName));
+}
+
+function normalizePendingBrowserAuthPurge(): void {
+  if (typeof window === "undefined") return;
+  if (!documentHasCookie(AUTH_COOKIE_PURGE_FLAG)) return;
+
+  clearSupabaseBrowserAuthState();
+}
 
 function getAllCookiesFromDocument(): Array<{ name: string; value: string }> {
   if (typeof document === "undefined") return [];
@@ -53,12 +68,14 @@ function setCookieOnDocument(
 export function createClient() {
   if (browserSingleton) return browserSingleton;
 
+  normalizePendingBrowserAuthPurge();
+
   const { url, key } = getSupabaseEnv();
   browserSingleton = createBrowserClient(url, key, {
     auth: {
       persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
     },
     cookies: {
       getAll() {

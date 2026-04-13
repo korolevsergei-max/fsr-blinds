@@ -10,6 +10,7 @@ export function WindowStageNav({
   active,
   isMeasured = false,
   isBracketed = false,
+  isManufactured = false,
   isInstalled = false,
   routeBasePath = "/installer/units",
   compact = false,
@@ -21,6 +22,7 @@ export function WindowStageNav({
   active: "before" | "bracketed" | "installed";
   isMeasured?: boolean;
   isBracketed?: boolean;
+  isManufactured?: boolean;
   isInstalled?: boolean;
   routeBasePath?: "/installer/units" | "/management/units" | "/scheduler/units";
   compact?: boolean;
@@ -40,19 +42,18 @@ export function WindowStageNav({
       done: isBracketed,
       href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/bracketing`,
     },
-    {
-      key: "installed" as const,
-      label: "Installed",
-      done: isInstalled,
-      href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/installed`,
-    },
   ];
+  const manufacturedClasses = `flex items-center justify-center gap-1.5 rounded-xl text-center font-bold tracking-tight ${
+    compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
+  } ${
+    isManufactured ? "bg-emerald-50 text-emerald-700" : "bg-white text-zinc-500"
+  }`;
 
   const bottomSpacing = flushBottom ? "" : compact ? "" : "mb-2";
 
   return (
     <div
-      className={`grid grid-cols-3 gap-2 rounded-2xl border border-border bg-surface p-1.5 ${bottomSpacing}`}
+      className={`grid grid-cols-4 gap-2 rounded-2xl border border-border bg-surface p-1.5 ${bottomSpacing}`}
     >
       {items.map((item) => (
         <Link
@@ -80,6 +81,35 @@ export function WindowStageNav({
           {item.label}
         </Link>
       ))}
+      <div className={manufacturedClasses} aria-label="Manufactured progress">
+        {isManufactured && (
+          <CheckCircle size={12} weight="fill" className="shrink-0 text-emerald-600" />
+        )}
+        Built
+      </div>
+      <Link
+        href={`${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/installed`}
+        className={`flex items-center justify-center gap-1.5 rounded-xl text-center font-bold tracking-tight transition-all active:scale-[0.98] ${
+          compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
+        } ${
+          active === "installed"
+            ? isInstalled
+              ? "bg-emerald-600 text-white shadow-sm"
+              : "bg-accent text-white shadow-sm"
+            : isInstalled
+              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              : "bg-white text-zinc-500 hover:bg-zinc-100"
+        }`}
+      >
+        {isInstalled && (
+          <CheckCircle
+            size={active === "installed" ? 14 : 12}
+            weight="fill"
+            className={active === "installed" ? "text-white" : "text-emerald-600"}
+          />
+        )}
+        Installed
+      </Link>
     </div>
   );
 }

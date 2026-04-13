@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
-import { clearSupabaseBrowserCookies } from "@/lib/supabase/browser-cookies";
+import { AUTH_COOKIE_PURGE_FLAG } from "@/lib/supabase/auth-errors";
+import { clearSupabaseBrowserAuthState } from "@/lib/supabase/browser-cookies";
 
 declare global {
   interface Window {
@@ -22,28 +21,18 @@ export function SupabaseAuthRecovery() {
     if (window.__fsrAuthRecoveryStarted) return;
     window.__fsrAuthRecoveryStarted = true;
 
-    const supabase = createClient();
-    const hasAuthCookies = document.cookie.split(";").some((c) => c.trim().startsWith("sb-"));
+    const shouldPurge = document.cookie
+      .split(";")
+      .some((cookie) => cookie.trim().startsWith(`${AUTH_COOKIE_PURGE_FLAG}=`));
 
-    void (async () => {
-      if (!hasAuthCookies) return;
+    if (!shouldPurge) return;
 
-      const { error } = await supabase.auth.getUser();
-      if (!error || !isInvalidRefreshTokenError(error)) return;
+    clearSupabaseBrowserAuthState();
 
-      // We have an error that indicates a dead refresh token. Clear everything.
-      clearSupabaseBrowserCookies();
-      try {
-        await supabase.auth.signOut({ scope: "local" });
-      } catch {
-        /* ignore */
-      }
-
-      const path = window.location.pathname;
-      if (path !== "/login" && !path.startsWith("/auth/")) {
-        window.location.replace(`/login?reason=session_expired`);
-      }
-    })();
+    const path = window.location.pathname;
+    if (path !== "/login" && !path.startsWith("/auth/")) {
+      window.location.replace(`/login?reason=session_expired`);
+    }
   }, []);
 
   return null;

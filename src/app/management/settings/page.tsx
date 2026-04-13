@@ -4,7 +4,7 @@ import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-da
 import { createClient } from "@/lib/supabase/server";
 import { loadManufacturingSettings } from "@/lib/manufacturing-scheduler";
 import { AccountsManager } from "../accounts/accounts-manager";
-import type { Assembler } from "@/lib/types";
+import type { Assembler, Qc } from "@/lib/types";
 import { SettingsScreen } from "./settings-screen";
 
 interface OwnerProfile {
@@ -18,6 +18,25 @@ async function loadAssemblers(): Promise<Assembler[]> {
     const supabase = await createClient();
     const { data } = await supabase
       .from("assemblers")
+      .select("id, name, email, phone, auth_user_id")
+      .order("name");
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone ?? "",
+      authUserId: row.auth_user_id ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function loadQcs(): Promise<Qc[]> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("qcs")
       .select("id, name, email, phone, auth_user_id")
       .order("name");
     return (data ?? []).map((row) => ({
@@ -59,13 +78,14 @@ export default async function SettingsPage({
   const params = (await searchParams) ?? {};
   const tab = typeof params.tab === "string" ? params.tab : "manufacturing";
 
-  const [data, authDrift, schedulerAccess, ownerProfiles, assemblers, manufacturing] =
+  const [data, authDrift, schedulerAccess, ownerProfiles, assemblers, qcs, manufacturing] =
     await Promise.all([
       loadFullDataset(),
       getInstallerCutterAuthDrift(),
       loadAllSchedulerBuildingAccess(),
       loadOwnerProfiles(),
       loadAssemblers(),
+      loadQcs(),
       loadManufacturingSettings(),
     ]);
 
@@ -76,6 +96,7 @@ export default async function SettingsPage({
       schedulerAccess={schedulerAccess}
       ownerProfiles={ownerProfiles}
       assemblers={assemblers}
+      qcs={qcs}
       currentUserAuthId={user?.id ?? ""}
     />
   );

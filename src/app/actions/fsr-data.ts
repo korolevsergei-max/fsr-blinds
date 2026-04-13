@@ -19,6 +19,8 @@ import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
 import { emitNotification } from "@/lib/emit-notification";
 import {
+  buildUnitAssignedNotificationBody,
+  buildUnitDatesNotificationBody,
   buildUnitProgressNotificationBody,
   buildWindowEscalationNotificationBody,
   type UnitNotificationContext,
@@ -142,7 +144,7 @@ function formatStagePhotoLabel(
 const PROGRESS_TITLES: Partial<Record<UnitStatus, string>> = {
   measured: "All windows measured",
   bracketed: "All windows bracketed",
-  measured_and_bracketed: "All windows measured & bracketed",
+  manufactured: "All blinds manufactured",
   installed: "All windows installed",
 };
 
@@ -632,18 +634,19 @@ export async function bulkAssignUnits(
           .eq("id", installerId)
           .maybeSingle();
         if (insRow) {
-          const unitLabel =
-            scopedUnitIds.length === 1
-              ? `Unit added to your queue`
-              : `${scopedUnitIds.length} units added to your queue`;
-          await emitNotification({
-            recipientRole: "installer",
-            recipientId: installerId,
-            type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
-            title: unitLabel,
-            body: `Assigned by ${owner.displayName}`,
-            relatedUnitId: scopedUnitIds.length === 1 ? scopedUnitIds[0] : null,
-          });
+          for (const uid of scopedUnitIds) {
+            const context = await loadUnitNotificationContext(db, uid);
+            await emitNotification({
+              recipientRole: "installer",
+              recipientId: installerId,
+              type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
+              title: "Unit added to your queue",
+              body: context
+                ? buildUnitAssignedNotificationBody(context, owner.displayName)
+                : `Assigned by ${owner.displayName}`,
+              relatedUnitId: uid,
+            });
+          }
         }
       }
 
@@ -656,12 +659,15 @@ export async function bulkAssignUnits(
             .eq("id", uid)
             .maybeSingle();
           if (unitRow?.assigned_installer_id && unitRow.installation_date === installationDate) {
+            const context = await loadUnitNotificationContext(db, uid);
             await emitNotification({
               recipientRole: "installer",
               recipientId: unitRow.assigned_installer_id,
               type: NOTIF_INSTALLATION_DATE_SET,
               title: "Installation date set",
-              body: `Installation scheduled for ${installationDate}.`,
+              body: context
+                ? buildUnitDatesNotificationBody(context, { installationDate })
+                : `Installation: ${installationDate}`,
               relatedUnitId: uid,
             });
           }
@@ -901,6 +907,9 @@ export async function updateUnitAssignment(
     // ─── Notifications ────────────────────────────────────────────────────────
     after(async () => {
       const resolvedInstallerId = installerId && !installerId.startsWith("sch-") ? installerId : null;
+      const context = resolvedInstallerId
+        ? await loadUnitNotificationContext(createAdminClient(), unitId)
+        : null;
 
       // Notify installer of assignment (single unit)
       if (resolvedInstallerId && patch.assigned_installer_name) {
@@ -909,7 +918,9 @@ export async function updateUnitAssignment(
           recipientId: resolvedInstallerId,
           type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
           title: "Unit added to your queue",
-          body: `Assigned by ${owner.displayName}`,
+          body: context
+            ? buildUnitAssignedNotificationBody(context, owner.displayName)
+            : `Assigned by ${owner.displayName}`,
           relatedUnitId: unitId,
         });
       }
@@ -922,13 +933,19 @@ export async function updateUnitAssignment(
           recipientId: resolvedInstallerId,
           type: hadInstallDate ? NOTIF_INSTALLATION_DATE_SET : NOTIF_DATES_CHANGED,
           title: hadInstallDate ? "Installation date set" : "Schedule dates updated",
-          body: [
-            measurementDate && `Measurement: ${measurementDate}`,
-            bracketingDate && `Bracketing: ${bracketingDate}`,
-            installationDate && `Installation: ${installationDate}`,
-          ]
-            .filter(Boolean)
-            .join(" · "),
+          body: context
+            ? buildUnitDatesNotificationBody(context, {
+                measurementDate,
+                bracketingDate,
+                installationDate,
+              })
+            : [
+                measurementDate && `Measurement: ${measurementDate}`,
+                bracketingDate && `Bracketing: ${bracketingDate}`,
+                installationDate && `Installation: ${installationDate}`,
+              ]
+                .filter(Boolean)
+                .join(" · "),
           relatedUnitId: unitId,
         });
       }
@@ -1938,7 +1955,7 @@ export async function uploadWindowInstalledPhoto(
       return {
         ok: false,
         error:
-          "Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded.",
+          "Measurements and bracketing must be completed for this window before installation can be marked complete.",
       };
     }
 

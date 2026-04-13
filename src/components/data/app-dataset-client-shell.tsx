@@ -64,7 +64,7 @@ function RealtimeBridge({
   const canUseOfflineCache = loaderKind !== "full";
 
   // Wire up Supabase Realtime subscriptions
-  useRealtimeSync(patchData, loaderKind);
+  useRealtimeSync(patchData, setData, loaderKind);
 
   // On mount: seed from IDB if server provided empty data (offline / first-render fallback).
   useEffect(() => {

@@ -28,14 +28,42 @@ export function ScheduleEntryCard({
   installer,
   variant = "week",
 }: ScheduleEntryCardProps) {
-  const TaskIcon =
-    entry.taskType === "measurement" ? (
-      <Wrench size={10} className="text-violet-500 flex-shrink-0" weight="bold" />
-    ) : entry.taskType === "bracketing" ? (
-      <Wrench size={10} className="text-sky-500 flex-shrink-0" weight="bold" />
-    ) : (
-      <Hammer size={10} className="text-emerald-500 flex-shrink-0" weight="bold" />
-    );
+  const isMeasurement = entry.taskType === "measurement";
+  const isBracketing = entry.taskType === "bracketing";
+  const Icon = isMeasurement || isBracketing ? Wrench : Hammer;
+  const taskLabel = isMeasurement ? "Measure" : isBracketing ? "Bracket" : "Install";
+
+  const tone = isOverdue
+    ? {
+        shell: "border-red-200 bg-red-50/40 hover:border-red-300/80",
+        stripe: "bg-red-400",
+        iconWrap: "border-red-100 bg-red-50 text-red-600",
+        client: "text-red-600",
+        meta: "border-red-200 bg-red-50 text-red-700",
+      }
+    : isMeasurement
+      ? {
+          shell: "border-border bg-card hover:border-zinc-300 hover:shadow-[var(--shadow-md)]",
+          stripe: "bg-violet-400",
+          iconWrap: "border-violet-100 bg-violet-50 text-violet-600",
+          client: "text-tertiary",
+          meta: "border-violet-200 bg-violet-50 text-violet-700",
+        }
+      : isBracketing
+        ? {
+            shell: "border-border bg-card hover:border-zinc-300 hover:shadow-[var(--shadow-md)]",
+            stripe: "bg-sky-400",
+            iconWrap: "border-sky-100 bg-sky-50 text-sky-600",
+            client: "text-tertiary",
+            meta: "border-sky-200 bg-sky-50 text-sky-700",
+          }
+        : {
+            shell: "border-border bg-card hover:border-zinc-300 hover:shadow-[var(--shadow-md)]",
+            stripe: "bg-emerald-400",
+            iconWrap: "border-emerald-100 bg-emerald-50 text-emerald-600",
+            client: "text-tertiary",
+            meta: "border-emerald-200 bg-emerald-50 text-emerald-700",
+          };
 
   if (variant === "month") {
     return (
@@ -52,7 +80,19 @@ export function ScheduleEntryCard({
         }`}
         title={`${entry.clientName} — ${entry.buildingName} — ${entry.unitNumber}`}
       >
-        {TaskIcon}
+        <Icon
+          size={10}
+          className={`flex-shrink-0 ${
+            isOverdue
+              ? "text-red-500"
+              : isMeasurement
+                ? "text-violet-500"
+                : isBracketing
+                  ? "text-sky-500"
+                  : "text-emerald-500"
+          }`}
+          weight="bold"
+        />
         <span className="truncate">{entry.unitNumber}</span>
         {isOverdue && <Warning size={7} className="flex-shrink-0" />}
       </Link>
@@ -62,42 +102,52 @@ export function ScheduleEntryCard({
   return (
     <Link
       href={href}
-      className={`flex flex-col gap-1 px-3 py-2.5 rounded-[var(--radius-sm)] border text-[11px] transition-all active:scale-[0.97] ${
-        isOverdue ? "border-red-200 bg-red-50/70" : "border-border bg-card"
-      }`}
+      className={`group relative overflow-hidden rounded-[var(--radius-lg)] border px-4 py-3.5 text-[11px] transition-all duration-200 active:scale-[0.99] ${tone.shell}`}
     >
-      {/* Row 1: task type icon + client name + overdue badge + installer avatar */}
-      <div className="flex items-center gap-1.5">
-        {TaskIcon}
-        <span className={`text-[10px] font-semibold uppercase tracking-wider truncate flex-1 ${isOverdue ? "text-red-600" : "text-tertiary"}`}>
-          {entry.clientName}
+      <span className={`absolute inset-y-3 left-0 w-0.5 rounded-r-full ${tone.stripe}`} />
+
+      <div className="flex items-start gap-3">
+        <span
+          className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border ${tone.iconWrap}`}
+        >
+          <Icon size={13} weight="bold" />
         </span>
-        {isOverdue && (
-          <Warning size={11} weight="fill" className="text-red-500 flex-shrink-0" />
-        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.client}`}>
+              {entry.clientName}
+            </span>
+            {isOverdue && (
+              <Warning size={12} weight="fill" className="flex-shrink-0 text-red-500" />
+            )}
+          </div>
+
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+              {entry.buildingName}
+            </span>
+            <span className="flex-shrink-0 text-zinc-300">•</span>
+            <span className="flex-shrink-0 font-mono text-[15px] font-bold tracking-[-0.05em] text-foreground">
+              {entry.unitNumber}
+            </span>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <StatusChip status={entry.status} />
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${tone.meta}`}>
+              {taskLabel}
+            </span>
+          </div>
+        </div>
+
         {installer && (
           <span
-            className={`w-5 h-5 rounded-full ${installer.bg} ${installer.text} flex items-center justify-center text-[8px] font-bold flex-shrink-0`}
+            className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-border text-[10px] font-bold ${installer.bg} ${installer.text}`}
           >
             {installer.initials}
           </span>
         )}
-      </div>
-
-      {/* Row 2: building · unit number */}
-      <div className="flex items-baseline gap-1">
-        <span className="font-semibold text-foreground truncate leading-tight">
-          {entry.buildingName}
-        </span>
-        <span className="text-muted flex-shrink-0">·</span>
-        <span className="font-mono font-semibold text-foreground flex-shrink-0">
-          {entry.unitNumber}
-        </span>
-      </div>
-
-      {/* Row 3: status chip */}
-      <div>
-        <StatusChip status={entry.status} />
       </div>
     </Link>
   );

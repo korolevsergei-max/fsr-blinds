@@ -1,4 +1,4 @@
-import { loadCachedUnitMedia } from "@/lib/unit-route-data";
+import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
 import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
 export default async function InstallerInstalledPhotoPage({
@@ -7,6 +7,6 @@ export default async function InstallerInstalledPhotoPage({
   params: Promise<{ id: string; roomId: string; windowId: string }>;
 }) {
   const { id } = await params;
-  const mediaItems = await loadCachedUnitMedia(id);
-  return <InstalledPhotoForm mediaItems={mediaItems} />;
+  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
+  return <InstalledPhotoForm mediaItems={mediaItems} milestones={milestones} />;
 }

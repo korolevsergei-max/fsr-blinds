@@ -8,6 +8,7 @@ import type {
   ScheduleEntry,
   Unit,
   Window,
+  WindowManufacturingEscalation,
 } from "./types";
 
 export type AppDataset = {
@@ -20,6 +21,7 @@ export type AppDataset = {
   schedule: ScheduleEntry[];
   cutters: Cutter[];
   schedulers: Scheduler[];
+  manufacturingEscalations: WindowManufacturingEscalation[];
 };
 
 export function getUnitsByInstaller(
@@ -84,6 +86,12 @@ export function getUnitIdsWithWindowEscalations(data: AppDataset): Set<string> {
     if (w.riskFlag === "green") continue;
     const unitId = roomToUnit.get(w.roomId);
     if (unitId) unitIds.add(unitId);
+  }
+
+  for (const escalation of data.manufacturingEscalations) {
+    if (escalation.status === "open") {
+      unitIds.add(escalation.unitId);
+    }
   }
 
   return unitIds;

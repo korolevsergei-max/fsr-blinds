@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react";
 import { uploadWindowInstalledPhoto, deleteWindowMediaItem, undoWindowStage } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { RiskFlag } from "@/lib/types";
 
@@ -21,10 +22,12 @@ import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 export function InstalledPhotoForm({
   data,
   mediaItems,
+  milestones,
   routeBasePath = "/installer/units",
 }: {
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
   routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
   const { id, roomId, windowId } = useParams<{
@@ -159,7 +162,7 @@ export function InstalledPhotoForm({
     setNotesError("");
 
     if (installPhotosBlocked) {
-      setError("Both measurements and bracketing photos must be completed for every window before installation photos can be uploaded.");
+      setError("Measurements and bracketing must be completed for this window before installation can be marked complete.");
       return;
     }
 
@@ -261,6 +264,7 @@ export function InstalledPhotoForm({
           windowId={windowItem.id}
           isMeasured={windowItem.measured}
           isBracketed={windowItem.bracketed}
+          isManufactured={milestones.allManufactured}
           isInstalled={windowItem.installed}
           active="installed"
           routeBasePath={routeBasePath}
@@ -278,12 +282,17 @@ export function InstalledPhotoForm({
             Installation Step
           </p>
           Confirm that the blind is installed correctly. A photo is {riskFlag === "green" ? <span className="font-bold text-emerald-600">optional</span> : <span className="font-bold text-amber-600 underline">required</span>} for this window based on its status.
+          {!milestones.allManufactured && (
+            <span className="block mt-2">
+              Manufacturing QC is tracked separately. Installation can still be completed here when this window is ready.
+            </span>
+          )}
         </div>
 
         {installPhotosBlocked && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-zinc-700 leading-snug">
             <p className="font-bold text-amber-900 mb-1">Pre-requisites Pending</p>
-            Measurements and bracketing must be completed for all windows in this unit before marking installation as complete.
+            Measurements and bracketing must be completed for this window before marking installation as complete.
           </div>
         )}
 

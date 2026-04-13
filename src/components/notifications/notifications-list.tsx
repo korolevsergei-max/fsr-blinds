@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition, useState, useMemo } from "react";
+import { useTransition, useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@phosphor-icons/react";
 import { markNotificationRead, markAllNotificationsRead } from "@/app/actions/fsr-data";
 import type { Notification } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -87,6 +88,88 @@ export function NotificationsList({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [liveNotifications, setLiveNotifications] = useState(notifications);
+
+  useEffect(() => {
+    setLiveNotifications(notifications);
+  }, [notifications]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const notificationsChannel = supabase
+      .channel(`notifications-${recipientRole}-${recipientId}`)
+      .on(
+        "postgres_changes" as "system",
+        { event: "INSERT", schema: "public", table: "notifications" } as unknown as { event: "system" },
+        (payload) => {
+          const next = payload.new as {
+            id: string;
+            recipient_role: string;
+            recipient_id: string;
+            type: string;
+            title: string;
+            body: string;
+            related_week_start?: string | null;
+            related_unit_id?: string | null;
+            created_at: string;
+          };
+
+          if (next.recipient_role !== recipientRole || next.recipient_id !== recipientId) {
+            return;
+          }
+
+          setLiveNotifications((prev) => {
+            if (prev.some((item) => item.id === next.id)) return prev;
+            return [
+              {
+                id: next.id,
+                recipientRole: next.recipient_role,
+                recipientId: next.recipient_id,
+                type: next.type,
+                title: next.title,
+                body: next.body,
+                relatedWeekStart: next.related_week_start ?? null,
+                relatedUnitId: next.related_unit_id ?? null,
+                createdAt: next.created_at,
+                read: false,
+              },
+              ...prev,
+            ];
+          });
+        }
+      )
+      .subscribe();
+
+    const readsChannel = supabase
+      .channel(`notification-reads-${recipientRole}-${recipientId}`)
+      .on(
+        "postgres_changes" as "system",
+        { event: "INSERT", schema: "public", table: "notification_reads" } as unknown as { event: "system" },
+        (payload) => {
+          const next = payload.new as {
+            notification_id: string;
+            user_role: string;
+            user_id: string;
+          };
+
+          if (next.user_role !== recipientRole || next.user_id !== recipientId) {
+            return;
+          }
+
+          setLiveNotifications((prev) =>
+            prev.map((item) =>
+              item.id === next.notification_id ? { ...item, read: true } : item
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(notificationsChannel);
+      void supabase.removeChannel(readsChannel);
+    };
+  }, [recipientId, recipientRole]);
 
   // Category filter state — all active by default
   const [activeCategories, setActiveCategories] = useState<Set<string>>(
@@ -117,11 +200,11 @@ export function NotificationsList({
   }, [categories, activeCategories]);
 
   const filtered = useMemo(
-    () => notifications.filter((n) => visibleTypes.has(n.type)),
-    [notifications, visibleTypes]
+    () => liveNotifications.filter((n) => visibleTypes.has(n.type)),
+    [liveNotifications, visibleTypes]
   );
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = liveNotifications.filter((n) => !n.read).length;
 
   const handleRead = (notif: Notification) => {
     const href =
@@ -133,17 +216,19 @@ export function NotificationsList({
       if (href) router.push(href);
       return;
     }
+    setLiveNotifications((prev) =>
+      prev.map((item) => (item.id === notif.id ? { ...item, read: true } : item))
+    );
     startTransition(async () => {
       await markNotificationRead(notif.id, recipientRole, recipientId);
-      router.refresh();
       if (href) router.push(href);
     });
   };
 
   const handleMarkAllRead = () => {
+    setLiveNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
     startTransition(async () => {
       await markAllNotificationsRead(recipientRole, recipientId);
-      router.refresh();
     });
   };
 
@@ -199,9 +284,9 @@ export function NotificationsList({
         {filtered.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title={notifications.length === 0 ? "All caught up" : "No alerts in view"}
+            title={liveNotifications.length === 0 ? "All caught up" : "No alerts in view"}
             description={
-              notifications.length === 0
+              liveNotifications.length === 0
                 ? "No notifications right now. We'll let you know when something needs your attention."
                 : "No notifications match the active filters. Try enabling more categories."
             }
@@ -254,7 +339,7 @@ export function NotificationsList({
                       </div>
 
                       {notif.body && (
-                        <p className="mt-1 text-[12px] leading-snug text-zinc-600">
+                        <p className="mt-1 whitespace-pre-line text-[12px] leading-snug text-zinc-600">
                           {notif.body}
                         </p>
                       )}

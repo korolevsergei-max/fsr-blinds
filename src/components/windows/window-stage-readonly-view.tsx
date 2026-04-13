@@ -5,10 +5,12 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Camera } from "@phosphor-icons/react";
 import Image from "next/image";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type StageMode = "before" | "bracketed" | "installed";
 
@@ -17,6 +19,7 @@ type StageRouteBasePath = "/management/units" | "/scheduler/units";
 type WindowStageReadonlyViewProps = {
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
   mode: StageMode;
   /** Read-only stage pages under management or scheduler. */
   routeBasePath?: StageRouteBasePath;
@@ -36,6 +39,7 @@ function pickLatestStagePhoto(
 export function WindowStageReadonlyView({
   data,
   mediaItems,
+  milestones,
   mode,
   routeBasePath = "/management/units",
 }: WindowStageReadonlyViewProps) {
@@ -74,6 +78,8 @@ export function WindowStageReadonlyView({
 
   const modeTitle =
     mode === "before" ? "Before" : mode === "bracketed" ? "Bracketed" : "Installed";
+  const escalationFlag = getHighestEscalationRiskFlag([windowItem.riskFlag]);
+  const detailSurfaceClass = getEscalationSurfaceClasses(escalationFlag, "card");
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
@@ -88,6 +94,10 @@ export function WindowStageReadonlyView({
             windowId={windowItem.id}
             routeBasePath={routeBasePath}
             active={mode}
+            isMeasured={windowItem.measured}
+            isBracketed={windowItem.bracketed}
+            isManufactured={milestones.allManufactured}
+            isInstalled={windowItem.installed}
             flushBottom
           />
         }
@@ -114,7 +124,7 @@ export function WindowStageReadonlyView({
           </div>
         )}
 
-        <div className="rounded-2xl border border-border bg-white p-4">
+        <div className={`rounded-2xl border p-4 ${detailSurfaceClass}`}>
           <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
             Window Details
           </h2>

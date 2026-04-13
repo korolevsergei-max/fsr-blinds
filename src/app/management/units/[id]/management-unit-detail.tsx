@@ -17,8 +17,9 @@ import {
   UserGear,
   ArrowRight,
   Trash,
+  ShieldCheck,
 } from "@phosphor-icons/react";
-import { getRoomsByUnit } from "@/lib/app-dataset";
+import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitActivityLog } from "@/lib/types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -36,7 +37,7 @@ import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel"
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
-import { getUnitEscalations } from "@/lib/window-issues";
+import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag, getUnitEscalations } from "@/lib/window-issues";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -55,6 +56,7 @@ const ACTOR_ICONS: Record<string, React.ReactNode> = {
   scheduler: <CalendarBlank size={14} className="text-sky-500" />,
   installer: <Wrench size={14} className="text-teal-500" />,
   cutter: <Buildings size={14} className="text-orange-500" />,
+  qc: <ShieldCheck size={14} className="text-emerald-600" />,
   system: <Robot size={14} className="text-zinc-400" />,
 };
 
@@ -63,6 +65,7 @@ const ACTOR_COLORS: Record<string, string> = {
   scheduler: "bg-sky-50 border-sky-100",
   installer: "bg-teal-50 border-teal-100",
   cutter: "bg-orange-50 border-orange-100",
+  qc: "bg-emerald-50 border-emerald-100",
   system: "bg-zinc-50 border-zinc-100",
 };
 
@@ -471,21 +474,28 @@ export function ManagementUnitDetail({
           >
             <SectionLabel as="h2">Rooms</SectionLabel>
             <div className="flex flex-col gap-2">
-              {rooms.map((room) => (
-                <Link
-                  key={room.id}
-                  href={`/management/units/${unit.id}/rooms/${room.id}`}
-                  className="flex items-center justify-between bg-accent text-white px-4 py-3 rounded-[12px] shadow-sm hover:opacity-90 transition-all active:scale-[0.99]"
-                >
-                  <span className="text-[13px] font-semibold">{room.name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] text-white/80 font-mono">
-                      {room.completedWindows}/{room.windowCount}
-                    </span>
-                    <ArrowRight size={13} />
-                  </div>
-                </Link>
-              ))}
+              {rooms.map((room) => {
+                const roomEscalation = getRoomEscalationRiskFlag(
+                  getWindowsByRoom(datasetData!, room.id)
+                );
+                const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
+
+                return (
+                  <Link
+                    key={room.id}
+                    href={`/management/units/${unit.id}/rooms/${room.id}`}
+                    className={`flex items-center justify-between px-4 py-3 rounded-[12px] shadow-sm transition-all active:scale-[0.99] ${roomCardClass}`}
+                  >
+                    <span className="text-[13px] font-semibold">{room.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-white/80 font-mono">
+                        {room.completedWindows}/{room.windowCount}
+                      </span>
+                      <ArrowRight size={13} />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </motion.div>
         )}

@@ -24,9 +24,19 @@ import { DateInput } from "@/components/ui/date-input";
 import { createUnit, deleteBuilding, updateBuilding } from "@/app/actions/management-actions";
 import { UserRole } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 
-export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?: UserRole }) {
+export function BuildingDetail({
+  data,
+  userRole,
+  isHydratingInitialData = false,
+}: {
+  data: AppDataset;
+  userRole?: UserRole;
+  isHydratingInitialData?: boolean;
+}) {
   const router = useRouter();
+  const { afterMutate } = useDatasetMutation();
   const { id: buildingId } = useParams<{ id: string }>();
   const building = data.buildings.find((b) => b.id === buildingId);
   const client = building
@@ -42,6 +52,10 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
   const [completeByDate, setCompleteByDate] = useState(""); // kept for createUnit API compat
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
+
+  if ((!building || !client) && isHydratingInitialData) {
+    return <div className="p-6 text-center text-muted">Loading building…</div>;
+  }
 
   if (!building || !client) {
     return <div className="p-6 text-center text-muted">Building not found</div>;
@@ -69,10 +83,15 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
         return;
       }
       setUnitNumber("");
-
       setCompleteByDate("");
       setShowForm(false);
-      window.location.reload();
+      afterMutate((prev) => {
+        const nextUnits = result.unit ? [result.unit, ...prev.units] : prev.units;
+        return {
+          ...prev,
+          units: nextUnits,
+        };
+      });
     });
   };
 
@@ -85,7 +104,19 @@ export function BuildingDetail({ data, userRole }: { data: AppDataset; userRole?
         return;
       }
       setShowEditForm(false);
-      window.location.reload();
+      afterMutate((prev) => ({
+        ...prev,
+        buildings: prev.buildings.map((item) =>
+          item.id === building.id
+            ? { ...item, name: editName.trim(), address: editAddress.trim() }
+            : item
+        ),
+        units: prev.units.map((item) =>
+          item.buildingId === building.id
+            ? { ...item, buildingName: editName.trim() }
+            : item
+        ),
+      }));
     });
   };
 

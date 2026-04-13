@@ -14,10 +14,11 @@ import type {
   ManufacturingWindowItem,
 } from "@/lib/manufacturing-scheduler";
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
+import { StickyDayRail } from "@/components/schedule/sticky-day-rail";
 import {
-  markWindowManufacturingIssue,
-  resolveWindowManufacturingIssue,
   shiftWindowManufacturingSchedule,
+  returnWindowToAssembler,
+  returnWindowToCutter,
   undoWindowAssembly,
   undoWindowCut,
   undoWindowQC,
@@ -39,6 +40,22 @@ function formatBucketDate(date: string | null) {
   return formatStoredDateLongEnglish(date) ?? date ?? "";
 }
 
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getBucketDayParts(date: string | null) {
+  if (!date) return null;
+  const parsed = new Date(`${date}T00:00:00`);
+  return {
+    dayLabel: parsed.toLocaleDateString("en-CA", { weekday: "short" }),
+    dayNumber: parsed.getDate(),
+  };
+}
+
 function formatInstallDate(date: string | null) {
   const label = formatStoredDateLongEnglish(date);
   return label ? `Install ${label}` : null;
@@ -57,27 +74,29 @@ type QueueActionResult = {
 };
 
 function getWindowPriority(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   item: ManufacturingWindowItem
 ) {
   if (item.issueStatus === "open") return 0;
   if (role === "cutter") {
     return item.productionStatus === "pending" ? 1 : 2;
   }
-  if (item.productionStatus === "cut") return 1;
-  if (item.productionStatus === "assembled") return 2;
+  if (role === "assembler") {
+    return item.productionStatus === "cut" ? 1 : 2;
+  }
+  if (item.productionStatus === "assembled") return 1;
   return 3;
 }
 
 function countActionReadyWindows(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   windows: ManufacturingWindowItem[]
 ) {
   return windows.filter((item) => getWindowPriority(role, item) < 3).length;
 }
 
 function sortWindows(
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   windows: ManufacturingWindowItem[]
 ) {
   return [...windows].sort((a, b) => {
@@ -95,7 +114,7 @@ function sortWindows(
 
 function normalizeSchedule(
   schedule: ManufacturingRoleSchedule,
-  role: "cutter" | "assembler"
+  role: "cutter" | "assembler" | "qc"
 ): ManufacturingRoleSchedule {
   return {
     ...schedule,
@@ -140,7 +159,7 @@ function normalizeSchedule(
 
 function updateWindowInSchedule(
   schedule: ManufacturingRoleSchedule,
-  role: "cutter" | "assembler",
+  role: "cutter" | "assembler" | "qc",
   windowId: string,
   updater: (item: ManufacturingWindowItem) => ManufacturingWindowItem
 ) {
@@ -166,7 +185,7 @@ export function ManufacturingRoleQueue({
   schedule,
   userName,
 }: {
-  role: "cutter" | "assembler";
+  role: "cutter" | "assembler" | "qc";
   schedule: ManufacturingRoleSchedule;
   userName?: string;
 }) {
@@ -174,6 +193,7 @@ export function ManufacturingRoleQueue({
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
+  const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
     setLocalSchedule(normalizeSchedule(schedule, role));
@@ -256,21 +276,34 @@ export function ManufacturingRoleQueue({
     }, { refreshOnSuccess: true });
   };
 
-  const handleOpenIssue = (item: ManufacturingWindowItem) => {
-    const reason = globalThis.window.prompt("Why are you opening an issue?");
-    if (!reason) return;
+  const collectPushbackDetails = (message: string) => {
+    const reason = globalThis.window.prompt(message);
+    if (!reason) return null;
+    const notes = globalThis.window.prompt("Add notes for the escalation.");
+    if (!notes) return null;
+    return { reason, notes };
+  };
 
-    runWindowAction(item.windowId, () => markWindowManufacturingIssue(item.windowId, reason), {
-      optimisticUpdate: (current) =>
-        updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-          ...currentItem,
-          issueStatus: "open",
-          issueReason: reason,
-        })),
+  const handleReturnToCutter = (item: ManufacturingWindowItem) => {
+    const details = collectPushbackDetails("Why is this blind being returned to cutter?");
+    if (!details) return;
+
+    runWindowAction(item.windowId, () => returnWindowToCutter(item.windowId, details.reason, details.notes), {
+      refreshOnSuccess: true,
     });
   };
 
-  const title = role === "cutter" ? "Cutting queue" : "Assembly queue";
+  const handleReturnToAssembler = (item: ManufacturingWindowItem) => {
+    const details = collectPushbackDetails("Why is this blind being returned to assembler?");
+    if (!details) return;
+
+    runWindowAction(item.windowId, () => returnWindowToAssembler(item.windowId, details.reason, details.notes), {
+      refreshOnSuccess: true,
+    });
+  };
+
+  const title =
+    role === "cutter" ? "Cutting queue" : role === "assembler" ? "Assembly queue" : "QC queue";
 
   return (
     <div className="px-4 pt-4 pb-6 space-y-4">
@@ -296,41 +329,48 @@ export function ManufacturingRoleQueue({
         <SummaryCard label="Unscheduled" value={localSchedule.unscheduledCount} tone="zinc" />
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 pt-4">
         {localSchedule.buckets.map((bucket) => (
-          <section
-            key={`${bucket.label}-${bucket.date ?? "special"}`}
-            className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_18px_54px_rgba(15,23,42,0.05)]"
-          >
-            <div className="border-b border-border/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,243,0.92))] px-4 py-3.5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-tertiary">
-                    {bucket.date && bucket.label === bucket.date ? "Work day" : bucket.label}
-                  </p>
-                  <p className="mt-1 text-[17px] font-semibold leading-snug tracking-tight text-foreground sm:text-[18px]">
-                    {formatBucketDate(bucket.date) || bucket.label}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-mono text-[1.2rem] font-semibold tracking-[-0.04em] text-foreground sm:text-[1.3rem]">
-                    {bucket.scheduledCount}/{bucket.capacity}
-                  </p>
-                  <p className={`mt-1 text-[11px] ${bucket.isOverCapacity ? "font-semibold text-amber-700" : "text-tertiary"}`}>
-                    {bucket.isOverCapacity ? "Over capacity" : "Scheduled"}
-                  </p>
-                </div>
-              </div>
-            </div>
+          <section key={`${bucket.label}-${bucket.date ?? "special"}`} className="relative">
+            {(() => {
+              const dayParts = getBucketDayParts(bucket.date);
+              if (dayParts) {
+                return (
+                  <StickyDayRail
+                    dayLabel={dayParts.dayLabel}
+                    dayNumber={dayParts.dayNumber}
+                    isToday={bucket.date === todayKey}
+                    isPast={Boolean(bucket.date && bucket.date < todayKey)}
+                    taskCount={bucket.scheduledCount}
+                  />
+                );
+              }
 
-            {bucket.units.length === 0 ? (
-              <p className="px-4 py-5 text-[14px] text-tertiary">Nothing queued here.</p>
-            ) : (
-              <div className="space-y-4 bg-surface/35 px-4 py-4">
+              return (
+                <div className="sticky top-[var(--schedule-sticky-top)] z-20 -mx-4 border-y border-border bg-card px-4 py-3">
+                  <div className="flex items-center justify-between gap-4 px-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-tertiary">
+                      {bucket.label}
+                    </p>
+                    <span className="rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium text-tertiary">
+                      {bucket.scheduledCount} scheduled
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="pt-3">
+              {bucket.units.length === 0 ? (
+                <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/70 px-4 py-4 text-sm text-tertiary">
+                  Nothing queued here.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
                 {bucket.units.map((unit) => (
                   <div
                     key={`${bucket.label}-${unit.unitId}`}
-                    className="overflow-hidden rounded-[22px] border border-border bg-white shadow-[0_10px_26px_rgba(15,23,42,0.04)]"
+                    className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card"
                   >
                     <button
                       onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
@@ -348,6 +388,7 @@ export function ManufacturingRoleQueue({
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end sm:text-[12px]">
                           <span>{unit.scheduledCount} blinds</span>
                           {unit.installationDate && <span>{formatInstallDate(unit.installationDate)}</span>}
+                          <span>{bucket.scheduledCount}/{bucket.capacity}</span>
                         </div>
                       </div>
                     </button>
@@ -387,7 +428,9 @@ export function ManufacturingRoleQueue({
                                       {item.issueStatus === "open" && (
                                         <span className="inline-flex items-center gap-1 font-medium text-amber-700">
                                           <WarningCircle size={13} weight="fill" />
-                                          {item.issueReason || "Issue open"}
+                                          {item.escalation
+                                            ? `${item.escalation.sourceRole} -> ${item.escalation.targetRole}: ${item.issueReason || "Escalation open"}`
+                                            : item.issueReason || "Issue open"}
                                         </span>
                                       )}
                                     </div>
@@ -397,26 +440,14 @@ export function ManufacturingRoleQueue({
                                         {item.notes}
                                       </p>
                                     )}
+                                    {item.issueStatus === "open" && item.issueNotes && (
+                                      <p className="mt-2 max-w-[65ch] text-[12px] leading-6 text-amber-800">
+                                        {item.issueNotes}
+                                      </p>
+                                    )}
 
                                     <div className="mt-4 flex flex-wrap gap-2.5">
-                                      {item.issueStatus === "open" ? (
-                                        <ActionButton
-                                          label="Resolve issue"
-                                          tone="warning"
-                                          busy={busy}
-                                          onClick={() =>
-                                            runWindowAction(item.windowId, () =>
-                                              resolveWindowManufacturingIssue(item.windowId)
-                                            , {
-                                              optimisticUpdate: (current) =>
-                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                  ...currentItem,
-                                                  issueStatus: "resolved",
-                                                })),
-                                            })
-                                          }
-                                        />
-                                      ) : role === "cutter" ? (
+                                      {role === "cutter" ? (
                                         item.productionStatus === "pending" ? (
                                           <>
                                             <ActionButton
@@ -434,12 +465,6 @@ export function ManufacturingRoleQueue({
                                                     })),
                                                 })
                                               }
-                                            />
-                                            <ActionButton
-                                              label="Issue"
-                                              tone="warning"
-                                              busy={busy}
-                                              onClick={() => handleOpenIssue(item)}
                                             />
                                             <ActionButton
                                               label="Move earlier"
@@ -462,13 +487,6 @@ export function ManufacturingRoleQueue({
                                               icon={<CheckCircle size={13} weight="fill" />}
                                             />
                                             <ActionButton
-                                              label="Issue"
-                                              tone="secondary"
-                                              busy={false}
-                                              disabled
-                                              onClick={() => undefined}
-                                            />
-                                            <ActionButton
                                               label="Move earlier"
                                               tone="secondary"
                                               busy={false}
@@ -484,32 +502,9 @@ export function ManufacturingRoleQueue({
                                             />
                                           </>
                                         )
-                                      ) : (
+                                      ) : role === "assembler" ? (
                                         <>
-                                          {item.productionStatus === "qc_approved" ? (
-                                            <StatusChip
-                                              label="QC approved"
-                                              tone="success"
-                                              icon={<CheckCircle size={13} weight="fill" />}
-                                            />
-                                          ) : item.productionStatus === "assembled" ? (
-                                            <ActionButton
-                                              label="Approve QC"
-                                              tone="success"
-                                              busy={busy}
-                                              onClick={() =>
-                                                runWindowAction(item.windowId, () =>
-                                                  markWindowQCApproved(item.windowId)
-                                                , {
-                                                  optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                      ...currentItem,
-                                                      productionStatus: "qc_approved",
-                                                    })),
-                                                })
-                                              }
-                                            />
-                                          ) : item.productionStatus === "cut" ? (
+                                          {item.productionStatus === "cut" ? (
                                             <ActionButton
                                               label="Mark assembled"
                                               tone="primary"
@@ -527,27 +522,72 @@ export function ManufacturingRoleQueue({
                                               }
                                             />
                                           ) : (
-                                            <StatusChip label="Awaiting cut" tone="muted" />
+                                            <StatusChip label="Not ready" tone="muted" />
                                           )}
                                           <ActionButton
-                                            label="Issue"
+                                            label="Return to cutter"
                                             tone="warning"
-                                            busy={item.productionStatus === "qc_approved" ? false : busy}
-                                            disabled={item.productionStatus === "qc_approved"}
-                                            onClick={() => handleOpenIssue(item)}
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "cut"}
+                                            onClick={() => handleReturnToCutter(item)}
                                           />
                                           <ActionButton
                                             label="Move earlier"
                                             tone="secondary"
-                                            busy={item.productionStatus === "qc_approved" ? false : busy}
-                                            disabled={item.productionStatus === "qc_approved"}
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "cut"}
                                             onClick={() => handleMove(item, "earlier")}
                                           />
                                           <ActionButton
                                             label="Move later"
                                             tone="secondary"
-                                            busy={item.productionStatus === "qc_approved" ? false : busy}
-                                            disabled={item.productionStatus === "qc_approved"}
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "cut"}
+                                            onClick={() => handleMove(item, "later")}
+                                          />
+                                        </>
+                                      ) : (
+                                        <>
+                                          {item.productionStatus === "assembled" ? (
+                                            <ActionButton
+                                              label="Approve QC"
+                                              tone="success"
+                                              busy={busy}
+                                              onClick={() =>
+                                                runWindowAction(item.windowId, () =>
+                                                  markWindowQCApproved(item.windowId)
+                                                , {
+                                                  optimisticUpdate: (current) =>
+                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                                      ...currentItem,
+                                                      productionStatus: "qc_approved",
+                                                      issueStatus: "resolved",
+                                                    })),
+                                                })
+                                              }
+                                            />
+                                          ) : (
+                                            <StatusChip label="Waiting on assembly" tone="muted" />
+                                          )}
+                                          <ActionButton
+                                            label="Return to assembler"
+                                            tone="warning"
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "assembled"}
+                                            onClick={() => handleReturnToAssembler(item)}
+                                          />
+                                          <ActionButton
+                                            label="Move earlier"
+                                            tone="secondary"
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "assembled"}
+                                            onClick={() => handleMove(item, "earlier")}
+                                          />
+                                          <ActionButton
+                                            label="Move later"
+                                            tone="secondary"
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "assembled"}
                                             onClick={() => handleMove(item, "later")}
                                           />
                                         </>
@@ -591,7 +631,7 @@ export function ManufacturingRoleQueue({
                                         />
                                       )}
 
-                                      {role === "assembler" && item.productionStatus === "qc_approved" && (
+                                      {role === "qc" && item.productionStatus === "qc_approved" && (
                                         <ActionButton
                                           label="Undo QC"
                                           tone="ghost"
@@ -626,8 +666,9 @@ export function ManufacturingRoleQueue({
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </section>
         ))}
       </div>

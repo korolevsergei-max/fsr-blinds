@@ -6,8 +6,7 @@ const statusStyles: Record<UnitStatus, string> = {
   not_started: "bg-zinc-100 text-zinc-500 border-zinc-200/80",
   measured: "bg-teal-50 text-teal-700 border-teal-200/70",
   bracketed: "bg-amber-50 text-amber-800 border-amber-200/70",
-  measured_and_bracketed:
-    "bg-indigo-50 text-indigo-800 border-indigo-200/80",
+  manufactured: "bg-indigo-50 text-indigo-800 border-indigo-200/80",
   installed: "bg-emerald-50 text-emerald-800 border-emerald-200/70",
 };
 

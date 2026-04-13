@@ -15,6 +15,7 @@ type BulkAssignSheetProps = {
   onClose: () => void;
   onSuccess: () => void;
   showCompleteBy?: boolean;
+  showScheduleDates?: boolean;
   /** Dates-only sheet (no installer picker) — used from “Set dates” bulk action. */
   variant?: "assign" | "datesOnly";
 };
@@ -25,9 +26,11 @@ export function BulkAssignSheet({
   onClose,
   onSuccess,
   showCompleteBy = false,
+  showScheduleDates = false,
   variant = "assign",
 }: BulkAssignSheetProps) {
   const datesOnly = variant === "datesOnly";
+  const showDateInputs = datesOnly || showScheduleDates;
   const [selectedInstaller, setSelectedInstaller] = useState("");
   const [measurementDate, setMeasurementDate] = useState("");
   const [bracketingDate, setBracketingDate] = useState("");
@@ -169,11 +172,11 @@ export function BulkAssignSheet({
             </div>
           )}
 
-          {datesOnly && (
+          {showDateInputs && (
             <div>
               <SectionLabel className="flex items-center gap-1.5">
                 <CalendarBlank size={13} className="inline" />
-                Schedule & deadlines
+                {datesOnly ? "Schedule & deadlines" : "Schedule dates"}
               </SectionLabel>
               <div className="flex flex-col gap-3">
                 <DateInput

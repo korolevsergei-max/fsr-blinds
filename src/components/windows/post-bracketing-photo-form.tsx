@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, Trash, UploadSimple } from "@phosphor-icons/react";
 import { uploadWindowPostBracketingPhoto, deleteWindowMediaItem, undoWindowStage } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { RiskFlag } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,10 +21,12 @@ import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 export function PostBracketingPhotoForm({
   data,
   mediaItems,
+  milestones,
   routeBasePath = "/installer/units",
 }: {
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
   routeBasePath?: "/installer/units" | "/scheduler/units";
 }) {
   const { id, roomId, windowId } = useParams<{
@@ -244,6 +247,7 @@ export function PostBracketingPhotoForm({
           windowId={windowItem.id}
           isMeasured={windowItem.measured}
           isBracketed={windowItem.bracketed}
+          isManufactured={milestones.allManufactured}
           isInstalled={windowItem.installed}
           active="bracketed"
           routeBasePath={routeBasePath}

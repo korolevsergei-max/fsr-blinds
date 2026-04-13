@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
+import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { PageHeader } from "@/components/ui/page-header";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
@@ -11,9 +12,11 @@ import { useAppDatasetMaybe } from "@/lib/dataset-context";
 export function ManagementRoomDetail({
   data,
   mediaItems,
+  milestones,
 }: {
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
+  milestones: UnitMilestoneCoverage;
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const datasetCtx = useAppDatasetMaybe();
@@ -38,6 +41,7 @@ export function ManagementRoomDetail({
           data={datasetData}
           mediaItems={mediaItems}
           roomId={roomId}
+          isManufacturedComplete={milestones.allManufactured}
           getStageNavProps={(winId) => ({
             unitId: id,
             roomId,

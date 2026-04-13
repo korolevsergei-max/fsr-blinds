@@ -2,24 +2,119 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { recomputeUnitStatus } from "@/lib/unit-progress";
 import {
   requireCutter,
   requireAssembler,
+  requireQc,
   getLinkedCutterId,
   getLinkedAssemblerId,
+  getLinkedQcId,
 } from "@/lib/auth";
 import { emitNotification } from "@/lib/emit-notification";
-import { NOTIF_MFG_BEHIND_SCHEDULE } from "@/lib/notification-types";
+import {
+  NOTIF_MFG_BEHIND_SCHEDULE,
+  NOTIF_MFG_PUSHBACK_RESOLVED,
+} from "@/lib/notification-types";
 import { loadManufacturingSettings, reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { addWorkingDays } from "@/lib/manufacturing-calendar";
-import { buildManufacturingRiskNotificationBody, type UnitNotificationContext } from "@/lib/notification-copy";
+import {
+  buildManufacturingPushbackResolvedBody,
+  buildManufacturingRiskNotificationBody,
+  type UnitNotificationContext,
+} from "@/lib/notification-copy";
+import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-escalations";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 function revalidateAll() {
   revalidatePath("/cutter", "layout");
   revalidatePath("/assembler", "layout");
+  revalidatePath("/qc", "layout");
   revalidatePath("/management", "layout");
+}
+
+async function loadManufacturingNotificationContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string,
+  windowId: string
+): Promise<{
+  context: UnitNotificationContext;
+  roomName: string;
+  windowLabel: string;
+  installerId: string | null;
+  schedulerId: string | null;
+}> {
+  const [unitRes, roomRes, assignmentRes] = await Promise.all([
+    supabase
+      .from("units")
+      .select("client_name, building_name, unit_number, assigned_installer_id")
+      .eq("id", unitId)
+      .single(),
+    supabase
+      .from("windows")
+      .select("label, rooms!inner(name)")
+      .eq("id", windowId)
+      .single(),
+    supabase
+      .from("scheduler_unit_assignments")
+      .select("scheduler_id")
+      .eq("unit_id", unitId)
+      .maybeSingle(),
+  ]);
+
+  const room = roomRes.data?.rooms as unknown as { name?: string } | { name?: string }[] | null;
+  const roomName = Array.isArray(room) ? room[0]?.name ?? "Room" : room?.name ?? "Room";
+
+  return {
+    context: {
+      clientName: unitRes.data?.client_name ?? "",
+      buildingName: unitRes.data?.building_name ?? "",
+      unitNumber: unitRes.data?.unit_number ?? "",
+    },
+    roomName,
+    windowLabel: roomRes.data?.label ?? "Window",
+    installerId: unitRes.data?.assigned_installer_id ?? null,
+    schedulerId: assignmentRes.data?.scheduler_id ?? null,
+  };
+}
+
+async function notifyManufacturingPushbackResolved(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  args: {
+    unitId: string;
+    windowId: string;
+    targetRole: "cutter" | "assembler" | "qc";
+  }
+) {
+  const details = await loadManufacturingNotificationContext(supabase, args.unitId, args.windowId);
+  const body = buildManufacturingPushbackResolvedBody(details.context, {
+    roomName: details.roomName,
+    windowLabel: details.windowLabel,
+    targetRole: args.targetRole,
+  });
+
+  if (details.schedulerId) {
+    await emitNotification({
+      recipientRole: "scheduler",
+      recipientId: details.schedulerId,
+      type: NOTIF_MFG_PUSHBACK_RESOLVED,
+      title: "Manufacturing rework completed",
+      body,
+      relatedUnitId: args.unitId,
+    });
+  }
+
+  if (details.installerId) {
+    await emitNotification({
+      recipientRole: "installer",
+      recipientId: details.installerId,
+      type: NOTIF_MFG_PUSHBACK_RESOLVED,
+      title: "Manufacturing rework completed",
+      body,
+      relatedUnitId: args.unitId,
+    });
+  }
 }
 
 /** Mark a single window blind as cut by the current cutter. */
@@ -70,6 +165,21 @@ export async function markWindowCut(
 
     if (error) return { ok: false, error: error.message };
 
+    const resolvedPushback = await resolveManufacturingEscalationsForTarget(supabase, {
+      windowId,
+      targetRole: "cutter",
+      resolvedByUserId: user.id,
+    });
+
+    if (resolvedPushback) {
+      await notifyManufacturingPushbackResolved(supabase, {
+        unitId,
+        windowId,
+        targetRole: "cutter",
+      });
+    }
+
+    await recomputeUnitStatus(supabase, unitId);
     await reflowManufacturingSchedules("mark_cut");
     revalidateAll();
     return { ok: true };
@@ -94,6 +204,12 @@ export async function markWindowAssembled(
 
     const now = new Date().toISOString();
 
+    const { data: currentRow } = await supabase
+      .from("window_production_status")
+      .select("unit_id")
+      .eq("window_id", windowId)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("window_production_status")
       .update({
@@ -107,6 +223,23 @@ export async function markWindowAssembled(
 
     if (error) return { ok: false, error: error.message };
 
+    const resolvedPushback = await resolveManufacturingEscalationsForTarget(supabase, {
+      windowId,
+      targetRole: "assembler",
+      resolvedByUserId: user.id,
+    });
+
+    if (resolvedPushback && currentRow?.unit_id) {
+      await notifyManufacturingPushbackResolved(supabase, {
+        unitId: currentRow.unit_id,
+        windowId,
+        targetRole: "assembler",
+      });
+    }
+
+    if (currentRow?.unit_id) {
+      await recomputeUnitStatus(supabase, currentRow.unit_id);
+    }
     await reflowManufacturingSchedules("mark_assembled");
     revalidateAll();
     return { ok: true };
@@ -115,27 +248,33 @@ export async function markWindowAssembled(
   }
 }
 
-/** Mark a single window blind as QC approved by the current assembler. */
+/** Mark a single window blind as QC approved by the current QC user. */
 export async function markWindowQCApproved(
   windowId: string,
   notes?: string
 ): Promise<ActionResult> {
   try {
-    const user = await requireAssembler();
+    const user = await requireQc();
     const supabase = await createClient();
 
-    const assemblerId = await getLinkedAssemblerId(user.id);
-    if (!assemblerId) {
-      return { ok: false, error: "Assembler profile not found." };
+    const qcId = await getLinkedQcId(user.id);
+    if (!qcId) {
+      return { ok: false, error: "QC profile not found." };
     }
 
     const now = new Date().toISOString();
+    const { data: currentRow } = await supabase
+      .from("window_production_status")
+      .select("unit_id")
+      .eq("window_id", windowId)
+      .maybeSingle();
 
     const { error } = await supabase
       .from("window_production_status")
       .update({
         status: "qc_approved",
-        qc_approved_by_assembler_id: assemblerId,
+        qc_approved_by_assembler_id: null,
+        qc_approved_by_qc_id: qcId,
         qc_approved_at: now,
         qc_notes: notes?.trim() ?? "",
       })
@@ -144,6 +283,9 @@ export async function markWindowQCApproved(
 
     if (error) return { ok: false, error: error.message };
 
+    if (currentRow?.unit_id) {
+      await recomputeUnitStatus(supabase, currentRow.unit_id);
+    }
     await reflowManufacturingSchedules("mark_qc");
     revalidateAll();
     return { ok: true };
@@ -172,7 +314,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
     const { data: units } = await supabase
       .from("units")
       .select("id, installation_date, window_count, client_name, building_name, unit_number")
-      .in("status", ["measured", "measured_and_bracketed"])
+      .in("status", ["measured", "bracketed", "manufactured", "measured_and_bracketed"])
       .not("installation_date", "is", null);
 
     if (!units || units.length === 0) return;

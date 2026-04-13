@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildCompleteByDateChangedNotificationBody,
   buildManufacturingRiskNotificationBody,
+  buildUnitAssignedNotificationBody,
+  buildUnitDatesNotificationBody,
   buildUnitProgressNotificationBody,
   buildWindowEscalationNotificationBody,
   formatUnitContextLine,
@@ -50,4 +53,29 @@ test("buildManufacturingRiskNotificationBody includes context and timing reason"
   assert.match(body, /Unit 403/);
   assert.match(body, /2 day\(s\)/);
   assert.match(body, /not QC-approved yet/);
+});
+
+test("buildUnitAssignedNotificationBody includes unit context and actor", () => {
+  const body = buildUnitAssignedNotificationBody(context, "Pat Owner");
+  assert.match(body, /Acme Client/);
+  assert.match(body, /Summerland Terrace/);
+  assert.match(body, /Unit 403/);
+  assert.match(body, /Assigned by Pat Owner/);
+});
+
+test("buildUnitDatesNotificationBody includes every populated date line", () => {
+  const body = buildUnitDatesNotificationBody(context, {
+    measurementDate: "2026-04-14",
+    bracketingDate: "2026-04-18",
+    installationDate: "2026-04-22",
+  });
+  assert.match(body, /Measurement: 2026-04-14/);
+  assert.match(body, /Bracketing: 2026-04-18/);
+  assert.match(body, /Installation: 2026-04-22/);
+});
+
+test("buildCompleteByDateChangedNotificationBody includes new deadline context", () => {
+  const body = buildCompleteByDateChangedNotificationBody(context, "2026-04-25");
+  assert.match(body, /Acme Client/);
+  assert.match(body, /Complete by: 2026-04-25/);
 });

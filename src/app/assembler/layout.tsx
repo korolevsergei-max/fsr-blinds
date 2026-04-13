@@ -23,6 +23,9 @@ export default async function AssemblerLayout({
   if (user.role === "scheduler") {
     redirect("/scheduler");
   }
+  if (user.role === "qc") {
+    redirect("/qc");
+  }
   if (user.role !== "assembler") {
     redirect("/login");
   }

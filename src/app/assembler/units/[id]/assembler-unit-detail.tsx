@@ -11,7 +11,8 @@ import {
   Warning,
   Hourglass,
 } from "@phosphor-icons/react";
-import { markWindowAssembled, markWindowQCApproved } from "@/app/actions/production-actions";
+import { markWindowAssembled } from "@/app/actions/production-actions";
+import { returnWindowToCutter } from "@/app/actions/manufacturing-actions";
 import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/assembler-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 
@@ -44,9 +45,13 @@ function AssemblerWindowCard({ window, roomName }: { window: AssemblerWindow; ro
     });
   }
 
-  function handleApproveQC() {
+  function handleReturnToCutter() {
     startTransition(async () => {
-      await markWindowQCApproved(window.id);
+      const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
+      if (!reason) return;
+      const notes = globalThis.window.prompt("Add notes for the cutter.");
+      if (!notes) return;
+      await returnWindowToCutter(window.id, reason, notes);
       router.refresh();
     });
   }
@@ -119,14 +124,10 @@ function AssemblerWindowCard({ window, roomName }: { window: AssemblerWindow; ro
       )}
 
       {status === "assembled" && (
-        <button
-          onClick={handleApproveQC}
-          disabled={pending}
-          className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
-        >
-          <CheckCircle size={16} weight="fill" />
-          {pending ? "Approving\u2026" : "Approve QC"}
-        </button>
+        <p className="text-xs text-tertiary flex items-center gap-1">
+          <Hourglass size={12} />
+          Waiting for QC approval
+        </p>
       )}
 
       {/* Pending — not yet cut */}
@@ -135,6 +136,17 @@ function AssemblerWindowCard({ window, roomName }: { window: AssemblerWindow; ro
           <Hourglass size={12} />
           Not yet cut
         </p>
+      )}
+
+      {(status === "cut" || status === "assembled") && (
+        <button
+          onClick={handleReturnToCutter}
+          disabled={pending}
+          className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          <Warning size={16} weight="fill" />
+          {pending ? "Saving\u2026" : "Return to Cutter"}
+        </button>
       )}
     </div>
   );
@@ -169,7 +181,7 @@ export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
       {/* Progress */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
-          <span className="text-secondary font-medium">Assembly &amp; QC Progress</span>
+          <span className="text-secondary font-medium">Assembly Progress</span>
           <span className="text-tertiary">
             {unit.assembledCount}/{total} assembled &middot; {unit.qcApprovedCount} QC&apos;d
           </span>

@@ -29,8 +29,9 @@ export default async function InstallerLayout({
   }
 
   let unreadCount = 0;
+  let installerId: string | null = null;
   try {
-    const installerId = await getLinkedInstallerId(user.id);
+    installerId = await getLinkedInstallerId(user.id);
     if (installerId) {
       unreadCount = await getUnreadNotificationCount("installer", installerId);
     }
@@ -47,7 +48,7 @@ export default async function InstallerLayout({
           </Suspense>
         </main>
       </div>
-      <BottomNav unreadNotifications={unreadCount} />
+      <BottomNav unreadNotifications={unreadCount} recipientId={installerId} />
     </div>
   );
 }

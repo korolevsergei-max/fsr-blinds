@@ -17,6 +17,8 @@ type DatasetContextValue = {
   user: AppUser;
   /** Linked entity ID for the current portal (e.g. installerId, schedulerId). */
   linkedEntityId: string | null;
+  /** True while a deferred portal is still waiting on its first non-empty dataset refresh. */
+  isHydratingInitialData: boolean;
   /** Optimistically patch the in-memory dataset. */
   patchData: (updater: (prev: AppDataset) => AppDataset) => void;
   /** Replace the entire dataset (used after full refetch). */
@@ -58,6 +60,7 @@ function createDatasetStore(initialSnapshot: DatasetSnapshot): DatasetStore {
       snapshot = {
         ...snapshot,
         data: nextData,
+        isHydratingInitialData: false,
         lastUpdated: Date.now(),
       };
       emit();
@@ -67,6 +70,7 @@ function createDatasetStore(initialSnapshot: DatasetSnapshot): DatasetStore {
       snapshot = {
         ...snapshot,
         data: nextData,
+        isHydratingInitialData: false,
         lastUpdated: Date.now(),
       };
       emit();
@@ -108,6 +112,16 @@ export function AppDatasetProvider({
       data: initialData,
       user,
       linkedEntityId,
+      isHydratingInitialData:
+        initialData.clients.length === 0 &&
+        initialData.buildings.length === 0 &&
+        initialData.units.length === 0 &&
+        initialData.rooms.length === 0 &&
+        initialData.windows.length === 0 &&
+        initialData.installers.length === 0 &&
+        initialData.schedule.length === 0 &&
+        initialData.cutters.length === 0 &&
+        initialData.schedulers.length === 0,
       lastUpdated: 0,
     })
   );

@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
+import {
+  deriveManufacturingMilestoneState,
+  type UnitMilestoneCoverage,
+} from "@/lib/unit-milestone-types";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -65,6 +68,20 @@ async function resolveInstalledCompletedAtFallback(
   return toInstalled?.created_at ?? null;
 }
 
+async function resolveManufacturedCompletedAt(
+  supabase: SupabaseClient,
+  unitId: string
+): Promise<string | null> {
+  const { data: rows } = await supabase
+    .from("window_production_status")
+    .select("qc_approved_at")
+    .eq("unit_id", unitId)
+    .eq("status", "qc_approved")
+    .order("qc_approved_at", { ascending: false })
+    .limit(1);
+  return rows?.[0]?.qc_approved_at ?? null;
+}
+
 export type { UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
 
 /**
@@ -89,12 +106,16 @@ export async function getUnitMilestoneCoverageWithClient(
     totalWindows: 0,
     measuredCount: 0,
     bracketedCount: 0,
+    manufacturedCount: 0,
     installedCount: 0,
     allMeasured: false,
     allBracketed: false,
+    allManufactured: false,
     allInstalled: false,
+    manufacturedByLegacyInstalledFallback: false,
     measuredCompletedAt: null,
     bracketedCompletedAt: null,
+    manufacturedCompletedAt: null,
     installedCompletedAt: null,
   };
 
@@ -152,6 +173,12 @@ export async function getUnitMilestoneCoverageWithClient(
     }
   }
 
+  // Manufacturing rows
+  const { data: productionRows } = await supabase
+    .from("window_production_status")
+    .select("window_id, status, qc_approved_at")
+    .eq("unit_id", unitId);
+
   // Installed coverage
   const installedWindows = windowRows.filter((w) => w.installed);
   const installedCount = installedWindows.length;
@@ -180,16 +207,40 @@ export async function getUnitMilestoneCoverageWithClient(
     }
   }
 
+  const qcApprovedCount = (productionRows ?? []).filter(
+    (row) => row.status === "qc_approved"
+  ).length;
+  const qcManufacturedCompletedAt =
+    qcApprovedCount >= totalWindows
+      ? await resolveManufacturedCompletedAt(supabase, unitId)
+      : null;
+  const {
+    manufacturedCount,
+    allManufactured,
+    manufacturedCompletedAt,
+    manufacturedByLegacyInstalledFallback,
+  } = deriveManufacturingMilestoneState({
+    totalWindows,
+    qcApprovedCount,
+    installedCount,
+    qcCompletedAt: qcManufacturedCompletedAt,
+    installedCompletedAt,
+  });
+
   return {
     totalWindows,
     measuredCount,
     bracketedCount,
+    manufacturedCount,
     installedCount,
     allMeasured,
     allBracketed,
+    allManufactured,
     allInstalled,
+    manufacturedByLegacyInstalledFallback,
     measuredCompletedAt,
     bracketedCompletedAt,
+    manufacturedCompletedAt,
     installedCompletedAt,
   };
 }

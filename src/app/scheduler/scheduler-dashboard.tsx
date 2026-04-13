@@ -25,7 +25,7 @@ import {
   getUnitIssues,
   computeIssueCounts,
 } from "@/lib/dashboard-issues";
-import { getUnitEscalations } from "@/lib/window-issues";
+import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-issues";
 
 function fadeUp(delay = 0) {
   return {
@@ -92,7 +92,7 @@ export function SchedulerDashboard({
     const map = new Map<string, string[]>();
     for (const unit of scopedUnits) {
       const details = getUnitEscalations(data, unit.id).map(
-        (item) => `${item.roomName} · ${item.windowLabel}: ${item.note}`
+        (item) => `${item.roomName} · ${item.windowLabel}: ${formatUnitEscalationDetail(item)}`
       );
       if (details.length > 0) map.set(unit.id, details);
     }

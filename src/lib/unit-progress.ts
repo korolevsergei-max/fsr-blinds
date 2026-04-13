@@ -42,6 +42,7 @@ export function deriveStatusFromCoverage(
     totalWindows: coverage.totalWindows,
     measuredCount: coverage.measuredCount,
     bracketedCount: coverage.bracketedCount,
+    manufacturedCount: coverage.manufacturedCount,
     installedCount: coverage.installedCount,
   });
 }

@@ -3,7 +3,7 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
-export type UserRole = "owner" | "installer" | "cutter" | "client" | "scheduler" | "assembler";
+export type UserRole = "owner" | "installer" | "cutter" | "client" | "scheduler" | "assembler" | "qc";
 
 export interface AppUser {
   id: string;
@@ -19,6 +19,7 @@ const VALID_USER_ROLES: UserRole[] = [
   "client",
   "scheduler",
   "assembler",
+  "qc",
 ];
 
 function normalizeUserRole(role: unknown): UserRole | null {
@@ -38,17 +39,20 @@ async function inferRoleFromLinkedAccount(
   const [
     schedulerRes,
     assemblerRes,
+    qcRes,
     cutterRes,
     installerRes,
   ] = await Promise.all([
     supabase.from("schedulers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("assemblers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("qcs").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("cutters").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("installers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
   ]);
 
   if (schedulerRes.data?.id) return "scheduler";
   if (assemblerRes.data?.id) return "assembler";
+  if (qcRes.data?.id) return "qc";
   if (cutterRes.data?.id) return "cutter";
   if (installerRes.data?.id) return "installer";
   return null;
@@ -195,6 +199,14 @@ export async function requireAssembler(): Promise<AppUser> {
   return user;
 }
 
+export async function requireQc(): Promise<AppUser> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "qc") {
+    throw new Error("Unauthorized: qc role required");
+  }
+  return user;
+}
+
 export async function requireOwnerOrScheduler(): Promise<AppUser> {
   const user = await getCurrentUser();
   if (!user || (user.role !== "owner" && user.role !== "scheduler")) {
@@ -233,6 +245,18 @@ export async function getLinkedAssemblerId(
   const supabase = await createClient();
   const { data } = await supabase
     .from("assemblers")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .single();
+  return data?.id ?? null;
+}
+
+export async function getLinkedQcId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("qcs")
     .select("id")
     .eq("auth_user_id", authUserId)
     .single();

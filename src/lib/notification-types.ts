@@ -19,6 +19,12 @@ export const NOTIF_UNIT_PROGRESS_UPDATE = "unit_progress_update";
 /** Manufacturing risk flag set to yellow/red with ≤3 days until install. */
 export const NOTIF_MFG_BEHIND_SCHEDULE = "mfg_behind_schedule";
 
+/** Manufacturing work was pushed back between internal roles. */
+export const NOTIF_MFG_PUSHBACK = "mfg_pushback";
+
+/** Manufacturing pushback was resolved by rework. */
+export const NOTIF_MFG_PUSHBACK_RESOLVED = "mfg_pushback_resolved";
+
 /** Installer creates/updates a window with yellow or red risk flag. */
 export const NOTIF_UNIT_ESCALATION = "unit_escalation";
 
@@ -70,7 +76,7 @@ export const SCHEDULER_NOTIF_CATEGORIES: NotifCategory[] = [
   {
     key: "manufacturing",
     label: "Manufacturing",
-    types: [NOTIF_MFG_BEHIND_SCHEDULE],
+    types: [NOTIF_MFG_BEHIND_SCHEDULE, NOTIF_MFG_PUSHBACK, NOTIF_MFG_PUSHBACK_RESOLVED],
   },
 ];
 
@@ -91,6 +97,11 @@ export const INSTALLER_NOTIF_CATEGORIES: NotifCategory[] = [
     label: "Schedule",
     types: [NOTIF_SCHEDULE_PUBLISHED],
   },
+  {
+    key: "manufacturing",
+    label: "Manufacturing",
+    types: [NOTIF_MFG_PUSHBACK, NOTIF_MFG_PUSHBACK_RESOLVED],
+  },
 ];
 
 // ─── Icon + colour metadata (used by NotificationsList) ───────────────────────
@@ -108,6 +119,8 @@ export const NOTIF_META: Record<string, NotifMeta> = {
   [NOTIF_COMPLETE_BY_DATE_CHANGED]:    { icon: "CalendarBlank", accent: "text-amber-500" },
   [NOTIF_UNIT_PROGRESS_UPDATE]:        { icon: "CheckCircle",   accent: "text-emerald-500" },
   [NOTIF_MFG_BEHIND_SCHEDULE]:         { icon: "Package",       accent: "text-orange-500" },
+  [NOTIF_MFG_PUSHBACK]:                { icon: "Warning",       accent: "text-orange-500" },
+  [NOTIF_MFG_PUSHBACK_RESOLVED]:       { icon: "CheckCircle",   accent: "text-emerald-500" },
   [NOTIF_UNIT_ASSIGNED_TO_INSTALLER]:  { icon: "UserPlus",      accent: "text-accent" },
   [NOTIF_INSTALLATION_DATE_SET]:       { icon: "CalendarBlank", accent: "text-accent" },
   [NOTIF_DATES_CHANGED]:               { icon: "CalendarBlank", accent: "text-amber-500" },

@@ -45,6 +45,9 @@
   --radius-lg: 1.125rem;   /* 18px — inputs, cards */
   --radius-xl: 1.5rem;     /* 24px — large cards */
   --radius-full: 9999px;   /* pills */
+
+  /* Shared sticky offsets */
+  --schedule-sticky-top: 73px;
 }
 
 /* ─── Tailwind v4 theme wiring ───────────────────────────────────────────── */

@@ -3,7 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import type { AppDataset } from "@/lib/app-dataset";
-import type { Notification, UnitActivityLog, UnitPhotoStage } from "@/lib/types";
+import type {
+  Notification,
+  UnitActivityLog,
+  UnitPhotoStage,
+  WindowManufacturingEscalation,
+} from "@/lib/types";
 import {
   mapClient,
   mapBuilding,
@@ -27,6 +32,7 @@ import {
   type CutterRow,
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
+import { mapManufacturingEscalation } from "@/lib/manufacturing-escalations";
 
 type MediaUploadRow = {
   id: string;
@@ -38,6 +44,23 @@ type MediaUploadRow = {
   upload_kind: string;
   stage: string | null;
   phase: string | null;
+  created_at: string;
+};
+
+type ManufacturingEscalationRow = {
+  id: string;
+  window_id: string;
+  unit_id: string;
+  source_role: "cutter" | "assembler" | "qc";
+  target_role: "cutter" | "assembler" | "qc";
+  escalation_type: "pushback" | "blocker";
+  status: "open" | "resolved";
+  reason: string | null;
+  notes: string | null;
+  opened_by_user_id: string | null;
+  opened_at: string;
+  resolved_by_user_id: string | null;
+  resolved_at: string | null;
   created_at: string;
 };
 
@@ -102,6 +125,34 @@ function buildDatasetFromRaw(raw: {
     schedule,
     cutters: (raw.cutters ?? []).map(mapCutter),
     schedulers,
+    manufacturingEscalations: [],
+  };
+}
+
+async function loadOpenManufacturingEscalations(
+  dataset: AppDataset
+): Promise<WindowManufacturingEscalation[]> {
+  const unitIds = dataset.units.map((unit) => unit.id);
+  if (unitIds.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("window_manufacturing_escalations")
+    .select("*")
+    .in("unit_id", unitIds)
+    .eq("status", "open")
+    .order("opened_at", { ascending: false });
+
+  if (error) return [];
+
+  return ((data ?? []) as ManufacturingEscalationRow[]).map(mapManufacturingEscalation);
+}
+
+async function withManufacturingEscalations(dataset: AppDataset): Promise<AppDataset> {
+  const manufacturingEscalations = await loadOpenManufacturingEscalations(dataset);
+  return {
+    ...dataset,
+    manufacturingEscalations,
   };
 }
 
@@ -111,7 +162,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   // Fast path: single RPC call (requires migration 20260408110000)
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_full_dataset");
   if (!rpcError && rpcData) {
-    return buildDatasetFromRaw(rpcData as {
+    return withManufacturingEscalations(buildDatasetFromRaw(rpcData as {
       clients: ClientRow[];
       buildings: BuildingRow[];
       units: UnitRow[];
@@ -122,7 +173,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       cutters: CutterRow[];
       schedulers: SchedulerRow[];
       scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
-    });
+    }));
   }
 
   // Fallback: multiple parallel queries (works before RPC migration is applied)
@@ -164,7 +215,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     );
   }
 
-  return buildDatasetFromRaw({
+  return withManufacturingEscalations(buildDatasetFromRaw({
     clients: (clientsRes.data as ClientRow[]) ?? [],
     buildings: (buildingsRes.data as BuildingRow[]) ?? [],
     units: (unitsRes.data as UnitRow[]) ?? [],
@@ -175,7 +226,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     cutters: cuttersRes.error ? [] : (cuttersRes.data as CutterRow[]) ?? [],
     schedulers: schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[]) ?? [],
     scheduler_unit_assignments: (assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? [],
-  });
+  }));
 });
 
 function emptyDataset(): AppDataset {
@@ -189,6 +240,7 @@ function emptyDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingEscalations: [],
   };
 }
 
@@ -336,7 +388,7 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
   );
 
-  return {
+  return withManufacturingEscalations({
     clients,
     buildings,
     units,
@@ -346,7 +398,8 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     schedule,
     cutters: [],
     schedulers: [],
-  };
+    manufacturingEscalations: [],
+  });
 }
 
 /**
@@ -399,7 +452,7 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
   );
 
-  return {
+  return withManufacturingEscalations({
     clients: ((clientRows.data as ClientRow[]) ?? []).map(mapClient),
     buildings: ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding),
     units,
@@ -409,7 +462,8 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     schedule,
     cutters: [],
     schedulers: [],
-  };
+    manufacturingEscalations: [],
+  });
 }
 
 export type InstallerMediaItem = {
@@ -628,12 +682,12 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
   const unitRow = unitRes.data as UnitRow;
   const unit = mapUnit(unitRow);
 
-  return {
+  return withManufacturingEscalations({
     ...emptyDataset(),
     units: [unit],
     rooms,
     windows: ((windowsRes.data as WindowRow[]) ?? []).map(mapWindow),
-  };
+  });
 }
 
 export async function loadUnitActivityLog(

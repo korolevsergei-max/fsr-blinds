@@ -8,6 +8,7 @@ import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -17,6 +18,7 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { afterMutate } = useDatasetMutation();
+  const datasetCtx = useAppDatasetMaybe();
   const unit = data.units.find((u) => u.id === id);
   const assignees = useMemo(
     () => data.installers.filter((installer) => Boolean(installer.id)),
@@ -34,6 +36,10 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
 
   if (selectedInstaller && !assignees.some((installer) => installer.id === selectedInstaller)) {
     setSelectedInstaller("");
+  }
+
+  if (!unit && datasetCtx?.isHydratingInitialData) {
+    return <div className="p-6 text-center text-muted">Loading unit…</div>;
   }
 
   if (!unit) {

@@ -19,6 +19,7 @@ function emptyDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingEscalations: [],
   };
 }
 
@@ -53,8 +54,9 @@ export default async function SchedulerLayout({
   }
 
   let unreadCount = 0;
+  let schedulerId: string | null = null;
   try {
-    const schedulerId = await getLinkedSchedulerId(user.id);
+    schedulerId = await getLinkedSchedulerId(user.id);
     if (schedulerId) {
       unreadCount = await getUnreadNotificationCount("scheduler", schedulerId);
     }
@@ -73,7 +75,7 @@ export default async function SchedulerLayout({
           </main>
         </div>
       </div>
-      <SchedulerNav unreadNotifications={unreadCount} />
+      <SchedulerNav unreadNotifications={unreadCount} recipientId={schedulerId} />
     </>
   );
 }
