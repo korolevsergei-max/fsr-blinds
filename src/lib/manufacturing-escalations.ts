@@ -153,3 +153,25 @@ export async function loadOpenManufacturingEscalationsByWindow(
   }
   return byWindow;
 }
+
+export async function loadManufacturingEscalationHistoryByWindow(
+  supabase: DbLikeClient,
+  windowIds: string[]
+): Promise<Map<string, WindowManufacturingEscalation[]>> {
+  if (windowIds.length === 0) return new Map();
+
+  const { data } = await supabase
+    .from("window_manufacturing_escalations")
+    .select("*")
+    .in("window_id", windowIds)
+    .order("opened_at", { ascending: false });
+
+  const byWindow = new Map<string, WindowManufacturingEscalation[]>();
+  for (const row of (data ?? []) as EscalationRow[]) {
+    const mapped = mapManufacturingEscalation(row);
+    const list = byWindow.get(row.window_id) ?? [];
+    list.push(mapped);
+    byWindow.set(row.window_id, list);
+  }
+  return byWindow;
+}

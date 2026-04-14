@@ -55,7 +55,7 @@ export const PRODUCTION_STATUS_LABELS: Record<ProductionStatus, string> = {
   pending: "Pending",
   cut: "Cut",
   assembled: "Assembled",
-  qc_approved: "QC Approved",
+  qc_approved: "Built fully",
 };
 
 export interface WindowProductionStatus {

@@ -13,7 +13,10 @@ import {
   ShieldCheck,
 } from "@phosphor-icons/react";
 import { markWindowQCApproved } from "@/app/actions/production-actions";
-import { returnWindowToAssembler } from "@/app/actions/manufacturing-actions";
+import {
+  returnWindowToAssembler,
+  returnWindowToCutter,
+} from "@/app/actions/manufacturing-actions";
 import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/assembler-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 
@@ -62,9 +65,22 @@ function QcWindowCard({
     startTransition(async () => {
       const reason = globalThis.window.prompt("Why is this blind being returned to assembler?");
       if (!reason) return;
-      const notes = globalThis.window.prompt("Add notes for the assembler.");
-      if (!notes) return;
-      await returnWindowToAssembler(window.id, reason, notes);
+      const result = await returnWindowToAssembler(window.id, reason, "");
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to return blind to assembler.");
+      }
+      router.refresh();
+    });
+  }
+
+  function handleReturnToCutter() {
+    startTransition(async () => {
+      const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
+      if (!reason) return;
+      const result = await returnWindowToCutter(window.id, reason, "");
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to return blind to cutter.");
+      }
       router.refresh();
     });
   }
@@ -116,7 +132,7 @@ function QcWindowCard({
       {status === "qc_approved" && production?.qcApprovedAt && (
         <p className="text-xs text-green-600 flex items-center gap-1">
           <CheckCircle size={12} weight="fill" />
-          QC approved {new Date(production.qcApprovedAt).toLocaleDateString()}
+          Built fully {new Date(production.qcApprovedAt).toLocaleDateString()}
         </p>
       )}
 
@@ -137,6 +153,14 @@ function QcWindowCard({
           >
             <Warning size={16} weight="fill" />
             {pending ? "Saving…" : "Return to Assembler"}
+          </button>
+          <button
+            onClick={handleReturnToCutter}
+            disabled={pending}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
+          >
+            <Warning size={16} weight="fill" />
+            {pending ? "Saving…" : "Return to Cutter"}
           </button>
         </div>
       )}

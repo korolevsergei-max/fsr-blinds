@@ -183,7 +183,7 @@ export function UnitProgressMilestonesPanel({
               milestones.totalWindows > 0
                 ? milestones.manufacturedByLegacyInstalledFallback
                   ? "Marked complete based on existing installation records"
-                  : `${milestones.manufacturedCount}/${milestones.totalWindows} windows QC approved`
+                  : `${milestones.manufacturedCount}/${milestones.totalWindows} windows built fully`
                 : "No windows yet"
             }
             met={allManufactured}

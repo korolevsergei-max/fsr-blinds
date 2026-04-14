@@ -262,7 +262,7 @@ export async function markWindowAssembled(
   }
 }
 
-/** Mark a single window blind as QC approved by the current QC user. */
+/** Mark a single window blind as built fully by the current QC user. */
 export async function markWindowQCApproved(
   windowId: string,
   notes?: string
@@ -306,7 +306,7 @@ export async function markWindowQCApproved(
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to mark QC approved." };
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to mark blind as built fully." };
   }
 }
 

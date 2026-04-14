@@ -14,7 +14,10 @@ import {
   isWorkingDay,
   listMonthDays,
 } from "@/lib/manufacturing-calendar";
-import { loadOpenManufacturingEscalationsByWindow } from "@/lib/manufacturing-escalations";
+import {
+  loadManufacturingEscalationHistoryByWindow,
+  loadOpenManufacturingEscalationsByWindow,
+} from "@/lib/manufacturing-escalations";
 
 type SettingsRow = {
   id: string;
@@ -171,10 +174,21 @@ export interface ManufacturingRoleSchedule {
   buckets: ManufacturingDayBucket[];
 }
 
+export interface ManufacturingCompletedWindowItem extends ManufacturingWindowItem {
+  escalationHistory: WindowManufacturingEscalation[];
+  roleCompletedAt: string | null;
+}
+
+export interface ManufacturingCompletedRoleData {
+  role: "cutter" | "assembler" | "qc";
+  items: ManufacturingCompletedWindowItem[];
+}
+
 function getQueueWindowPriority(
   role: "cutter" | "assembler" | "qc",
   item: ManufacturingWindowItem
 ) {
+  if (item.issueStatus === "open" && item.escalation?.targetRole === role) return 0;
   if (item.issueStatus === "open") return 0;
   if (role === "cutter") {
     return item.productionStatus === "pending" ? 1 : 2;
@@ -184,6 +198,13 @@ function getQueueWindowPriority(
   }
   if (item.productionStatus === "assembled") return 1;
   return 3;
+}
+
+function isReturnedToRole(
+  role: "cutter" | "assembler" | "qc",
+  item: ManufacturingWindowItem
+) {
+  return item.issueStatus === "open" && item.escalation?.targetRole === role;
 }
 
 function countQueueReadyWindows(
@@ -895,6 +916,12 @@ export async function loadManufacturingRoleSchedule(
   for (const item of items) {
     const rawDate = item[roleDateKey];
     const date = rawDate && rawDate < currentWorkDate ? currentWorkDate : rawDate;
+    if (isReturnedToRole(role, item)) {
+      const list = byBucket.get("__returned__") ?? [];
+      list.push(item);
+      byBucket.set("__returned__", list);
+      continue;
+    }
     if (item.issueStatus === "open") {
       const list = byBucket.get("__issues__") ?? [];
       list.push(item);
@@ -913,7 +940,7 @@ export async function loadManufacturingRoleSchedule(
   }
 
   const orderedKeys = [...byBucket.keys()].sort((a, b) => {
-    const specialOrder = ["__issues__", "__unscheduled__"];
+    const specialOrder = ["__returned__", "__issues__", "__unscheduled__"];
     const aIdx = specialOrder.indexOf(a);
     const bIdx = specialOrder.indexOf(b);
     if (aIdx >= 0 || bIdx >= 0) {
@@ -987,7 +1014,9 @@ export async function loadManufacturingRoleSchedule(
     return {
       date: key.startsWith("__") ? null : key,
       label:
-        key === "__issues__"
+        key === "__returned__"
+          ? "Returned"
+          : key === "__issues__"
           ? "Issues"
           : key === "__unscheduled__"
           ? "Unscheduled"
@@ -1023,5 +1052,70 @@ export async function loadManufacturingRoleSchedule(
     unscheduledCount,
     allItems,
     buckets,
+  };
+}
+
+function getRoleCompletedAt(
+  role: "cutter" | "assembler" | "qc",
+  item: ManufacturingWindowItem
+) {
+  return role === "cutter"
+    ? item.cutAt
+    : role === "assembler"
+      ? item.assembledAt
+      : item.qcApprovedAt;
+}
+
+function isCompletedForRole(
+  role: "cutter" | "assembler" | "qc",
+  item: ManufacturingWindowItem
+) {
+  if (role === "cutter") {
+    return item.productionStatus === "cut" || item.productionStatus === "assembled" || item.productionStatus === "qc_approved";
+  }
+  if (role === "assembler") {
+    return item.productionStatus === "assembled" || item.productionStatus === "qc_approved";
+  }
+  return item.productionStatus === "qc_approved";
+}
+
+function compareCompletedItems(a: ManufacturingCompletedWindowItem, b: ManufacturingCompletedWindowItem) {
+  const aCompleted = a.roleCompletedAt ?? "";
+  const bCompleted = b.roleCompletedAt ?? "";
+  if (aCompleted !== bCompleted) return bCompleted.localeCompare(aCompleted);
+
+  if (a.installationDate !== b.installationDate) {
+    if (!a.installationDate) return 1;
+    if (!b.installationDate) return -1;
+    return a.installationDate.localeCompare(b.installationDate);
+  }
+
+  const unitCompare = a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
+  if (unitCompare !== 0) return unitCompare;
+  const roomCompare = a.roomName.localeCompare(b.roomName, undefined, { numeric: true });
+  if (roomCompare !== 0) return roomCompare;
+  return a.label.localeCompare(b.label, undefined, { numeric: true });
+}
+
+export async function loadManufacturingCompletedRoleData(
+  role: "cutter" | "assembler" | "qc"
+): Promise<ManufacturingCompletedRoleData> {
+  const schedule = await loadManufacturingRoleSchedule(role);
+  const supabase = await createClient();
+  const windowIds = schedule.allItems.map((item) => item.windowId);
+  const escalationHistoryByWindow = await loadManufacturingEscalationHistoryByWindow(supabase, windowIds);
+
+  const items = schedule.allItems
+    .filter((item) => isCompletedForRole(role, item))
+    .map((item) => ({
+      ...item,
+      escalationHistory: escalationHistoryByWindow.get(item.windowId) ?? [],
+      roleCompletedAt: getRoleCompletedAt(role, item),
+    }))
+    .sort(compareCompletedItems);
+
+  return {
+    role,
+    items,
   };
 }

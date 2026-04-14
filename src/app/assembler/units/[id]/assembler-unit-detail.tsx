@@ -61,9 +61,7 @@ function AssemblerWindowCard({
     startTransition(async () => {
       const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
       if (!reason) return;
-      const notes = globalThis.window.prompt("Add notes for the cutter.");
-      if (!notes) return;
-      await returnWindowToCutter(window.id, reason, notes);
+      await returnWindowToCutter(window.id, reason, "");
       router.refresh();
     });
   }
@@ -119,7 +117,7 @@ function AssemblerWindowCard({
       {status === "qc_approved" && production?.qcApprovedAt && (
         <p className="text-xs text-green-600 flex items-center gap-1">
           <CheckCircle size={12} weight="fill" />
-          QC approved {new Date(production.qcApprovedAt).toLocaleDateString()}
+          Built fully {new Date(production.qcApprovedAt).toLocaleDateString()}
         </p>
       )}
 
@@ -256,7 +254,7 @@ export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
           />
         </div>
         <div className="flex gap-4 text-[10px] text-tertiary">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> QC Approved</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Built fully</span>
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400" /> Assembled</span>
         </div>
         {unit.installationDate && (

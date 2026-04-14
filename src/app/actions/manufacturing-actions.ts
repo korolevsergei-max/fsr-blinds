@@ -452,19 +452,19 @@ export async function returnWindowToCutter(
 ): Promise<ActionResult> {
   try {
     const user = await getCurrentUser();
-    if (!user || user.role !== "assembler") {
-      return { ok: false, error: "Only assemblers can return work to cutters." };
+    if (!user || !["assembler", "qc"].includes(user.role)) {
+      return { ok: false, error: "Only assemblers or QC users can return work to cutters." };
     }
 
     const trimmedReason = reason.trim();
     const trimmedNotes = notes.trim();
-    if (!trimmedReason || !trimmedNotes) {
-      return { ok: false, error: "Reason and notes are required." };
+    if (!trimmedReason) {
+      return { ok: false, error: "A reason is required." };
     }
 
     const { supabase, row } = await loadWindowProduction(windowId);
-    if (!row || !["cut", "assembled"].includes(row.status)) {
-      return { ok: false, error: "Only cut or assembled blinds can be returned to cutter." };
+    if (!row || !["cut", "assembled", "qc_approved"].includes(row.status)) {
+      return { ok: false, error: "Only cut, assembled, or built-fully blinds can be returned to cutter." };
     }
 
     const { unitId } = await loadWindowUnit(windowId);
@@ -492,7 +492,7 @@ export async function returnWindowToCutter(
     await openManufacturingEscalation(supabase, {
       windowId,
       unitId,
-      sourceRole: "assembler",
+      sourceRole: user.role as "assembler" | "qc",
       targetRole: "cutter",
       reason: trimmedReason,
       notes: trimmedNotes,
@@ -502,7 +502,7 @@ export async function returnWindowToCutter(
     await notifyManufacturingPushback(supabase, {
       unitId,
       windowId,
-      sourceRole: "assembler",
+      sourceRole: user.role as "assembler" | "qc",
       targetRole: "cutter",
       reason: trimmedReason,
       notes: trimmedNotes,
@@ -532,8 +532,8 @@ export async function returnWindowToAssembler(
 
     const trimmedReason = reason.trim();
     const trimmedNotes = notes.trim();
-    if (!trimmedReason || !trimmedNotes) {
-      return { ok: false, error: "Reason and notes are required." };
+    if (!trimmedReason) {
+      return { ok: false, error: "A reason is required." };
     }
 
     const { supabase, row } = await loadWindowProduction(windowId);

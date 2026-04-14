@@ -203,7 +203,7 @@ function updateWindowInSchedule(
   schedule: ManufacturingRoleSchedule,
   role: "cutter" | "assembler" | "qc",
   windowId: string,
-  updater: (item: ManufacturingWindowItem) => ManufacturingWindowItem
+  updater: (item: ManufacturingWindowItem) => ManufacturingWindowItem | null
 ) {
   const nextSchedule: ManufacturingRoleSchedule = {
     ...schedule,
@@ -211,11 +211,15 @@ function updateWindowInSchedule(
       ...bucket,
       units: bucket.units.map((unit) => ({
         ...unit,
-        blindTypeGroups: unit.blindTypeGroups.map((group) => ({
+          blindTypeGroups: unit.blindTypeGroups.map((group) => ({
           ...group,
-          windows: group.windows.map((item) => (item.windowId === windowId ? updater(item) : item)),
-        })),
-      })),
+          windows: group.windows
+            .map((item) => (item.windowId === windowId ? updater(item) : item))
+            .filter((item): item is ManufacturingWindowItem => Boolean(item)),
+        }))
+        .filter((group) => group.windows.length > 0),
+      }))
+      .filter((unit) => unit.blindTypeGroups.length > 0),
     })),
   };
 
@@ -347,28 +351,26 @@ export function ManufacturingRoleQueue({
     }, { refreshOnSuccess: true });
   };
 
-  const collectPushbackDetails = (message: string) => {
+  const collectPushbackReason = (message: string) => {
     const reason = globalThis.window.prompt(message);
     if (!reason) return null;
-    const notes = globalThis.window.prompt("Add notes for the escalation.");
-    if (!notes) return null;
-    return { reason, notes };
+    return reason;
   };
 
   const handleReturnToCutter = (item: ManufacturingWindowItem) => {
-    const details = collectPushbackDetails("Why is this blind being returned to cutter?");
-    if (!details) return;
+    const reason = collectPushbackReason("Why is this blind being returned to cutter?");
+    if (!reason) return;
 
-    runWindowAction(item.windowId, () => returnWindowToCutter(item.windowId, details.reason, details.notes), {
+    runWindowAction(item.windowId, () => returnWindowToCutter(item.windowId, reason, ""), {
       refreshOnSuccess: true,
     });
   };
 
   const handleReturnToAssembler = (item: ManufacturingWindowItem) => {
-    const details = collectPushbackDetails("Why is this blind being returned to assembler?");
-    if (!details) return;
+    const reason = collectPushbackReason("Why is this blind being returned to assembler?");
+    if (!reason) return;
 
-    runWindowAction(item.windowId, () => returnWindowToAssembler(item.windowId, details.reason, details.notes), {
+    runWindowAction(item.windowId, () => returnWindowToAssembler(item.windowId, reason, ""), {
       refreshOnSuccess: true,
     });
   };
@@ -705,10 +707,7 @@ export function ManufacturingRoleQueue({
                                                   markWindowCut(item.windowId)
                                                 , {
                                                   optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                      ...currentItem,
-                                                      productionStatus: "cut",
-                                                    })),
+                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
                                                 })
                                               }
                                             />
@@ -760,10 +759,7 @@ export function ManufacturingRoleQueue({
                                                   markWindowAssembled(item.windowId)
                                                 , {
                                                   optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                      ...currentItem,
-                                                      productionStatus: "assembled",
-                                                    })),
+                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
                                                 })
                                               }
                                             />
@@ -804,16 +800,16 @@ export function ManufacturingRoleQueue({
                                                   markWindowQCApproved(item.windowId)
                                                 , {
                                                   optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                      ...currentItem,
-                                                      productionStatus: "qc_approved",
-                                                      issueStatus: "resolved",
-                                                    })),
+                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
                                                 })
                                               }
                                             />
                                           ) : (
-                                            <StatusChip label="Waiting on assembly" tone="muted" />
+                                            <StatusChip
+                                              label={item.productionStatus === "qc_approved" ? "Built fully" : "Waiting on assembly"}
+                                              tone={item.productionStatus === "qc_approved" ? "success" : "muted"}
+                                              icon={item.productionStatus === "qc_approved" ? <CheckCircle size={13} weight="fill" /> : undefined}
+                                            />
                                           )}
                                           <ActionButton
                                             label="Return to assembler"
@@ -821,6 +817,13 @@ export function ManufacturingRoleQueue({
                                             busy={busy}
                                             disabled={item.productionStatus !== "assembled"}
                                             onClick={() => handleReturnToAssembler(item)}
+                                          />
+                                          <ActionButton
+                                            label="Return to cutter"
+                                            tone="warning"
+                                            busy={busy}
+                                            disabled={item.productionStatus !== "assembled"}
+                                            onClick={() => handleReturnToCutter(item)}
                                           />
                                           <ActionButton
                                             label="Move earlier"

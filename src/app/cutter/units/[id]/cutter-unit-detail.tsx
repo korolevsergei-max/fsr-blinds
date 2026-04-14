@@ -82,7 +82,7 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
       {status === "qc_approved" && production?.qcApprovedAt && (
         <p className="text-xs text-green-600 flex items-center gap-1">
           <CheckCircle size={12} weight="fill" />
-          QC approved {new Date(production.qcApprovedAt).toLocaleDateString()}
+          Built fully {new Date(production.qcApprovedAt).toLocaleDateString()}
         </p>
       )}
       {status === "cut" && production?.cutAt && (

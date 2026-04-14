@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, Queue } from "@phosphor-icons/react";
+import { ChartBar, CheckCircle, Queue } from "@phosphor-icons/react";
 
 const navItems = [
   { href: "/cutter", label: "Dashboard", Icon: ChartBar },
   { href: "/cutter/queue", label: "Queue", Icon: Queue },
+  { href: "/cutter/completed", label: "Completed", Icon: CheckCircle },
 ];
 
 export function CutterNav() {

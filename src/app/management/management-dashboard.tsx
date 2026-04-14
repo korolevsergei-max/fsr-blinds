@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -26,6 +26,7 @@ import {
   computeIssueCounts,
 } from "@/lib/dashboard-issues";
 import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-issues";
+import { useSessionStorage } from "@/hooks/use-session-storage";
 
 function fadeUp(delay = 0) {
   return {
@@ -49,15 +50,15 @@ export function ManagementDashboard({
   const today = new Date().toISOString().split("T")[0];
 
   // Scope filters
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
-  const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
-  const [installerFilter, setInstallerFilter] = useState<string[]>([]);
-  const [yearFilter, setYearFilter] = useState("all");
-  const [monthFilter, setMonthFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useSessionStorage<string[]>("management-dashboard-clientFilter", []);
+  const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("management-dashboard-buildingFilter", []);
+  const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("management-dashboard-installerFilter", []);
+  const [yearFilter, setYearFilter] = useSessionStorage<string>("management-dashboard-yearFilter", "all");
+  const [monthFilter, setMonthFilter] = useSessionStorage<string>("management-dashboard-monthFilter", "all");
 
   // Selection state — status + issue can combine
-  const [selectedStatus, setSelectedStatus] = useState<UnitStatus | null>(null);
-  const [selectedIssue, setSelectedIssue] = useState<DashboardIssue | null>(null);
+  const [selectedStatus, setSelectedStatus] = useSessionStorage<UnitStatus | null>("management-dashboard-selectedStatus", null);
+  const [selectedIssue, setSelectedIssue] = useSessionStorage<DashboardIssue | null>("management-dashboard-selectedIssue", null);
 
   const availableBuildings = useMemo(
     () =>
