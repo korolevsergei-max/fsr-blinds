@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { Camera } from "@phosphor-icons/react";
+import { Camera, User } from "@phosphor-icons/react";
 import Image from "next/image";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -25,15 +25,26 @@ type WindowStageReadonlyViewProps = {
   routeBasePath?: StageRouteBasePath;
 };
 
-function pickLatestStagePhoto(
+function pickAllStagePhotos(
   mediaItems: UnitStageMediaItem[],
   windowId: string,
   stage: UnitStageMediaItem["stage"]
-): string | null {
-  const match = mediaItems
+): UnitStageMediaItem[] {
+  return mediaItems
     .filter((item) => item.windowId === windowId && item.stage === stage)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  return match?.publicUrl ?? null;
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export function WindowStageReadonlyView({
@@ -57,20 +68,40 @@ export function WindowStageReadonlyView({
     (w) => w.id === windowId && w.roomId === roomId
   );
 
-  const selectedPhotoUrl = useMemo(() => {
-    if (!windowItem) return null;
+  const stagePhotos = useMemo(() => {
+    if (!windowItem) return [];
     if (mode === "before") {
-      return (
-        pickLatestStagePhoto(mediaItems, windowItem.id, "scheduled_bracketing") ??
-        windowItem.photoUrl ??
-        null
-      );
+      const fromMedia = pickAllStagePhotos(mediaItems, windowItem.id, "scheduled_bracketing");
+      // Prepend legacy photoUrl if not already in media list
+      if (
+        windowItem.photoUrl &&
+        !fromMedia.some((item) => item.publicUrl === windowItem.photoUrl)
+      ) {
+        const legacyItem: UnitStageMediaItem = {
+          id: `legacy-${windowItem.id}`,
+          publicUrl: windowItem.photoUrl,
+          label: windowItem.label,
+          unitId: unit?.id ?? "",
+          roomId: room?.id ?? null,
+          roomName: room?.name ?? null,
+          windowId: windowItem.id,
+          windowLabel: windowItem.label,
+          uploadKind: "window_measure",
+          stage: "scheduled_bracketing",
+          createdAt: "",
+          uploadedByUserId: null,
+          uploadedByName: null,
+          uploadedByRole: null,
+        };
+        return [...fromMedia, legacyItem];
+      }
+      return fromMedia;
     }
     if (mode === "bracketed") {
-      return pickLatestStagePhoto(mediaItems, windowItem.id, "bracketed_measured");
+      return pickAllStagePhotos(mediaItems, windowItem.id, "bracketed_measured");
     }
-    return pickLatestStagePhoto(mediaItems, windowItem.id, "installed_pending_approval");
-  }, [mediaItems, mode, windowItem]);
+    return pickAllStagePhotos(mediaItems, windowItem.id, "installed_pending_approval");
+  }, [mediaItems, mode, windowItem, unit, room]);
 
   if (!unit || !room || !windowItem) {
     return <div className="p-6 text-center text-muted">Window not found</div>;
@@ -104,16 +135,47 @@ export function WindowStageReadonlyView({
       />
 
       <div className="flex flex-1 flex-col gap-6 px-5 py-5">
-        {selectedPhotoUrl ? (
-          <div className="relative aspect-video overflow-hidden rounded-2xl border border-border bg-surface">
-            <Image
-              src={selectedPhotoUrl}
-              alt={`${windowItem.label} ${modeTitle} photo`}
-              fill
-              sizes="(max-width: 640px) 100vw, 560px"
-              className="select-none object-cover [-webkit-touch-callout:none]"
-              draggable={false}
-            />
+        {stagePhotos.length > 0 ? (
+          <div>
+            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted flex items-center justify-between">
+              <span>{modeTitle} Photos</span>
+              <span className="font-normal normal-case text-zinc-400">{stagePhotos.length} saved</span>
+            </h2>
+            <div className={stagePhotos.length === 1 ? "" : "grid grid-cols-2 gap-2.5"}>
+              {stagePhotos.map((photo) => (
+                <a
+                  key={photo.id}
+                  href={photo.publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`relative block overflow-hidden rounded-2xl border border-border bg-surface ${
+                    stagePhotos.length === 1 ? "aspect-video w-full" : "aspect-square"
+                  }`}
+                >
+                  <Image
+                    src={photo.publicUrl}
+                    alt={`${windowItem.label} ${modeTitle} photo`}
+                    fill
+                    sizes="(max-width: 640px) 100vw, 560px"
+                    className="select-none object-cover [-webkit-touch-callout:none]"
+                    draggable={false}
+                  />
+                  {/* Uploader overlay */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">
+                    <p className="flex items-center gap-1 text-[10px] font-medium text-white/90 leading-tight">
+                      <User size={10} />
+                      {photo.uploadedByName ?? "Unknown"}
+                      {photo.uploadedByRole && (
+                        <span className="capitalize opacity-70">· {photo.uploadedByRole}</span>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-white/60 mt-0.5">
+                      {photo.createdAt ? formatRelativeTime(photo.createdAt) : "Existing photo"}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="flex h-56 w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-white">

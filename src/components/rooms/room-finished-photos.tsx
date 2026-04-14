@@ -90,6 +90,9 @@ export function RoomFinishedPhotos({
             uploadKind: "room_finished_photo",
             stage: "installed_pending_approval" as const,
             createdAt: now,
+            uploadedByUserId: null,
+            uploadedByName: null,
+            uploadedByRole: null,
           })),
         ]);
       } finally {

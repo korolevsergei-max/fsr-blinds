@@ -56,9 +56,6 @@ export function ManagementRoomDetail({
           mediaItems={mediaItems}
           roomId={roomId}
           isManufacturedComplete={milestones.allManufactured}
-          getEditHref={(winId) =>
-            `/management/units/${id}/rooms/${roomId}/windows/new?edit=${winId}`
-          }
           getStageNavProps={(winId) => ({
             unitId: id,
             roomId,

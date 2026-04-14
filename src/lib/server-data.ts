@@ -45,6 +45,9 @@ type MediaUploadRow = {
   stage: string | null;
   phase: string | null;
   created_at: string;
+  uploaded_by_user_id: string | null;
+  uploaded_by_name: string | null;
+  uploaded_by_role: string | null;
 };
 
 type ManufacturingEscalationRow = {
@@ -490,6 +493,9 @@ export type UnitStageMediaItem = {
   uploadKind: string;
   stage: UnitPhotoStage;
   createdAt: string;
+  uploadedByUserId: string | null;
+  uploadedByName: string | null;
+  uploadedByRole: string | null;
 };
 
 function normalizeMediaStage(
@@ -560,23 +566,56 @@ export async function loadUnitStageMedia(
   unitId: string
 ): Promise<UnitStageMediaItem[]> {
   const supabase = await createClient();
-  const [{ data: media, error: mediaError }, { data: rooms, error: roomError }] =
-    await Promise.all([
-      supabase
-        .from("media_uploads")
-        .select(
-          "id, public_url, label, unit_id, room_id, window_id, upload_kind, stage, phase, created_at"
-        )
-        .eq("unit_id", unitId)
-        .order("created_at", { ascending: false }),
-      supabase.from("rooms").select("id, name").eq("unit_id", unitId),
-    ]);
 
-  if (mediaError) {
-    throw new Error(
-      `${mediaError.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
-    );
+  // Try selecting with uploader columns (added in 20260414 migration).
+  // If those columns don't exist yet, PostgREST returns a 400 — fall back
+  // to the base column set so the app keeps working before migration runs.
+  let media: MediaUploadRow[] | null = null;
+  let hasUploaderColumns = true;
+
+  const fullSelect =
+    "id, public_url, label, unit_id, room_id, window_id, upload_kind, stage, phase, created_at, uploaded_by_user_id, uploaded_by_name, uploaded_by_role";
+  const baseSelect =
+    "id, public_url, label, unit_id, room_id, window_id, upload_kind, stage, phase, created_at";
+
+  const [primaryResult, { data: rooms, error: roomError }] = await Promise.all([
+    supabase
+      .from("media_uploads")
+      .select(fullSelect)
+      .eq("unit_id", unitId)
+      .order("created_at", { ascending: false }),
+    supabase.from("rooms").select("id, name").eq("unit_id", unitId),
+  ]);
+
+  if (primaryResult.error) {
+    // If the error looks like a missing-column error, retry without uploader cols.
+    const msg = primaryResult.error.message ?? "";
+    if (
+      msg.includes("uploaded_by") ||
+      msg.includes("column") ||
+      primaryResult.error.code === "42703"
+    ) {
+      hasUploaderColumns = false;
+      const fallback = await supabase
+        .from("media_uploads")
+        .select(baseSelect)
+        .eq("unit_id", unitId)
+        .order("created_at", { ascending: false });
+      if (fallback.error) {
+        throw new Error(
+          `${fallback.error.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
+        );
+      }
+      media = (fallback.data ?? []) as MediaUploadRow[];
+    } else {
+      throw new Error(
+        `${primaryResult.error.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
+      );
+    }
+  } else {
+    media = (primaryResult.data ?? []) as MediaUploadRow[];
   }
+
   if (roomError) {
     throw new Error(roomError.message);
   }
@@ -598,7 +637,7 @@ export async function loadUnitStageMedia(
     (windows ?? []).map((window) => [window.id, { label: window.label, roomId: window.room_id }])
   );
 
-  return ((media ?? []) as MediaUploadRow[]).map((item) => {
+  return (media ?? []).map((item) => {
     const windowMeta = item.window_id ? windowMap.get(item.window_id) : null;
     return {
       id: item.id,
@@ -612,6 +651,9 @@ export async function loadUnitStageMedia(
       uploadKind: item.upload_kind,
       stage: normalizeMediaStage(item.stage, item.phase),
       createdAt: item.created_at,
+      uploadedByUserId: hasUploaderColumns ? (item.uploaded_by_user_id ?? null) : null,
+      uploadedByName: hasUploaderColumns ? (item.uploaded_by_name ?? null) : null,
+      uploadedByRole: hasUploaderColumns ? (item.uploaded_by_role ?? null) : null,
     };
   });
 }

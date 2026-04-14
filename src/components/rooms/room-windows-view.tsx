@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, CheckCircle, Images, Ruler, Trash, X } from "@phosphor-icons/react";
+import { Camera, CaretLeft, CaretRight, CheckCircle, Images, Ruler, Trash, User, X } from "@phosphor-icons/react";
 import { getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -13,6 +13,18 @@ import { WindowStageNav } from "@/components/window-stage-nav";
 import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 type ImageOrientation = "portrait" | "landscape" | "square";
 type GalleryItem = {
   key: string;
@@ -21,22 +33,25 @@ type GalleryItem = {
   url: string;
   title: string;
   createdAt: string | null;
+  uploadedByName: string | null;
+  uploadedByRole: string | null;
 };
 
 interface RoomWindowsViewProps {
   data: AppDataset;
   mediaItems: UnitStageMediaItem[];
   roomId: string;
-  /** When provided, renders an edit link per window (installer only). */
-  getEditHref?: (windowId: string) => string;
-  /** When provided, renders direct stage upload/edit links (installer only). */
+  /**
+   * When provided, stage tabs become non-navigating buttons and a stage-aware
+   * Edit button is shown. Props are used to build edit page URLs per stage.
+   */
   getStageNavProps?: (windowId: string) => {
     unitId: string;
     roomId: string;
     windowId: string;
     routeBasePath?: "/installer/units" | "/management/units" | "/scheduler/units";
   };
-  /** When provided, renders an "Add Window" CTA (installer only). */
+  /** When provided, renders an "Add Window" CTA. */
   addWindowHref?: string;
   /** When provided, renders a Delete button per window with confirmation. */
   onDeleteWindow?: (windowId: string) => Promise<void>;
@@ -56,7 +71,6 @@ export function RoomWindowsView({
   data,
   mediaItems,
   roomId,
-  getEditHref,
   getStageNavProps,
   addWindowHref,
   onDeleteWindow,
@@ -67,6 +81,11 @@ export function RoomWindowsView({
     Record<string, ImageOrientation>
   >({});
   const [galleryWindowId, setGalleryWindowId] = useState<string | null>(null);
+  const [photoIndexByWindowId, setPhotoIndexByWindowId] = useState<Record<string, number>>({});
+  // User-selected active stage per window card (defaults to furthest-along stage)
+  const [activeStageByWindowId, setActiveStageByWindowId] = useState<
+    Record<string, "before" | "bracketed" | "installed">
+  >({});
   const [confirmDeleteWindowId, setConfirmDeleteWindowId] = useState<string | null>(null);
   const [isPendingDelete, startDeleteTransition] = useTransition();
 
@@ -113,6 +132,8 @@ export function RoomWindowsView({
           url: win.photoUrl,
           title: `${win.label} ${STAGE_META.pre.label}`,
           createdAt: null,
+          uploadedByName: null,
+          uploadedByRole: null,
         });
       }
 
@@ -135,6 +156,8 @@ export function RoomWindowsView({
           url: item.publicUrl,
           title: item.label?.trim() || `${win.label} ${STAGE_META[stage].label}`,
           createdAt: item.createdAt,
+          uploadedByName: item.uploadedByName ?? null,
+          uploadedByRole: item.uploadedByRole ?? null,
         });
       }
 
@@ -216,10 +239,34 @@ export function RoomWindowsView({
           }
 
           const galleryCount = windowGalleryMap.get(win.id)?.length ?? 0;
-          const selectedImageUrl =
-            stageOptions.find((o) => o.key === "pre")?.url ??
-            stageOptions[0]?.url ??
-            null;
+          // Default to furthest-along stage; user can tap a pill to switch
+          const defaultStage: "before" | "bracketed" | "installed" = win.installed
+            ? "installed"
+            : win.bracketed
+              ? "bracketed"
+              : "before";
+          const activeNavStage = activeStageByWindowId[win.id] ?? defaultStage;
+          const activeStageKey: WindowStageKey =
+            activeNavStage === "before" ? "pre" : activeNavStage;
+
+          // Collect all photos for the active stage (newest first from media, legacy photoUrl appended for "pre")
+          const activeStageItemStage = STAGE_META[activeStageKey].itemStage;
+          const activeStageMediaPhotos = (windowMediaByWindowId.get(win.id) ?? []).filter(
+            (item) => item.stage === activeStageItemStage
+          );
+          const activeStagePhotoUrls: string[] =
+            activeStageKey === "pre" &&
+            win.photoUrl &&
+            !activeStageMediaPhotos.some((p) => p.publicUrl === win.photoUrl)
+              ? [...activeStageMediaPhotos.map((p) => p.publicUrl), win.photoUrl]
+              : activeStageMediaPhotos.map((p) => p.publicUrl);
+
+          const photoCount = activeStagePhotoUrls.length;
+          const photoIndex = Math.min(
+            photoIndexByWindowId[win.id] ?? 0,
+            Math.max(0, photoCount - 1)
+          );
+          const selectedImageUrl = activeStagePhotoUrls[photoIndex] ?? null;
 
           const openGallery = () => {
             if (galleryCount > 0) setGalleryWindowId(win.id);
@@ -263,54 +310,100 @@ export function RoomWindowsView({
                       isBracketed={win.bracketed}
                       isManufactured={isManufacturedComplete}
                       isInstalled={win.installed}
-                      active={
-                        win.installed
-                          ? "installed"
-                          : win.bracketed
-                            ? "bracketed"
-                            : "before"
-                      }
+                      active={activeNavStage}
                       compact
+                      onStageSelect={(stage) => {
+                        setActiveStageByWindowId((prev) => ({ ...prev, [win.id]: stage }));
+                        setPhotoIndexByWindowId((prev) => ({ ...prev, [win.id]: 0 }));
+                      }}
                     />
                   </div>
                 )}
 
                 {selectedImageUrl && (
-                  <div
-                    className={`mb-3 overflow-hidden rounded-xl border border-border bg-surface ${
-                      imageOrientationByUrl[selectedImageUrl] === "portrait"
-                        ? "flex justify-center"
-                        : ""
-                    }`}
-                  >
-                    <Image
-                      src={selectedImageUrl}
-                      alt={`${win.label} photo`}
-                      width={800}
-                      height={600}
-                      sizes="(max-width: 640px) 100vw, 560px"
-                      unoptimized={selectedImageUrl.startsWith("blob:")}
-                      onLoad={(e) => {
-                        const img = e.currentTarget;
-                        const next: ImageOrientation =
-                          img.naturalHeight > img.naturalWidth
-                            ? "portrait"
-                            : img.naturalHeight < img.naturalWidth
-                              ? "landscape"
-                              : "square";
-                        setImageOrientationByUrl((cur) => {
-                          if (cur[selectedImageUrl] === next) return cur;
-                          return { ...cur, [selectedImageUrl]: next };
-                        });
-                      }}
-                      className={`w-full bg-surface h-auto ${
-                        imageOrientationByUrl[selectedImageUrl] === "portrait"
-                          ? "max-h-[28rem] object-contain"
-                          : imageOrientationByUrl[selectedImageUrl] === "square"
-                            ? "aspect-square object-cover"
-                            : "aspect-[16/9] object-cover"
-                      }`}
-                    />
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2">
+                      {/* Left arrow — always occupies space to prevent image width shift */}
+                      {photoCount > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPhotoIndexByWindowId((prev) => ({
+                              ...prev,
+                              [win.id]: photoIndex - 1,
+                            }));
+                          }}
+                          disabled={photoIndex === 0}
+                          className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white shadow-sm text-zinc-700 disabled:opacity-20 active:scale-95 transition-transform"
+                          aria-label="Previous photo"
+                        >
+                          <CaretLeft size={18} weight="bold" />
+                        </button>
+                      )}
+
+                      <div
+                        className={`flex-1 overflow-hidden rounded-xl border border-border bg-surface ${
+                          imageOrientationByUrl[selectedImageUrl] === "portrait"
+                            ? "flex justify-center"
+                            : ""
+                        }`}
+                      >
+                        <Image
+                          src={selectedImageUrl}
+                          alt={`${win.label} photo`}
+                          width={800}
+                          height={600}
+                          sizes="(max-width: 640px) 100vw, 560px"
+                          unoptimized={selectedImageUrl.startsWith("blob:")}
+                          onLoad={(e) => {
+                            const img = e.currentTarget;
+                            const next: ImageOrientation =
+                              img.naturalHeight > img.naturalWidth
+                                ? "portrait"
+                                : img.naturalHeight < img.naturalWidth
+                                  ? "landscape"
+                                  : "square";
+                            setImageOrientationByUrl((cur) => {
+                              if (cur[selectedImageUrl] === next) return cur;
+                              return { ...cur, [selectedImageUrl]: next };
+                            });
+                          }}
+                          className={`w-full bg-surface h-auto ${
+                            imageOrientationByUrl[selectedImageUrl] === "portrait"
+                              ? "max-h-[28rem] object-contain"
+                              : imageOrientationByUrl[selectedImageUrl] === "square"
+                                ? "aspect-square object-cover"
+                                : "aspect-[16/9] object-cover"
+                          }`}
+                        />
+                      </div>
+
+                      {/* Right arrow */}
+                      {photoCount > 1 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPhotoIndexByWindowId((prev) => ({
+                              ...prev,
+                              [win.id]: photoIndex + 1,
+                            }));
+                          }}
+                          disabled={photoIndex === photoCount - 1}
+                          className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white shadow-sm text-zinc-700 disabled:opacity-20 active:scale-95 transition-transform"
+                          aria-label="Next photo"
+                        >
+                          <CaretRight size={18} weight="bold" />
+                        </button>
+                      )}
+                    </div>
+
+                    {photoCount > 1 && (
+                      <p className="mt-1.5 text-center text-[11px] font-semibold text-zinc-400">
+                        {photoIndex + 1} of {photoCount}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -363,23 +456,33 @@ export function RoomWindowsView({
                 </div>
 
                 {win.notes && (
-                  <p className="mt-2 line-clamp-1 text-xs italic text-zinc-500">{win.notes}</p>
+                  <p className="mt-2 text-xs italic text-zinc-500">{win.notes}</p>
                 )}
 
-                {(getEditHref || onDeleteWindow) && (
+                {(getStageNavProps || onDeleteWindow) && (
                   <div
                     className="mt-4 flex items-center justify-center gap-2"
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                   >
-                    {getEditHref && (
-                      <Link
-                        href={getEditHref(win.id)}
-                        className="inline-flex flex-1 items-center justify-center rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground"
-                      >
-                        Edit
-                      </Link>
-                    )}
+                    {getStageNavProps && (() => {
+                      const navProps = getStageNavProps(win.id);
+                      const base = navProps.routeBasePath ?? "/installer/units";
+                      const editHref =
+                        activeNavStage === "bracketed"
+                          ? `${base}/${navProps.unitId}/rooms/${navProps.roomId}/windows/${navProps.windowId}/bracketing`
+                          : activeNavStage === "installed"
+                            ? `${base}/${navProps.unitId}/rooms/${navProps.roomId}/windows/${navProps.windowId}/installed`
+                            : `${base}/${navProps.unitId}/rooms/${navProps.roomId}/windows/new?edit=${navProps.windowId}`;
+                      return (
+                        <Link
+                          href={editHref}
+                          className="inline-flex flex-1 items-center justify-center rounded-xl border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground"
+                        >
+                          Edit
+                        </Link>
+                      );
+                    })()}
                     {onDeleteWindow && (
                       <button
                         type="button"
@@ -551,20 +654,23 @@ export function RoomWindowsView({
                                     unoptimized={item.url.startsWith("blob:")}
                                     className="object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                                   />
-                                </div>
-                                <div className="px-3 py-2.5">
-                                  <p className="line-clamp-1 text-xs font-semibold text-foreground">
-                                    {item.title}
-                                  </p>
-                                  <p className="mt-1 text-[11px] text-muted">
-                                    {item.createdAt
-                                      ? new Date(item.createdAt).toLocaleDateString("en-CA", {
-                                          month: "short",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })
-                                      : "Existing window photo"}
-                                  </p>
+                                  {/* Uploader overlay */}
+                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">
+                                    <p className="flex items-center gap-1 text-[10px] font-medium text-white/90 leading-tight">
+                                      <User size={10} />
+                                      {item.uploadedByName ?? "Unknown"}
+                                      {item.uploadedByRole && (
+                                        <span className="capitalize opacity-70">
+                                          · {item.uploadedByRole}
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-[10px] text-white/60 mt-0.5">
+                                      {item.createdAt
+                                        ? formatRelativeTime(item.createdAt)
+                                        : "Existing photo"}
+                                    </p>
+                                  </div>
                                 </div>
                               </a>
                             ))}

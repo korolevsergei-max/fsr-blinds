@@ -7,7 +7,7 @@ import { WindowForm } from "@/components/windows/window-form";
 export default function SchedulerNewWindowPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const { activityLog, milestones } = useUnitSupplementalData(id);
+  const { activityLog, mediaItems, milestones } = useUnitSupplementalData(id);
   const t = searchParams.get("t");
   const formKey = t ?? "default";
 
@@ -15,6 +15,7 @@ export default function SchedulerNewWindowPage() {
     <WindowForm
       key={formKey}
       activityLog={activityLog}
+      mediaItems={mediaItems}
       milestones={milestones}
       routeBasePath="/scheduler/units"
     />

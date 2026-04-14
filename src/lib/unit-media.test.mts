@@ -54,6 +54,9 @@ function makeItem(overrides: Partial<UnitStageMediaItem> = {}): UnitStageMediaIt
     uploadKind: "window_measure",
     stage: "scheduled_bracketing",
     createdAt: "2026-04-13T10:00:00.000Z",
+    uploadedByUserId: null,
+    uploadedByName: null,
+    uploadedByRole: null,
     ...overrides,
   };
 }

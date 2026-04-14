@@ -131,6 +131,21 @@ function getStageForWindowUpload(): UnitPhotoStage {
   return "scheduled_bracketing";
 }
 
+const MAX_PHOTOS_PER_STAGE = 3;
+
+async function countWindowStagePhotos(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  windowId: string,
+  stage: string
+): Promise<number> {
+  const { count } = await supabase
+    .from("media_uploads")
+    .select("id", { count: "exact", head: true })
+    .eq("window_id", windowId)
+    .eq("stage", stage);
+  return count ?? 0;
+}
+
 function formatStagePhotoLabel(
   stage: UnitPhotoStage,
   customLabel: string,
@@ -420,15 +435,19 @@ async function logUnitActivity(
  */
 async function resolveFieldActor(
   unitInstallerName: string | null | undefined
-): Promise<{ actorRole: string; actorName: string }> {
+): Promise<{ actorRole: string; actorName: string; actorUserId: string | null }> {
   const user = await getCurrentUser();
   if (user?.role === "owner") {
-    return { actorRole: "owner", actorName: user.displayName };
+    return { actorRole: "owner", actorName: user.displayName, actorUserId: user.id };
   }
   if (user?.role === "scheduler") {
-    return { actorRole: "scheduler", actorName: user.displayName };
+    return { actorRole: "scheduler", actorName: user.displayName, actorUserId: user.id };
   }
-  return { actorRole: "installer", actorName: unitInstallerName ?? "Installer" };
+  return {
+    actorRole: "installer",
+    actorName: user?.displayName ?? unitInstallerName ?? "Installer",
+    actorUserId: user?.id ?? null,
+  };
 }
 
 /** Looks up the scheduler_id responsible for a unit (from scheduler_unit_assignments). Returns null if unassigned. */
@@ -1481,6 +1500,8 @@ export async function createWindowWithPhoto(
     }
 
     if (publicUrl && storagePath) {
+      const { actorRole: uploadRole, actorName: uploadName, actorUserId: uploadUserId } =
+        await resolveFieldActor(null);
       const { error: medErr } = await supabase.from("media_uploads").insert({
         id: `med-${crypto.randomUUID()}`,
         storage_path: storagePath,
@@ -1492,6 +1513,9 @@ export async function createWindowWithPhoto(
         room_id: roomId,
         window_id: windowId,
         label,
+        uploaded_by_user_id: uploadUserId,
+        uploaded_by_name: uploadName,
+        uploaded_by_role: uploadRole,
       });
       if (medErr) {
         await supabase.from("windows").delete().eq("id", windowId);
@@ -1706,7 +1730,19 @@ export async function updateWindowWithOptionalPhoto(
       return { ok: false, error: upWin.message };
     }
 
+    const { data: unit } = await supabase
+      .from("units")
+      .select("assigned_installer_name, status")
+      .eq("id", unitId)
+      .single();
+    const { actorRole, actorName, actorUserId } = await resolveFieldActor(unit?.assigned_installer_name);
+
     if (publicUrl && storagePath) {
+      const existingCount = await countWindowStagePhotos(supabase, windowId, uploadStage);
+      if (existingCount >= MAX_PHOTOS_PER_STAGE) {
+        await supabase.storage.from(BUCKET).remove([storagePath]);
+        return { ok: false, error: `Maximum of ${MAX_PHOTOS_PER_STAGE} photos per stage allowed.` };
+      }
       const { error: mediaInsertError } = await supabase.from("media_uploads").insert({
         id: `med-${crypto.randomUUID()}`,
         storage_path: storagePath,
@@ -1718,6 +1754,9 @@ export async function updateWindowWithOptionalPhoto(
         room_id: roomId,
         window_id: windowId,
         label: `${label} (updated)`,
+        uploaded_by_user_id: actorUserId,
+        uploaded_by_name: actorName,
+        uploaded_by_role: actorRole,
       });
       if (mediaInsertError) {
         await supabase.storage.from(BUCKET).remove([storagePath]);
@@ -1725,14 +1764,8 @@ export async function updateWindowWithOptionalPhoto(
       }
     }
 
-    const { data: unit } = await supabase
-      .from("units")
-      .select("assigned_installer_name, status")
-      .eq("id", unitId)
-      .single();
     const prevStatus = (unit?.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const { actorRole, actorName } = await resolveFieldActor(unit?.assigned_installer_name);
 
     after(async () => {
       const db = createAdminClient();
@@ -1853,9 +1886,16 @@ export async function uploadWindowPostBracketingPhoto(
       return { ok: false, error: windowUpdateError.message };
     }
 
+    const { actorRole, actorName, actorUserId } = await resolveFieldActor(unitResult.data.assigned_installer_name);
+
     let mediaId: string | undefined;
     let photoUrl: string | null = null;
     if (hasPhoto && photo instanceof File) {
+      const existingCount = await countWindowStagePhotos(supabase, windowId, "bracketed_measured");
+      if (existingCount >= MAX_PHOTOS_PER_STAGE) {
+        return { ok: false, error: `Maximum of ${MAX_PHOTOS_PER_STAGE} photos per stage allowed.` };
+      }
+
       const ext =
         (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const path = `${unitId}/${roomId}/post-bracketing/${crypto.randomUUID()}.${ext}`;
@@ -1887,6 +1927,9 @@ export async function uploadWindowPostBracketingPhoto(
         room_id: roomId,
         window_id: windowId,
         label: `${windowRow.label} — Post-bracketing`,
+        uploaded_by_user_id: actorUserId,
+        uploaded_by_name: actorName,
+        uploaded_by_role: actorRole,
       });
       if (mediaError) {
         await supabase.storage.from(BUCKET).remove([path]);
@@ -1898,7 +1941,6 @@ export async function uploadWindowPostBracketingPhoto(
     const capturedHasPhoto = hasPhoto;
     const prevStatus = (unitResult.data.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const { actorRole, actorName } = await resolveFieldActor(unitResult.data.assigned_installer_name);
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
@@ -2012,9 +2054,16 @@ export async function uploadWindowInstalledPhoto(
       return { ok: false, error: windowUpdateError.message };
     }
 
+    const { actorRole, actorName, actorUserId } = await resolveFieldActor(unitRow.assigned_installer_name);
+
     let mediaId: string | undefined;
     let photoUrl: string | null = null;
     if (hasPhoto && photo instanceof File) {
+      const existingCount = await countWindowStagePhotos(supabase, windowId, "installed_pending_approval");
+      if (existingCount >= MAX_PHOTOS_PER_STAGE) {
+        return { ok: false, error: `Maximum of ${MAX_PHOTOS_PER_STAGE} photos per stage allowed.` };
+      }
+
       const ext =
         (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       const path = `${unitId}/${roomId}/installed/${crypto.randomUUID()}.${ext}`;
@@ -2046,6 +2095,9 @@ export async function uploadWindowInstalledPhoto(
         room_id: roomId,
         window_id: windowId,
         label: `${windowRow.label} — Installed`,
+        uploaded_by_user_id: actorUserId,
+        uploaded_by_name: actorName,
+        uploaded_by_role: actorRole,
       });
       if (mediaError) {
         await supabase.storage.from(BUCKET).remove([path]);
@@ -2057,7 +2109,6 @@ export async function uploadWindowInstalledPhoto(
     const capturedHasPhoto2 = hasPhoto;
     const prevStatus = (unitRow.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const { actorRole, actorName } = await resolveFieldActor(unitRow.assigned_installer_name);
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
@@ -2084,6 +2135,54 @@ export async function uploadWindowInstalledPhoto(
       photoUrl,
       photoCountDelta: hasPhoto ? 1 : 0,
     };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function deleteWindowStagePhoto(
+  mediaId: string,
+  unitId: string
+): Promise<ActionResult> {
+  try {
+    if (!mediaId || !unitId) return { ok: false, error: "Missing required fields." };
+
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+
+    const supabase = await createClient();
+
+    // Fetch the media record and verify it belongs to this unit.
+    const { data: mediaRow, error: fetchError } = await supabase
+      .from("media_uploads")
+      .select("id, storage_path, unit_id, uploaded_by_user_id")
+      .eq("id", mediaId)
+      .single();
+
+    if (fetchError || !mediaRow) return { ok: false, error: "Photo not found." };
+    if (mediaRow.unit_id !== unitId) return { ok: false, error: "Photo does not belong to this unit." };
+
+    // Permission: owners and schedulers can delete any photo; installers can only delete their own.
+    if (user.role === "installer" && mediaRow.uploaded_by_user_id !== user.id) {
+      return { ok: false, error: "You can only delete photos you uploaded." };
+    }
+
+    // Delete from storage first.
+    if (mediaRow.storage_path) {
+      await supabase.storage.from(BUCKET).remove([mediaRow.storage_path]);
+    }
+
+    // Delete the DB record.
+    const { error: deleteError } = await supabase
+      .from("media_uploads")
+      .delete()
+      .eq("id", mediaId);
+
+    if (deleteError) return { ok: false, error: deleteError.message };
+
+    revalidateUnit(unitId);
+    return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };

@@ -8,18 +8,22 @@ import {
   Camera,
   CheckCircle,
   ClockCounterClockwise,
+  Plus,
   Trash,
   UploadSimple,
+  User,
 } from "@phosphor-icons/react";
 import {
   createWindowWithPhoto,
   deleteWindow,
   deleteWindowMeasurementPhoto,
+  deleteWindowStagePhoto,
   undoWindowStage,
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
+import type { UnitStageMediaItem } from "@/lib/server-data";
 import { type BlindType, type ChainSide, type RiskFlag, type UnitActivityLog } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
@@ -30,6 +34,21 @@ import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload"
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
+import { removeUnitStageMediaItem } from "@/lib/use-unit-supplemental";
+
+const MAX_MEASURED_PHOTOS = 3;
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function formatActivityDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -76,11 +95,13 @@ function buildWindowActivityDescription(log: UnitActivityLog): string {
 export function WindowForm({
   data,
   activityLog,
+  mediaItems = [],
   milestones,
   routeBasePath = "/installer/units",
 }: {
   data?: AppDataset;
   activityLog: UnitActivityLog[];
+  mediaItems?: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
   routeBasePath?: "/installer/units" | "/scheduler/units" | "/management/units";
 }) {
@@ -149,6 +170,7 @@ export function WindowForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -651,6 +673,100 @@ export function WindowForm({
             </button>
           )}
         </motion.div>
+
+        {/* Additional measured photos — edit mode only */}
+        {existingWindow && unit && (() => {
+          const additionalPhotos = mediaItems
+            .filter(
+              (item) =>
+                item.windowId === existingWindow.id &&
+                item.stage === "scheduled_bracketing" &&
+                item.uploadKind === "window_measure"
+            )
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+          if (additionalPhotos.length === 0) return null;
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.20, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-1 flex items-center justify-between">
+                <span>All Measured Photos</span>
+                <span className="font-normal normal-case text-zinc-400">
+                  {additionalPhotos.length}/{MAX_MEASURED_PHOTOS}
+                </span>
+              </h2>
+              <div className="grid grid-cols-2 gap-2.5 mt-3">
+                {additionalPhotos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-zinc-100"
+                  >
+                    <Image
+                      src={photo.publicUrl}
+                      alt={photo.label ?? "Photo"}
+                      fill
+                      sizes="(max-width: 640px) 50vw, 280px"
+                      className="object-cover"
+                    />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">
+                      <p className="flex items-center gap-1 text-[10px] font-medium text-white/90 leading-tight">
+                        <User size={10} />
+                        {photo.uploadedByName ?? "Unknown"}
+                        {photo.uploadedByRole && (
+                          <span className="capitalize opacity-70">· {photo.uploadedByRole}</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-white/60 mt-0.5">
+                        {formatRelativeTime(photo.createdAt)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={deletingMediaId === photo.id}
+                      onClick={async () => {
+                        setDeletingMediaId(photo.id);
+                        try {
+                          const result = await deleteWindowStagePhoto(photo.id, unit.id);
+                          if (result.ok) {
+                            removeUnitStageMediaItem(unit.id, photo.id);
+                            datasetCtx?.patchData((prev) =>
+                              reconcileUnitDerivedState(prev, unit.id, { photoDelta: -1 })
+                            );
+                          }
+                        } finally {
+                          setDeletingMediaId(null);
+                        }
+                      }}
+                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/70 disabled:opacity-40"
+                    >
+                      {deletingMediaId === photo.id ? (
+                        <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                      ) : (
+                        <Trash size={13} weight="bold" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+                {additionalPhotos.length < MAX_MEASURED_PHOTOS && !photoFile && (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoPickerOpen(true)}
+                    className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 transition-all active:scale-[0.97] hover:bg-zinc-100/60"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white border border-zinc-200 shadow-sm">
+                      <Plus size={20} className="text-zinc-500" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-zinc-500">Add Photo</span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          );
+        })()}
 
         <motion.div
           initial={{ opacity: 0, y: 8 }}

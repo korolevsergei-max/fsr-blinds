@@ -7,11 +7,11 @@ import { WindowForm } from "@/components/windows/window-form";
 export default function InstallerNewWindowPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const { activityLog, milestones } = useUnitSupplementalData(id);
+  const { activityLog, mediaItems, milestones } = useUnitSupplementalData(id);
   const t = searchParams.get("t");
   const formKey = t ?? "default";
 
   return (
-    <WindowForm key={formKey} activityLog={activityLog} milestones={milestones} />
+    <WindowForm key={formKey} activityLog={activityLog} mediaItems={mediaItems} milestones={milestones} />
   );
 }
