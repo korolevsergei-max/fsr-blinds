@@ -43,7 +43,7 @@ export function WindowStageNav({
       href: `${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/bracketing`,
     },
   ];
-  const manufacturedClasses = `flex items-center justify-center gap-1.5 rounded-xl text-center font-bold tracking-tight ${
+  const manufacturedClasses = `flex items-center justify-center gap-1 min-w-0 rounded-xl text-center font-bold tracking-tight ${
     compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
   } ${
     isManufactured ? "bg-emerald-50 text-emerald-700" : "bg-white text-zinc-500"
@@ -59,7 +59,7 @@ export function WindowStageNav({
         <Link
           key={item.key}
           href={item.href}
-          className={`flex items-center justify-center gap-1.5 rounded-xl text-center font-bold tracking-tight transition-all active:scale-[0.98] ${
+          className={`flex items-center justify-center gap-1 min-w-0 rounded-xl text-center font-bold tracking-tight transition-all active:scale-[0.98] ${
             compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
           } ${
             item.key === active
@@ -75,21 +75,21 @@ export function WindowStageNav({
             <CheckCircle
               size={item.key === active ? 14 : 12}
               weight="fill"
-              className={item.key === active ? "text-white" : "text-emerald-600"}
+              className={`shrink-0 ${item.key === active ? "text-white" : "text-emerald-600"}`}
             />
           )}
-          {item.label}
+          <span className="truncate">{item.label}</span>
         </Link>
       ))}
       <div className={manufacturedClasses} aria-label="Manufactured progress">
         {isManufactured && (
           <CheckCircle size={12} weight="fill" className="shrink-0 text-emerald-600" />
         )}
-        Built
+        <span className="truncate">Built</span>
       </div>
       <Link
         href={`${routeBasePath}/${unitId}/rooms/${roomId}/windows/${windowId}/installed`}
-        className={`flex items-center justify-center gap-1.5 rounded-xl text-center font-bold tracking-tight transition-all active:scale-[0.98] ${
+        className={`flex items-center justify-center gap-1 min-w-0 rounded-xl text-center font-bold tracking-tight transition-all active:scale-[0.98] ${
           compact ? "px-2 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
         } ${
           active === "installed"
@@ -105,10 +105,10 @@ export function WindowStageNav({
           <CheckCircle
             size={active === "installed" ? 14 : 12}
             weight="fill"
-            className={active === "installed" ? "text-white" : "text-emerald-600"}
+            className={`shrink-0 ${active === "installed" ? "text-white" : "text-emerald-600"}`}
           />
         )}
-        Installed
+        <span className="truncate">Installed</span>
       </Link>
     </div>
   );

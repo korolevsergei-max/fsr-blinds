@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireOwnerOrScheduler, getLinkedSchedulerId } from "@/lib/auth";
+import { requireOwnerOrScheduler, getLinkedSchedulerId, getCurrentUser } from "@/lib/auth";
 import type { AppUser } from "@/lib/auth";
 import { getSchedulerScopedUnitIds, isSchedulerScopedUnit } from "@/lib/scheduler-scope";
 import {
@@ -411,6 +411,24 @@ async function logUnitActivity(
     details: details ?? null,
     created_at: new Date().toISOString(),
   });
+}
+
+/**
+ * Resolves the actor role and display name for field-work mutations.
+ * Owner → "owner"/display name; scheduler → "scheduler"/display name;
+ * anyone else (installer) → "installer"/unit's assigned installer name.
+ */
+async function resolveFieldActor(
+  unitInstallerName: string | null | undefined
+): Promise<{ actorRole: string; actorName: string }> {
+  const user = await getCurrentUser();
+  if (user?.role === "owner") {
+    return { actorRole: "owner", actorName: user.displayName };
+  }
+  if (user?.role === "scheduler") {
+    return { actorRole: "scheduler", actorName: user.displayName };
+  }
+  return { actorRole: "installer", actorName: unitInstallerName ?? "Installer" };
 }
 
 /** Looks up the scheduler_id responsible for a unit (from scheduler_unit_assignments). Returns null if unassigned. */
@@ -1280,13 +1298,13 @@ export async function deleteWindow(
     ]);
 
     const capturedWinRow = winRow;
-    const actorName = unitRow?.assigned_installer_name ?? "Installer";
+    const { actorRole, actorName } = await resolveFieldActor(unitRow?.assigned_installer_name);
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
         db,
         unitId,
-        "installer",
+        actorRole,
         actorName,
         "window_deleted",
         {
@@ -1489,14 +1507,14 @@ export async function createWindowWithPhoto(
       .single();
     const prevStatus = (unit?.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const actorName = unit?.assigned_installer_name ?? "Installer";
+    const { actorRole, actorName } = await resolveFieldActor(unit?.assigned_installer_name);
 
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
         db,
         unitId,
-        "installer",
+        actorRole,
         actorName,
         "window_created",
         {
@@ -1714,14 +1732,14 @@ export async function updateWindowWithOptionalPhoto(
       .single();
     const prevStatus = (unit?.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const actorName = unit?.assigned_installer_name ?? "Installer";
+    const { actorRole, actorName } = await resolveFieldActor(unit?.assigned_installer_name);
 
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
         db,
         unitId,
-        "installer",
+        actorRole,
         actorName,
         "window_updated",
         {
@@ -1880,13 +1898,13 @@ export async function uploadWindowPostBracketingPhoto(
     const capturedHasPhoto = hasPhoto;
     const prevStatus = (unitResult.data.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const actorName = unitResult.data.assigned_installer_name ?? "Installer";
+    const { actorRole, actorName } = await resolveFieldActor(unitResult.data.assigned_installer_name);
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
         db,
         unitId,
-        "installer",
+        actorRole,
         actorName,
         capturedHasPhoto ? "post_bracketing_photo_added" : "bracketing_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel, riskFlag, hasPhoto: capturedHasPhoto }
@@ -2039,13 +2057,13 @@ export async function uploadWindowInstalledPhoto(
     const capturedHasPhoto2 = hasPhoto;
     const prevStatus = (unitRow.status as UnitStatus | undefined) ?? "not_started";
     const unitStatus = await finalizeUnitMutation(supabase, unitId, [roomId]);
-    const actorName = unitRow.assigned_installer_name ?? "Installer";
+    const { actorRole, actorName } = await resolveFieldActor(unitRow.assigned_installer_name);
     after(async () => {
       const db = createAdminClient();
       await logUnitActivity(
         db,
         unitId,
-        "installer",
+        actorRole,
         actorName,
         capturedHasPhoto2 ? "installed_photo_added" : "installation_completed",
         { roomId, windowId, windowLabel: capturedWindowLabel2, riskFlag, hasPhoto: capturedHasPhoto2 }

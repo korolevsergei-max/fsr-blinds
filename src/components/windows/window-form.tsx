@@ -82,7 +82,7 @@ export function WindowForm({
   data?: AppDataset;
   activityLog: UnitActivityLog[];
   milestones: UnitMilestoneCoverage;
-  routeBasePath?: "/installer/units" | "/scheduler/units";
+  routeBasePath?: "/installer/units" | "/scheduler/units" | "/management/units";
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const router = useRouter();

@@ -32,7 +32,7 @@ export function InstalledPhotoForm({
   data?: AppDataset;
   mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
-  routeBasePath?: "/installer/units" | "/scheduler/units";
+  routeBasePath?: "/installer/units" | "/scheduler/units" | "/management/units";
 }) {
   const { id, roomId, windowId } = useParams<{
     id: string;

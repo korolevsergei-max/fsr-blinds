@@ -1,12 +1,11 @@
-import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
-import { WindowStageReadonlyView } from "@/components/windows/window-stage-readonly-view";
+"use client";
 
-export default async function ManagementWindowInstalledPage({
-  params,
-}: {
-  params: Promise<{ id: string; roomId: string; windowId: string }>;
-}) {
-  const { id } = await params;
-  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
-  return <WindowStageReadonlyView mediaItems={mediaItems} milestones={milestones} mode="installed" />;
+import { useParams } from "next/navigation";
+import { useUnitMediaAndMilestones } from "@/lib/use-unit-supplemental";
+import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
+
+export default function ManagementInstalledPhotoPage() {
+  const { id } = useParams<{ id: string }>();
+  const { mediaItems, milestones } = useUnitMediaAndMilestones(id);
+  return <InstalledPhotoForm mediaItems={mediaItems} milestones={milestones} routeBasePath="/management/units" />;
 }

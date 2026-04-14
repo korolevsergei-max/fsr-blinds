@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { WarningCircle } from "@phosphor-icons/react";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import {
@@ -9,8 +10,10 @@ import {
 
 export function UnitEscalationsPanel({
   escalations,
+  getEscalationHref,
 }: {
   escalations: UnitEscalationSummary[];
+  getEscalationHref?: (item: UnitEscalationSummary) => string | undefined;
 }) {
   if (escalations.length === 0) return null;
 
@@ -29,8 +32,9 @@ export function UnitEscalationsPanel({
       </div>
 
       <div className="flex flex-col divide-y divide-amber-200/70">
-        {escalations.map((item) => (
-          <div key={item.windowId} className="px-4 py-3">
+        {escalations.map((item) => {
+          const href = getEscalationHref?.(item);
+          const inner = (
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">
@@ -54,8 +58,22 @@ export function UnitEscalationsPanel({
                 kind={item.issueType === "client_approval" ? "client_approval" : "manufacturing"}
               />
             </div>
-          </div>
-        ))}
+          );
+
+          return href ? (
+            <Link
+              key={item.windowId}
+              href={href}
+              className="block px-4 py-3 hover:bg-amber-100/60 active:bg-amber-100 transition-colors"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div key={item.windowId} className="px-4 py-3">
+              {inner}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

@@ -38,6 +38,7 @@ import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-mi
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag, getUnitEscalations } from "@/lib/window-issues";
+import { resolveEscalationHref } from "@/lib/escalation-helpers";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -476,7 +477,14 @@ export function ManagementUnitDetail({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <UnitEscalationsPanel escalations={escalations} />
+          <UnitEscalationsPanel
+            escalations={escalations}
+            getEscalationHref={(item) =>
+              unitId
+                ? resolveEscalationHref(item, unitWindows, unitId, "/management/units")
+                : undefined
+            }
+          />
         </motion.div>
 
         {/* Rooms preview */}
