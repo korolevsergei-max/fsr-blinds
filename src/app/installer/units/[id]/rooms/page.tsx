@@ -5,5 +5,5 @@ import { CreateRooms } from "./create-rooms";
 
 export default function InstallerRoomsPage() {
   const { data, patchData } = useAppDataset();
-  return <CreateRooms data={data} patchData={patchData} />;
+  return <CreateRooms data={data} patchData={patchData} routeBasePath="/installer/units" />;
 }

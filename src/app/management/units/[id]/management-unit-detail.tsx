@@ -522,6 +522,25 @@ export function ManagementUnitDetail({
           </motion.div>
         )}
 
+        {/* Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col gap-3"
+        >
+          <Link href={`/management/units/${unit.id}/rooms`}>
+            <Button fullWidth size="lg">
+              Manage rooms
+            </Button>
+          </Link>
+          <Link href={`/management/units/${unit.id}/summary`}>
+            <Button variant="secondary" fullWidth size="lg">
+              View Summary
+            </Button>
+          </Link>
+        </motion.div>
+
         {/* Activity Log */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}

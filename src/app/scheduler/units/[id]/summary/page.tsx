@@ -5,5 +5,5 @@ import { SummaryView } from "./summary-view";
 
 export default function SummaryPage() {
   const { data } = useAppDataset();
-  return <SummaryView data={data} />;
+  return <SummaryView data={data} routeBasePath="/scheduler/units" />;
 }
