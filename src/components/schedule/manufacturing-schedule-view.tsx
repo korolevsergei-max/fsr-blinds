@@ -240,7 +240,7 @@ export function ManufacturingScheduleView({
   }));
 
   return (
-    <div className="space-y-4 px-4 py-4">
+    <div className="space-y-4 px-4 pt-4 pb-28">
       {showRoleSelector && (
         <div className="flex gap-2">
           {(Object.keys(ROLE_LABELS) as ManufacturingRole[]).map((value) => {
