@@ -10,6 +10,8 @@ export type UnitMilestoneCoverage = {
   allInstalled: boolean;
   /** True when a fully installed legacy unit is treated as manufactured-complete without QC rows. */
   manufacturedByLegacyInstalledFallback: boolean;
+  /** Window IDs that have been individually QC-approved (status = "qc_approved"). */
+  manufacturedWindowIds: string[];
   /** ISO timestamp of when the last required window was measured (or null). */
   measuredCompletedAt: string | null;
   /** ISO timestamp of when the last qualifying bracketed photo was uploaded (or null). */
@@ -65,6 +67,7 @@ export const EMPTY_MILESTONES: UnitMilestoneCoverage = {
   allManufactured: false,
   allInstalled: false,
   manufacturedByLegacyInstalledFallback: false,
+  manufacturedWindowIds: [],
   measuredCompletedAt: null,
   bracketedCompletedAt: null,
   manufacturedCompletedAt: null,

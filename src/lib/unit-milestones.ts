@@ -113,6 +113,7 @@ export async function getUnitMilestoneCoverageWithClient(
     allManufactured: false,
     allInstalled: false,
     manufacturedByLegacyInstalledFallback: false,
+    manufacturedWindowIds: [],
     measuredCompletedAt: null,
     bracketedCompletedAt: null,
     manufacturedCompletedAt: null,
@@ -207,9 +208,11 @@ export async function getUnitMilestoneCoverageWithClient(
     }
   }
 
-  const qcApprovedCount = (productionRows ?? []).filter(
+  const qcApprovedRows = (productionRows ?? []).filter(
     (row) => row.status === "qc_approved"
-  ).length;
+  );
+  const qcApprovedCount = qcApprovedRows.length;
+  const manufacturedWindowIds = qcApprovedRows.map((row) => row.window_id);
   const qcManufacturedCompletedAt =
     qcApprovedCount >= totalWindows
       ? await resolveManufacturedCompletedAt(supabase, unitId)
@@ -238,6 +241,7 @@ export async function getUnitMilestoneCoverageWithClient(
     allManufactured,
     allInstalled,
     manufacturedByLegacyInstalledFallback,
+    manufacturedWindowIds,
     measuredCompletedAt,
     bracketedCompletedAt,
     manufacturedCompletedAt,

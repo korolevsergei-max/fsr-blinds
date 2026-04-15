@@ -56,6 +56,7 @@ export function ManagementRoomDetail({
           mediaItems={mediaItems}
           roomId={roomId}
           isManufacturedComplete={milestones.allManufactured}
+          manufacturedWindowIds={milestones.manufacturedWindowIds}
           getStageNavProps={(winId) => ({
             unitId: id,
             roomId,

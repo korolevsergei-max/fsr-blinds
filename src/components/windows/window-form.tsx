@@ -421,7 +421,11 @@ export function WindowForm({
             active="before"
             isMeasured={existingWindow.measured}
             isBracketed={existingWindow.bracketed}
-            isManufactured={milestones.allManufactured}
+            isManufactured={
+              milestones.manufacturedWindowIds.length > 0
+                ? milestones.manufacturedWindowIds.includes(existingWindow.id)
+                : milestones.allManufactured
+            }
             isInstalled={existingWindow.installed}
             routeBasePath={routeBasePath}
           />

@@ -747,3 +747,105 @@ export async function getUnitSchedulerAssignment(unitId: string): Promise<string
     .single();
   return data?.scheduler_id ?? null;
 }
+
+/**
+ * One-time backfill: ensures every window belonging to an installed (or
+ * manufactured) unit has a window_production_status row with status =
+ * 'qc_approved'. Windows that already have a production row are upserted to
+ * qc_approved; windows with no row get a new qc_approved row inserted.
+ */
+export async function backfillInstalledWindowProductionStatus(): Promise<
+  ActionResult & { updatedCount?: number }
+> {
+  try {
+    await requireOwner();
+    const supabase = await createClient();
+
+    // 1. Fetch all installed (and manufactured) unit IDs + their windows via rooms
+    const { data: unitRows, error: unitsError } = await supabase
+      .from("units")
+      .select("id")
+      .in("status", ["installed", "manufactured"]);
+    if (unitsError) return { ok: false, error: unitsError.message };
+
+    const unitIds = (unitRows ?? []).map((u: { id: string }) => u.id);
+    if (unitIds.length === 0) return { ok: true, updatedCount: 0 };
+
+    const { data: roomRows, error: roomsError } = await supabase
+      .from("rooms")
+      .select("id, unit_id")
+      .in("unit_id", unitIds);
+    if (roomsError) return { ok: false, error: roomsError.message };
+
+    const roomIds = (roomRows ?? []).map((r: { id: string }) => r.id);
+    if (roomIds.length === 0) return { ok: true, updatedCount: 0 };
+
+    const roomUnitMap = new Map<string, string>(
+      (roomRows ?? []).map((r: { id: string; unit_id: string }) => [r.id, r.unit_id])
+    );
+
+    const { data: windowRows, error: windowsError } = await supabase
+      .from("windows")
+      .select("id, room_id")
+      .in("room_id", roomIds);
+    if (windowsError) return { ok: false, error: windowsError.message };
+
+    const windows = windowRows ?? [];
+    const windowIds = windows.map((w: { id: string }) => w.id);
+    if (windowIds.length === 0) return { ok: true, updatedCount: 0 };
+
+    // 2. Fetch existing production rows for these windows
+    const { data: existingRows, error: existingError } = await supabase
+      .from("window_production_status")
+      .select("id, window_id, status")
+      .in("window_id", windowIds);
+    if (existingError) return { ok: false, error: existingError.message };
+
+    const existingByWindowId = new Map<string, { id: string; status: string }>(
+      (existingRows ?? []).map((r: { id: string; window_id: string; status: string }) => [
+        r.window_id,
+        { id: r.id, status: r.status },
+      ])
+    );
+
+    // 3. Build upserts for windows not yet qc_approved
+    const now = new Date().toISOString();
+    const upserts: Record<string, unknown>[] = [];
+
+    for (const window of windows as Array<{ id: string; room_id: string }>) {
+      const unitId = roomUnitMap.get(window.room_id);
+      if (!unitId) continue;
+
+      const existing = existingByWindowId.get(window.id);
+      if (existing?.status === "qc_approved") continue; // already done
+
+      upserts.push({
+        id: existing?.id ?? `ps-${crypto.randomUUID().slice(0, 8)}`,
+        window_id: window.id,
+        unit_id: unitId,
+        status: "qc_approved",
+        cut_at: now,
+        assembled_at: now,
+        qc_approved_at: now,
+        issue_status: "none",
+        issue_reason: "",
+        issue_notes: "",
+        cut_notes: "",
+        assembled_notes: "",
+        qc_notes: "backfilled from installed unit status",
+      });
+    }
+
+    if (upserts.length === 0) return { ok: true, updatedCount: 0 };
+
+    const { error: upsertError } = await supabase
+      .from("window_production_status")
+      .upsert(upserts, { onConflict: "window_id" });
+    if (upsertError) return { ok: false, error: upsertError.message };
+
+    revalidateAllPortalData();
+    return { ok: true, updatedCount: upserts.length };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Backfill failed" };
+  }
+}

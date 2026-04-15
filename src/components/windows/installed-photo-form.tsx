@@ -270,7 +270,11 @@ export function InstalledPhotoForm({
           windowId={windowItem.id}
           isMeasured={windowItem.measured}
           isBracketed={windowItem.bracketed}
-          isManufactured={milestones.allManufactured}
+          isManufactured={
+            milestones.manufacturedWindowIds.length > 0
+              ? milestones.manufacturedWindowIds.includes(windowItem.id)
+              : milestones.allManufactured
+          }
           isInstalled={windowItem.installed}
           active="installed"
           routeBasePath={routeBasePath}

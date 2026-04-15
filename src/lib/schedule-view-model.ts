@@ -165,7 +165,8 @@ export interface ManufacturingDashboardState {
 function getManufacturingRoleDate(
   item: ManufacturingWindowItem,
   role: "cutter" | "assembler" | "qc",
-  currentWorkDate: string
+  currentWorkDate: string,
+  earliestScheduledDate?: string
 ) {
   const rawDate =
     role === "cutter"
@@ -174,7 +175,13 @@ function getManufacturingRoleDate(
         ? item.scheduledAssemblyDate
         : item.scheduledQcDate;
   if (!rawDate) return null;
-  return rawDate < currentWorkDate ? currentWorkDate : rawDate;
+  // Clamp past dates to today. Also clamp the earliest future date bucket to
+  // today so the schedule matches the role queue (which always starts at today).
+  if (rawDate < currentWorkDate) return currentWorkDate;
+  if (earliestScheduledDate && rawDate === earliestScheduledDate && rawDate > currentWorkDate) {
+    return currentWorkDate;
+  }
+  return rawDate;
 }
 
 function isVisibleForManufacturingRole(
@@ -335,12 +342,28 @@ export function buildManufacturingScheduleState(args: {
   });
 
   const roleItems = filteredItems.filter((item) => isVisibleForManufacturingRole(item, role));
+
+  // Find the earliest scheduled date across all role-visible items. If it's in
+  // the future, clamp it to today — mirroring the queue's bucket logic so that
+  // the owner's schedule and the role queue always agree on which day items fall on.
+  const scheduledDates = roleItems
+    .filter((item) => item.issueStatus !== "open")
+    .map((item) =>
+      role === "cutter"
+        ? item.scheduledCutDate
+        : role === "assembler"
+          ? item.scheduledAssemblyDate
+          : item.scheduledQcDate
+    )
+    .filter((d): d is string => d !== null && d >= currentWorkDate);
+  const earliestScheduledDate = scheduledDates.length > 0 ? scheduledDates.sort()[0] : undefined;
+
   const datedEntriesByDate = new Map<string, ManufacturingWindowItem[]>();
   const issueItems: ManufacturingWindowItem[] = [];
   const unscheduledItems: ManufacturingWindowItem[] = [];
 
   for (const item of roleItems) {
-    const roleDate = getManufacturingRoleDate(item, role, currentWorkDate);
+    const roleDate = getManufacturingRoleDate(item, role, currentWorkDate, earliestScheduledDate);
     const inScope = roleDate ? isDateWithinInterval(roleDate, interval.startKey, interval.endKey) : false;
     const hasIssue = item.issueStatus === "open" || Boolean(item.escalation);
 
@@ -366,7 +389,7 @@ export function buildManufacturingScheduleState(args: {
   }).length;
 
   const scheduled = roleItems.filter((item) => {
-    const roleDate = getManufacturingRoleDate(item, role, currentWorkDate);
+    const roleDate = getManufacturingRoleDate(item, role, currentWorkDate, earliestScheduledDate);
     return Boolean(roleDate && isDateWithinInterval(roleDate, interval.startKey, interval.endKey));
   }).length;
 

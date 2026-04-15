@@ -7,6 +7,8 @@ import { signOut } from "@/app/actions/auth-actions";
 import {
   returnWindowToAssembler,
   returnWindowToCutter,
+  undoWindowAssembly,
+  undoWindowCut,
 } from "@/app/actions/manufacturing-actions";
 import type {
   ManufacturingCompletedRoleData,
@@ -243,6 +245,28 @@ export function ManufacturingRoleCompletedScreen({
     });
   };
 
+  const handleUndoCut = (item: ManufacturingCompletedWindowItem) => {
+    startActionTransition(async () => {
+      const result = await undoWindowCut(item.windowId);
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to undo cut.");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const handleUndoAssembly = (item: ManufacturingCompletedWindowItem) => {
+    startActionTransition(async () => {
+      const result = await undoWindowAssembly(item.windowId);
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to undo assembly.");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
   return (
     <div className="space-y-5 px-4 pt-5 pb-4">
       <div className="flex items-start justify-between">
@@ -388,6 +412,8 @@ export function ManufacturingRoleCompletedScreen({
                           (role === "assembler" && item.productionStatus === "assembled") ||
                           (role === "qc" && item.productionStatus === "qc_approved");
                         const canReturnToAssembler = role === "qc" && item.productionStatus === "qc_approved";
+                        const canUndoCut = role === "cutter" && item.productionStatus === "cut";
+                        const canUndoAssembly = role === "assembler" && item.productionStatus === "assembled";
 
                         return (
                           <article
@@ -446,8 +472,26 @@ export function ManufacturingRoleCompletedScreen({
                                 </div>
                               )}
 
-                              {(canReturnToCutter || canReturnToAssembler) && (
+                              {(canReturnToCutter || canReturnToAssembler || canUndoCut || canUndoAssembly) && (
                                 <div className="mt-4 flex flex-wrap gap-2.5">
+                                  {canUndoCut && (
+                                    <button
+                                      disabled={actionPending}
+                                      onClick={() => handleUndoCut(item)}
+                                      className="rounded-full border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-all hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Undo cut
+                                    </button>
+                                  )}
+                                  {canUndoAssembly && (
+                                    <button
+                                      disabled={actionPending}
+                                      onClick={() => handleUndoAssembly(item)}
+                                      className="rounded-full border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-all hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Undo assembly
+                                    </button>
+                                  )}
                                   {canReturnToCutter && (
                                     <button
                                       disabled={actionPending}

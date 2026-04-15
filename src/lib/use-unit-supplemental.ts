@@ -52,6 +52,7 @@ function deriveClientMilestones(
     manufacturedCount: manufacturedComplete ? coverage.totalWindows : 0,
     allManufactured: manufacturedComplete,
     manufacturedByLegacyInstalledFallback: false,
+    manufacturedWindowIds: [],
     measuredCompletedAt: null,
     bracketedCompletedAt: null,
     manufacturedCompletedAt: null,

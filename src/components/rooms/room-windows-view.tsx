@@ -56,6 +56,8 @@ interface RoomWindowsViewProps {
   /** When provided, renders a Delete button per window with confirmation. */
   onDeleteWindow?: (windowId: string) => Promise<void>;
   isManufacturedComplete?: boolean;
+  /** Window IDs that have been individually QC-approved. Takes precedence over isManufacturedComplete for per-window Built status. */
+  manufacturedWindowIds?: string[];
 }
 
 const STAGE_META: Record<
@@ -75,6 +77,7 @@ export function RoomWindowsView({
   addWindowHref,
   onDeleteWindow,
   isManufacturedComplete = false,
+  manufacturedWindowIds,
 }: RoomWindowsViewProps) {
   const windowsList = getWindowsByRoom(data, roomId);
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
@@ -308,7 +311,11 @@ export function RoomWindowsView({
                       {...getStageNavProps(win.id)}
                       isMeasured={win.measured}
                       isBracketed={win.bracketed}
-                      isManufactured={isManufacturedComplete}
+                      isManufactured={
+                        manufacturedWindowIds
+                          ? manufacturedWindowIds.includes(win.id)
+                          : isManufacturedComplete
+                      }
                       isInstalled={win.installed}
                       active={activeNavStage}
                       compact

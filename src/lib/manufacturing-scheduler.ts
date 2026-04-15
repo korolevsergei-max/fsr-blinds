@@ -939,6 +939,20 @@ export async function loadManufacturingRoleSchedule(
     byBucket.set(date, list);
   }
 
+  // Clamp the earliest scheduled date to today so the queue always starts with
+  // a "Today" bucket — cutters/assemblers should work on the next available
+  // items now, not wait until the scheduled date.
+  const dateBucketKeys = [...byBucket.keys()].filter((k) => !k.startsWith("__"));
+  if (dateBucketKeys.length > 0) {
+    const earliestKey = dateBucketKeys.sort()[0];
+    if (earliestKey > currentWorkDate) {
+      const items = byBucket.get(earliestKey)!;
+      byBucket.delete(earliestKey);
+      const existing = byBucket.get(currentWorkDate) ?? [];
+      byBucket.set(currentWorkDate, [...existing, ...items]);
+    }
+  }
+
   const orderedKeys = [...byBucket.keys()].sort((a, b) => {
     const specialOrder = ["__returned__", "__issues__", "__unscheduled__"];
     const aIdx = specialOrder.indexOf(a);
