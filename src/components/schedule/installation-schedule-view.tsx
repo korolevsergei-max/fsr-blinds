@@ -233,7 +233,7 @@ export function InstallationScheduleView({
         )}
 
         {scope !== "month" ? (
-          <div className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-col gap-6 pt-2">
             {interval.days.map((day, index) => {
               const dateKey = formatDateKey(day);
               const entries = state.entriesByDate.get(dateKey) ?? [];
