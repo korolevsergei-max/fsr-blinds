@@ -314,32 +314,6 @@ function getCurrentWorkDate(
     : addWorkingDays(today, 1, settings, overrides);
 }
 
-function findLatestWorkingDayWithCapacity(
-  latestDate: string,
-  capacity: number,
-  loadMap: Map<string, number>,
-  settings: ManufacturingSettings,
-  overrides: Map<string, ManufacturingCalendarOverride>,
-  requiredSlots: number,
-  floorDate: string
-): string | null {
-  if (capacity <= 0) return null;
-
-  let cursor = latestDate < floorDate ? floorDate : latestDate;
-  for (let i = 0; i < 370; i += 1) {
-    if (cursor < floorDate) return null;
-    if (isWorkingDay(cursor, settings, overrides)) {
-      const load = loadMap.get(cursor) ?? 0;
-      if (load + requiredSlots <= capacity) {
-        return cursor;
-      }
-    }
-    const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-    if (nextCursor < floorDate) return null;
-    cursor = nextCursor;
-  }
-  return null;
-}
 
 function pushLoad(loadMap: Map<string, number>, date: string | null) {
   if (!date) return;
@@ -491,216 +465,129 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     }
   }
 
-  const qcCandidates = [...candidatesByUnit.values()]
-    .map((items) =>
-      items
-        .filter((item) => {
-          const status = item.production?.status ?? "pending";
-          return status !== "qc_approved";
-        })
-        .sort((a, b) => buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window)))
-    )
-    .filter((items) => items.length > 0)
-    .sort((a, b) => {
-      const aDate = a[0]?.targetReadyDate ?? "9999-12-31";
-      const bDate = b[0]?.targetReadyDate ?? "9999-12-31";
-      if (aDate !== bDate) return aDate.localeCompare(bDate);
-      return a[0].unit.unit_number.localeCompare(b[0].unit.unit_number);
-    });
-
-  for (const group of qcCandidates) {
-    const unlocked = group.filter((item) => !item.existing?.isScheduleLocked);
-    if (unlocked.length === 0) continue;
-
-    const latestDate = group[0].targetReadyDate;
-    if (!latestDate) continue;
-
-    const sameDay = findLatestWorkingDayWithCapacity(
-      latestDate,
-      settings.qcDailyCapacity,
-      qcLoad,
-      settings,
-      overrides,
-      unlocked.length,
-      currentWorkDate
-    );
-
-    if (sameDay) {
-      for (const item of unlocked) {
-        item.scheduledQcDate = sameDay;
-        pushLoad(qcLoad, sameDay);
-      }
-      continue;
-    }
-
-    const remaining = [...unlocked];
-    let cursor = latestDate < currentWorkDate ? currentWorkDate : latestDate;
-    while (remaining.length > 0) {
-      if (!isWorkingDay(cursor, settings, overrides)) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
-      }
-      const used = qcLoad.get(cursor) ?? 0;
-      const available = Math.max(0, settings.qcDailyCapacity - used);
-      if (available === 0) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
-      }
-      const take = remaining.splice(0, available);
-      for (const item of take) {
-        item.scheduledQcDate = cursor;
-        pushLoad(qcLoad, cursor);
-      }
-      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-      if (nextCursor < currentWorkDate) break;
-      cursor = nextCursor;
-    }
-  }
-
-  const assemblyCandidateGroups = [...candidatesByUnit.values()]
-    .flatMap((items) => {
-      const readyForAssembly = items.filter((item) => {
-        const status = item.production?.status ?? "pending";
-        return status !== "assembled" && status !== "qc_approved";
+  // ── CUT QUEUE — forward fill ──────────────────────────────────────────────
+  // All pending unlocked windows sorted by urgency (install date, unit, blind).
+  // Start from today and pack each working day to capacity, spilling into the next.
+  {
+    const candidates: Candidate[] = [...candidatesByUnit.values()]
+      .flatMap((items) =>
+        items.filter(
+          (item) =>
+            (item.production?.status ?? "pending") === "pending" &&
+            !item.existing?.isScheduleLocked
+        )
+      )
+      .sort((a, b) => {
+        const aInstall = a.unit.installation_date ?? "9999-12-31";
+        const bInstall = b.unit.installation_date ?? "9999-12-31";
+        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        if (a.unit.unit_number !== b.unit.unit_number)
+          return a.unit.unit_number.localeCompare(b.unit.unit_number);
+        return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
       });
-      const byQcDate = new Map<string, Candidate[]>();
-      for (const item of readyForAssembly) {
-        const key = item.scheduledQcDate ?? "__unscheduled__";
-        const list = byQcDate.get(key) ?? [];
-        list.push(item);
-        byQcDate.set(key, list);
-      }
-      return [...byQcDate.entries()]
-        .filter(([qcDate, rows]) => qcDate !== "__unscheduled__" && rows.length > 0)
-        .map(([qcDate, rows]) => ({
-          qcDate,
-          rows: rows.sort((a, b) => buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window))),
-        }));
-    })
-    .sort((a, b) => a.qcDate.localeCompare(b.qcDate));
 
-  for (const group of assemblyCandidateGroups) {
-    const unlocked = group.rows.filter((item) => !item.existing?.isScheduleLocked);
-    if (unlocked.length === 0) continue;
-
-    const latestAssemblyDate = addWorkingDays(group.qcDate, -1, settings, overrides);
-    const sameDay = findLatestWorkingDayWithCapacity(
-      latestAssemblyDate,
-      settings.assemblerDailyCapacity,
-      assemblyLoad,
-      settings,
-      overrides,
-      unlocked.length,
-      currentWorkDate
-    );
-
-    if (sameDay) {
-      for (const item of unlocked) {
-        item.scheduledAssemblyDate = sameDay;
-        pushLoad(assemblyLoad, sameDay);
+    let cursor = currentWorkDate;
+    for (const item of candidates) {
+      for (let guard = 0; guard < 730; guard++) {
+        if (
+          isWorkingDay(cursor, settings, overrides) &&
+          (cutLoad.get(cursor) ?? 0) < settings.cutterDailyCapacity
+        )
+          break;
+        cursor = addWorkingDays(cursor, 1, settings, overrides);
       }
-      continue;
-    }
-
-    const remaining = [...unlocked];
-    let cursor = latestAssemblyDate < currentWorkDate ? currentWorkDate : latestAssemblyDate;
-    while (remaining.length > 0) {
-      if (!isWorkingDay(cursor, settings, overrides)) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
-      }
-      const used = assemblyLoad.get(cursor) ?? 0;
-      const available = Math.max(0, settings.assemblerDailyCapacity - used);
-      if (available === 0) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
-      }
-      const take = remaining.splice(0, available);
-      for (const item of take) {
-        item.scheduledAssemblyDate = cursor;
-        pushLoad(assemblyLoad, cursor);
-      }
-      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-      if (nextCursor < currentWorkDate) break;
-      cursor = nextCursor;
+      item.scheduledCutDate = cursor;
+      pushLoad(cutLoad, cursor);
     }
   }
 
-  const cutCandidateGroups = [...candidatesByUnit.values()]
-    .flatMap((items) => {
-      const pending = items.filter((item) => (item.production?.status ?? "pending") === "pending");
-      const byAssemblyDate = new Map<string, Candidate[]>();
-      for (const item of pending) {
-        const key = item.scheduledAssemblyDate ?? "__unscheduled__";
-        const list = byAssemblyDate.get(key) ?? [];
-        list.push(item);
-        byAssemblyDate.set(key, list);
+  // ── ASSEMBLY QUEUE — forward fill, gated on cut date ─────────────────────
+  // Assembly cannot happen before the window is cut. Sort by cut date so
+  // earlier-cut items fill assembly days first, then by urgency.
+  {
+    const candidates: Candidate[] = [...candidatesByUnit.values()]
+      .flatMap((items) =>
+        items.filter((item) => {
+          const status = item.production?.status ?? "pending";
+          return (
+            status !== "assembled" &&
+            status !== "qc_approved" &&
+            !item.existing?.isScheduleLocked &&
+            item.scheduledCutDate !== null
+          );
+        })
+      )
+      .sort((a, b) => {
+        const aCut = a.scheduledCutDate ?? "9999-12-31";
+        const bCut = b.scheduledCutDate ?? "9999-12-31";
+        if (aCut !== bCut) return aCut.localeCompare(bCut);
+        const aInstall = a.unit.installation_date ?? "9999-12-31";
+        const bInstall = b.unit.installation_date ?? "9999-12-31";
+        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        if (a.unit.unit_number !== b.unit.unit_number)
+          return a.unit.unit_number.localeCompare(b.unit.unit_number);
+        return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
+      });
+
+    let cursor = currentWorkDate;
+    for (const item of candidates) {
+      // Cannot assemble before the cut date
+      let day = item.scheduledCutDate! > cursor ? item.scheduledCutDate! : cursor;
+      for (let guard = 0; guard < 730; guard++) {
+        if (
+          isWorkingDay(day, settings, overrides) &&
+          (assemblyLoad.get(day) ?? 0) < settings.assemblerDailyCapacity
+        )
+          break;
+        day = addWorkingDays(day, 1, settings, overrides);
       }
-      return [...byAssemblyDate.entries()]
-        .filter(([assemblyDate, rows]) => assemblyDate !== "__unscheduled__" && rows.length > 0)
-        .map(([assemblyDate, rows]) => ({
-          assemblyDate,
-          rows: rows.sort((a, b) => buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window))),
-        }));
-    })
-    .sort((a, b) => a.assemblyDate.localeCompare(b.assemblyDate));
-
-  for (const group of cutCandidateGroups) {
-    const unlocked = group.rows.filter((item) => !item.existing?.isScheduleLocked);
-    if (unlocked.length === 0) continue;
-
-    const latestCutDate = addWorkingDays(group.assemblyDate, -1, settings, overrides);
-    const sameDay = findLatestWorkingDayWithCapacity(
-      latestCutDate,
-      settings.cutterDailyCapacity,
-      cutLoad,
-      settings,
-      overrides,
-      unlocked.length,
-      currentWorkDate
-    );
-
-    if (sameDay) {
-      for (const item of unlocked) {
-        item.scheduledCutDate = sameDay;
-        pushLoad(cutLoad, sameDay);
-      }
-      continue;
+      item.scheduledAssemblyDate = day;
+      pushLoad(assemblyLoad, day);
+      cursor = day;
     }
+  }
 
-    const remaining = [...unlocked];
-    let cursor = latestCutDate < currentWorkDate ? currentWorkDate : latestCutDate;
-    while (remaining.length > 0) {
-      if (!isWorkingDay(cursor, settings, overrides)) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
+  // ── QC QUEUE — forward fill, gated on assembly date ──────────────────────
+  // QC cannot happen before assembly. Same forward-fill pattern.
+  {
+    const candidates: Candidate[] = [...candidatesByUnit.values()]
+      .flatMap((items) =>
+        items.filter((item) => {
+          const status = item.production?.status ?? "pending";
+          return (
+            status !== "qc_approved" &&
+            !item.existing?.isScheduleLocked &&
+            item.scheduledAssemblyDate !== null
+          );
+        })
+      )
+      .sort((a, b) => {
+        const aAssembly = a.scheduledAssemblyDate ?? "9999-12-31";
+        const bAssembly = b.scheduledAssemblyDate ?? "9999-12-31";
+        if (aAssembly !== bAssembly) return aAssembly.localeCompare(bAssembly);
+        const aInstall = a.unit.installation_date ?? "9999-12-31";
+        const bInstall = b.unit.installation_date ?? "9999-12-31";
+        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        if (a.unit.unit_number !== b.unit.unit_number)
+          return a.unit.unit_number.localeCompare(b.unit.unit_number);
+        return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
+      });
+
+    let cursor = currentWorkDate;
+    for (const item of candidates) {
+      // Cannot QC before assembly
+      let day = item.scheduledAssemblyDate! > cursor ? item.scheduledAssemblyDate! : cursor;
+      for (let guard = 0; guard < 730; guard++) {
+        if (
+          isWorkingDay(day, settings, overrides) &&
+          (qcLoad.get(day) ?? 0) < settings.qcDailyCapacity
+        )
+          break;
+        day = addWorkingDays(day, 1, settings, overrides);
       }
-      const used = cutLoad.get(cursor) ?? 0;
-      const available = Math.max(0, settings.cutterDailyCapacity - used);
-      if (available === 0) {
-        const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-        if (nextCursor < currentWorkDate) break;
-        cursor = nextCursor;
-        continue;
-      }
-      const take = remaining.splice(0, available);
-      for (const item of take) {
-        item.scheduledCutDate = cursor;
-        pushLoad(cutLoad, cursor);
-      }
-      const nextCursor = addWorkingDays(cursor, -1, settings, overrides);
-      if (nextCursor < currentWorkDate) break;
-      cursor = nextCursor;
+      item.scheduledQcDate = day;
+      pushLoad(qcLoad, day);
+      cursor = day;
     }
   }
 
