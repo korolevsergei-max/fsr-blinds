@@ -9,7 +9,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import type { ManufacturingRoleSchedule, ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
+import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import {
   buildManufacturingDashboardState,
   type ManufacturingDashboardCategory,
@@ -96,10 +96,6 @@ const CATEGORY_COPY: Record<
   },
 };
 
-function formatMeasurement(item: ManufacturingWindowItem) {
-  return `${item.width ?? "—"} × ${item.height ?? "—"}${item.depth != null ? ` × ${item.depth}` : ""}`;
-}
-
 function DashboardUnitCard({
   unit,
   role,
@@ -115,131 +111,43 @@ function DashboardUnitCard({
   const returnedCount = unit.blindTypeGroups.flatMap((group) => group.windows).filter(
     (window) => window.issueStatus === "open" && window.escalation?.targetRole === role
   ).length;
-  const unitAccentClass = returnedCount > 0 ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]" : "border-border";
+  const categoryCopy = CATEGORY_COPY[category];
+  const borderClass = returnedCount > 0 ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]" : "border-border";
 
   return (
-    <div className={`overflow-hidden rounded-[var(--radius-lg)] border bg-card ${unitAccentClass}`}>
-      <button
-        onClick={() => router.push(`${unitHrefBase}/${unit.unitId}`)}
-        className="w-full border-b border-border/70 px-4 py-4 text-left"
-      >
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[15px] font-semibold tracking-tight text-foreground">
-                Unit {unit.unitNumber}
-              </p>
-              {returnedCount > 0 && (
-                <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-700">
-                  {returnedCount} returned
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-[12px] text-secondary">
-              {unit.buildingName} · {unit.clientName}
+    <button
+      onClick={() => router.push(`${unitHrefBase}/${unit.unitId}`)}
+      className={`w-full text-left overflow-hidden rounded-[var(--radius-lg)] border bg-card px-4 py-4 transition-colors hover:bg-surface/50 ${borderClass}`}
+    >
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[15px] font-semibold tracking-tight text-foreground">
+              Unit {unit.unitNumber}
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">
-            <span>{unit.scheduledCount} blinds</span>
-            {unit.installationDate && (
-              <span>
-                Install {formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}
+            {returnedCount > 0 && (
+              <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-700">
+                {returnedCount} returned
               </span>
             )}
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${categoryCopy.badgeClass}`}>
+              {categoryCopy.label}
+            </span>
           </div>
+          <p className="mt-1 text-[12px] text-secondary">
+            {unit.buildingName}
+          </p>
         </div>
-      </button>
-
-      <div className="space-y-5 px-4 py-4">
-        {unit.blindTypeGroups.map((group) => (
-          <div key={`${unit.unitId}-${group.blindType}`}>
-            <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-              <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary">
-                {group.blindType}
-              </span>
-              <span className="text-[12px] text-tertiary">{group.windows.length} blinds</span>
-            </div>
-
-            <div className="divide-y divide-border/60">
-              {group.windows.map((window) => {
-                const categoryCopy = CATEGORY_COPY[category];
-                const isReturned = category === "returned";
-
-                return (
-                  <article
-                    key={window.windowId}
-                    className={[
-                      "grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start",
-                      isReturned ? "rounded-[var(--radius-md)] px-3 -mx-3 bg-red-50/70" : "",
-                    ].join(" ")}
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                        <p className="text-[15px] font-semibold tracking-tight text-foreground">
-                          {window.label}
-                        </p>
-                        <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
-                          {window.roomName}
-                        </span>
-                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${categoryCopy.badgeClass}`}>
-                          {categoryCopy.label}
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
-                        {window.installationDate && (
-                          <span>
-                            Install {formatStoredDateLongEnglish(window.installationDate) ?? window.installationDate}
-                          </span>
-                        )}
-                        {window.targetReadyDate && (
-                          <span>
-                            Ready by {formatStoredDateLongEnglish(window.targetReadyDate) ?? window.targetReadyDate}
-                          </span>
-                        )}
-                        {(window.issueStatus === "open" || window.escalation) && (
-                          <span className={`inline-flex items-center gap-1 font-medium ${isReturned ? "text-red-700" : "text-amber-700"}`}>
-                            <WarningCircle size={13} weight="fill" />
-                            {isReturned
-                              ? `Returned ${window.escalation?.sourceRole ?? "upstream"} -> ${window.escalation?.targetRole ?? role}`
-                              : window.issueReason || window.escalation?.reason || "Issue open"}
-                          </span>
-                        )}
-                      </div>
-
-                      {isReturned ? (
-                        <div className="mt-3 rounded-[var(--radius-md)] border border-red-200 bg-white/90 px-3 py-3 text-[12px] text-red-900">
-                          <p className="font-semibold">
-                            {window.issueReason || window.escalation?.reason || "Returned for rework"}
-                          </p>
-                          {(window.issueNotes || window.escalation?.notes) && (
-                            <p className="mt-1 leading-5 text-red-800">
-                              {window.issueNotes || window.escalation?.notes}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        window.notes && (
-                          <p className="mt-2 max-w-[65ch] text-[12px] leading-6 text-secondary">
-                            {window.notes}
-                          </p>
-                        )
-                      )}
-                    </div>
-
-                    <div className="lg:min-w-[9rem] lg:text-right">
-                      <p className="font-mono text-[15px] font-semibold leading-none tracking-tight text-foreground md:text-[16px]">
-                        {formatMeasurement(window)}
-                      </p>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">
+          <span>{unit.scheduledCount} blinds</span>
+          {unit.installationDate && (
+            <span>
+              Install {formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}
+            </span>
+          )}
+        </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -303,27 +211,15 @@ export function ManufacturingRolePipelineDashboard({
   unitHrefBase: string;
 }) {
   const [activeCategory, setActiveCategory] = useState<ManufacturingDashboardCategory | null>(null);
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDateFilter, setInstallDateFilter] = useState<ScheduleInstallDateFilter>("all");
 
   const allItems = schedule.allItems;
-  const clientOptions = [
-    { value: "all", label: "All clients" },
-    ...[
-      ...new Map(
-        allItems.map((item) => [item.clientId, { value: item.clientId, label: item.clientName }])
-      ).values(),
-    ],
-  ];
-
   const buildingOptions = [
     { value: "all", label: "All buildings" },
     ...[
       ...new Map(
-        allItems
-          .filter((item) => clientFilter.length === 0 || clientFilter.includes(item.clientId))
-          .map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
+        allItems.map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
       ).values(),
     ],
   ];
@@ -334,7 +230,6 @@ export function ManufacturingRolePipelineDashboard({
   }));
 
   const activeFilterCount = [
-    clientFilter.length > 0,
     buildingFilter.length > 0,
     installDateFilter !== "all",
   ].filter(Boolean).length;
@@ -345,11 +240,11 @@ export function ManufacturingRolePipelineDashboard({
         schedule,
         role,
         today: new Date(),
-        clientFilter,
+        clientFilter: [],
         buildingFilter,
         installDateFilter,
       }),
-    [buildingFilter, clientFilter, installDateFilter, role, schedule]
+    [buildingFilter, installDateFilter, role, schedule]
   );
 
   const visibleSections = activeCategory
@@ -371,16 +266,6 @@ export function ManufacturingRolePipelineDashboard({
         </div>
         <FilterDropdown
           multiple
-          label="Client"
-          values={clientFilter}
-          options={clientOptions}
-          onChange={(values) => {
-            setClientFilter(values);
-            setBuildingFilter([]);
-          }}
-        />
-        <FilterDropdown
-          multiple
           label="Building"
           values={buildingFilter}
           options={buildingOptions}
@@ -396,7 +281,6 @@ export function ManufacturingRolePipelineDashboard({
           <button
             type="button"
             onClick={() => {
-              setClientFilter([]);
               setBuildingFilter([]);
               setInstallDateFilter("all");
             }}

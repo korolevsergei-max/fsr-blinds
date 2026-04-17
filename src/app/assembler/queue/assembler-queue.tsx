@@ -44,7 +44,7 @@ function UnitRow({ unit }: { unit: AssemblerUnit }) {
         )}
       </div>
       <p className="text-xs text-secondary">
-        {unit.buildingName} &middot; {unit.clientName}
+        {unit.buildingName}
       </p>
       <div className="flex items-center justify-between pt-0.5">
         <span className="text-xs text-tertiary">

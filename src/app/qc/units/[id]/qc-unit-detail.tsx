@@ -247,7 +247,7 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
             Unit {unit.unitNumber}
           </h1>
           <p className="text-xs text-tertiary truncate">
-            {unit.buildingName} &middot; {unit.clientName}
+            {unit.buildingName}
           </p>
         </div>
       </div>

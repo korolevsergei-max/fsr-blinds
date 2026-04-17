@@ -202,7 +202,6 @@ export function ManufacturingRoleCompletedScreen({
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
   const [actionPending, startActionTransition] = useTransition();
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDateFilter, setInstallDateFilter] = useState<string[]>([]);
   const [completedDateFilter, setCompletedDateFilter] = useState<string[]>([]);
@@ -237,21 +236,11 @@ export function ManufacturingRoleCompletedScreen({
   const title = role === "cutter" ? "Completed cuts" : role === "assembler" ? "Completed assembly" : "Built fully";
   const greeting = userName ? `Hello, ${userName.split(" ")[0]}` : role === "qc" ? "QC" : role === "assembler" ? "Assembler" : "Cutter";
 
-  const clientOptions = [
-    { value: "all", label: "All clients" },
-    ...[
-      ...new Map(
-        data.items.map((item) => [item.clientId, { value: item.clientId, label: item.clientName }])
-      ).values(),
-    ],
-  ];
   const buildingOptions = [
     { value: "all", label: "All buildings" },
     ...[
       ...new Map(
-        data.items
-          .filter((item) => clientFilter.length === 0 || clientFilter.includes(item.clientId))
-          .map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
+        data.items.map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
       ).values(),
     ],
   ];
@@ -279,7 +268,6 @@ export function ManufacturingRoleCompletedScreen({
   const filteredItems = useMemo(
     () =>
       data.items.filter((item) => {
-        if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) return false;
         if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) return false;
         if (
           installDateFilter.length > 0 &&
@@ -296,12 +284,11 @@ export function ManufacturingRoleCompletedScreen({
         if (!hasHistoryMatch(item, historyFilter)) return false;
         return true;
       }),
-    [buildingFilter, clientFilter, completedDateFilter, data.items, historyFilter, installDateFilter]
+    [buildingFilter, completedDateFilter, data.items, historyFilter, installDateFilter]
   );
 
   const dayBuckets = useMemo(() => buildCompletedBuckets(filteredItems), [filteredItems]);
   const activeFilterCount = [
-    clientFilter.length > 0,
     buildingFilter.length > 0,
     installDateFilter.length > 0,
     completedDateFilter.length > 0,
@@ -393,16 +380,6 @@ export function ManufacturingRoleCompletedScreen({
           </div>
           <FilterDropdown
             multiple
-            label="Client"
-            values={clientFilter}
-            options={clientOptions}
-            onChange={(values) => {
-              setClientFilter(values);
-              setBuildingFilter([]);
-            }}
-          />
-          <FilterDropdown
-            multiple
             label="Building"
             values={buildingFilter}
             options={buildingOptions}
@@ -431,7 +408,6 @@ export function ManufacturingRoleCompletedScreen({
             <button
               type="button"
               onClick={() => {
-                setClientFilter([]);
                 setBuildingFilter([]);
                 setInstallDateFilter([]);
                 setCompletedDateFilter([]);
@@ -495,7 +471,7 @@ export function ManufacturingRoleCompletedScreen({
                             Unit {unit.unitNumber}
                           </p>
                           <p className="mt-1 text-[12px] text-secondary">
-                            {unit.buildingName} · {unit.clientName}
+                            {unit.buildingName}
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">

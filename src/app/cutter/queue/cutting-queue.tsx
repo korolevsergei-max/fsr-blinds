@@ -79,7 +79,7 @@ function UnitRow({ unit }: { unit: CutterUnit }) {
         <UrgencyBadge installationDate={unit.installationDate} />
       </div>
       <p className="text-xs text-secondary">
-        {unit.buildingName} · {unit.clientName}
+        {unit.buildingName}
       </p>
       <div className="flex items-center justify-between pt-0.5">
         <span className="text-xs text-tertiary">

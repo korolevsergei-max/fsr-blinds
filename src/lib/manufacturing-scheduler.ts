@@ -1,10 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
   BlindType,
+  ChainSide,
+  FabricAdjustmentSide,
   ManufacturingCalendarOverride,
   ManufacturingIssueStatus,
   ManufacturingSettings,
   ProductionStatus,
+  WandChain,
+  WindowInstallation,
   WindowManufacturingEscalation,
   WindowManufacturingSchedule,
 } from "@/lib/types";
@@ -77,6 +81,11 @@ type WindowRow = {
   height: number | null;
   depth: number | null;
   notes: string | null;
+  window_installation: string | null;
+  wand_chain: number | null;
+  fabric_adjustment_side: string | null;
+  fabric_adjustment_inches: number | null;
+  chain_side: string | null;
 };
 
 type ProductionRow = {
@@ -131,6 +140,11 @@ export interface ManufacturingWindowItem {
   scheduledQcDate: string | null;
   isScheduleLocked: boolean;
   overCapacityOverride: boolean;
+  windowInstallation: WindowInstallation;
+  wandChain: WandChain | null;
+  fabricAdjustmentSide: FabricAdjustmentSide;
+  fabricAdjustmentInches: number | null;
+  chainSide: ChainSide | null;
 }
 
 export interface ManufacturingUnitCard {
@@ -672,7 +686,7 @@ export async function loadManufacturingRoleSchedule(
     windowIds.length > 0
       ? supabase
           .from("windows")
-          .select("id, room_id, label, blind_type, width, height, depth, notes")
+          .select("id, room_id, label, blind_type, width, height, depth, notes, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, chain_side")
           .in("id", windowIds)
       : Promise.resolve({ data: [] as WindowRow[] }),
     windowIds.length > 0
@@ -765,6 +779,11 @@ export async function loadManufacturingRoleSchedule(
       scheduledQcDate: row.scheduled_qc_date,
       isScheduleLocked: row.is_schedule_locked ?? false,
       overCapacityOverride: row.over_capacity_override ?? false,
+      windowInstallation: (window.window_installation ?? "inside") as WindowInstallation,
+      wandChain: (window.wand_chain ?? null) as WandChain | null,
+      fabricAdjustmentSide: (window.fabric_adjustment_side ?? "none") as FabricAdjustmentSide,
+      fabricAdjustmentInches: window.fabric_adjustment_inches ?? null,
+      chainSide: (window.chain_side ?? null) as ChainSide | null,
     };
     allItems.push(item);
 

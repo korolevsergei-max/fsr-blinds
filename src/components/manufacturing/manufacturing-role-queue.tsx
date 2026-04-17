@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   CheckCircle,
   FunnelSimple,
+  Printer,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -34,10 +35,7 @@ import {
   markWindowCut,
   markWindowQCApproved,
 } from "@/app/actions/production-actions";
-
-function formatMeasurement(item: ManufacturingWindowItem): string {
-  return `${item.width ?? "—"} × ${item.height ?? "—"}${item.depth != null ? ` × ${item.depth}` : ""}`;
-}
+import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 
 function formatBucketDate(date: string | null) {
   return formatStoredDateLongEnglish(date) ?? date ?? "";
@@ -99,13 +97,6 @@ function getWindowPriority(
   return 3;
 }
 
-function countActionReadyWindows(
-  role: "cutter" | "assembler" | "qc",
-  windows: ManufacturingWindowItem[]
-) {
-  return windows.filter((item) => getWindowPriority(role, item) < 3).length;
-}
-
 function isReturnedToRole(
   item: ManufacturingWindowItem,
   role: "cutter" | "assembler" | "qc"
@@ -134,23 +125,6 @@ function matchesQueueStatusFilter(args: {
   });
 }
 
-function sortWindows(
-  role: "cutter" | "assembler" | "qc",
-  windows: ManufacturingWindowItem[]
-) {
-  return [...windows].sort((a, b) => {
-    const priorityDiff = getWindowPriority(role, a) - getWindowPriority(role, b);
-    if (priorityDiff !== 0) return priorityDiff;
-
-    const readyDateA = a.targetReadyDate ?? "9999-12-31";
-    const readyDateB = b.targetReadyDate ?? "9999-12-31";
-    if (readyDateA !== readyDateB) return readyDateA.localeCompare(readyDateB);
-
-    if (a.roomName !== b.roomName) return a.roomName.localeCompare(b.roomName);
-    return a.label.localeCompare(b.label);
-  });
-}
-
 function normalizeSchedule(
   schedule: ManufacturingRoleSchedule,
   role: "cutter" | "assembler" | "qc"
@@ -165,33 +139,16 @@ function normalizeSchedule(
           blindTypeGroups: [...unit.blindTypeGroups]
             .map((group) => ({
               ...group,
-              windows: sortWindows(role, group.windows),
-            }))
-            .sort((a, b) => {
-              const aReady = countActionReadyWindows(role, a.windows);
-              const bReady = countActionReadyWindows(role, b.windows);
-              if (aReady !== bReady) return bReady - aReady;
-
-              const aPriority = Math.min(...a.windows.map((window) => getWindowPriority(role, window)));
-              const bPriority = Math.min(...b.windows.map((window) => getWindowPriority(role, window)));
-              if (aPriority !== bPriority) return aPriority - bPriority;
-
-              return a.blindType.localeCompare(b.blindType);
-            }),
-        }))
-        .sort((a, b) => {
-          const aWindows = a.blindTypeGroups.flatMap((group) => group.windows);
-          const bWindows = b.blindTypeGroups.flatMap((group) => group.windows);
-          const aPriority = Math.min(...aWindows.map((window) => getWindowPriority(role, window)));
-          const bPriority = Math.min(...bWindows.map((window) => getWindowPriority(role, window)));
-          if (aPriority !== bPriority) return aPriority - bPriority;
-
-          const aReady = countActionReadyWindows(role, aWindows);
-          const bReady = countActionReadyWindows(role, bWindows);
-          if (aReady !== bReady) return bReady - aReady;
-
-          return a.unitNumber.localeCompare(b.unitNumber);
-        }),
+              windows: [...group.windows].sort((a, b) => {
+                const pa = getWindowPriority(role, a);
+                const pb = getWindowPriority(role, b);
+                if (pa !== pb) return pa - pb;
+                const wa = a.width ?? -1;
+                const wb = b.width ?? -1;
+                return wb - wa;
+              }),
+            })),
+        })),
     })),
   };
 }
@@ -238,10 +195,11 @@ export function ManufacturingRoleQueue({
   const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
-  const [clientFilter, setClientFilter] = useState<string[]>([]);
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDateFilter, setInstallDateFilter] = useState<ScheduleInstallDateFilter>("all");
   const [statusFilters, setStatusFilters] = useState<QueueStatusFilter[]>([]);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printSelectedDays, setPrintSelectedDays] = useState<number[]>([0]);
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
@@ -375,22 +333,11 @@ export function ManufacturingRoleQueue({
   const title =
     role === "cutter" ? "Cutting queue" : role === "assembler" ? "Assembly queue" : "QC queue";
 
-  const clientOptions = [
-    { value: "all", label: "All clients" },
-    ...[
-      ...new Map(
-        localSchedule.allItems.map((item) => [item.clientId, { value: item.clientId, label: item.clientName }])
-      ).values(),
-    ],
-  ];
-
   const buildingOptions = [
     { value: "all", label: "All buildings" },
     ...[
       ...new Map(
-        localSchedule.allItems
-          .filter((item) => clientFilter.length === 0 || clientFilter.includes(item.clientId))
-          .map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
+        localSchedule.allItems.map((item) => [item.buildingId, { value: item.buildingId, label: item.buildingName }])
       ).values(),
     ],
   ];
@@ -411,52 +358,67 @@ export function ManufacturingRoleQueue({
   ];
 
   const activeFilterCount = [
-    clientFilter.length > 0,
     buildingFilter.length > 0,
     installDateFilter !== "all",
     statusFilters.length > 0,
   ].filter(Boolean).length;
 
+  const printDayOptions = localSchedule.buckets
+    .filter((b) => b.date !== null)
+    .slice(0, 3)
+    .map((bucket, idx) => {
+      const pendingIds = bucket.units
+        .flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))
+        .filter((w) => w.productionStatus === "pending")
+        .map((w) => w.windowId);
+      const dayLabel = idx === 0 ? "Today" : idx === 1 ? "Next working day" : "Working day after";
+      return { label: dayLabel, date: bucket.date!, pendingIds };
+    });
+
+  const handlePrint = () => {
+    const ids = printSelectedDays
+      .flatMap((idx) => printDayOptions[idx]?.pendingIds ?? []);
+    if (ids.length === 0) return;
+    const url = `/cutter/queue/print?ids=${ids.join(",")}`;
+    window.open(url, "_blank");
+    setPrintModalOpen(false);
+  };
+
+  // Flatten to per-bucket window list, sorted by width descending (widest first)
   const visibleBuckets = localSchedule.buckets
     .map((bucket) => {
-      const units = bucket.units
-        .map((unit) => {
-          const blindTypeGroups = unit.blindTypeGroups
-            .map((group) => ({
-              ...group,
-              windows: group.windows.filter((item) => {
-                if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) return false;
-                if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) return false;
-                if (!matchesInstallDateFilter(item.installationDate, installDateFilter, new Date())) return false;
-                return matchesQueueStatusFilter({
-                  item,
-                  role,
-                  statusFilters,
-                  todayKey,
-                  bucketDate: bucket.date,
-                  bucketLabel: bucket.label,
-                });
-              }),
-            }))
-            .filter((group) => group.windows.length > 0);
+      const windows: ManufacturingWindowItem[] = [];
+      for (const unit of bucket.units) {
+        for (const group of unit.blindTypeGroups) {
+          for (const item of group.windows) {
+            if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
+            if (!matchesInstallDateFilter(item.installationDate, installDateFilter, new Date())) continue;
+            if (!matchesQueueStatusFilter({
+              item,
+              role,
+              statusFilters,
+              todayKey,
+              bucketDate: bucket.date,
+              bucketLabel: bucket.label,
+            })) continue;
+            windows.push(item);
+          }
+        }
+      }
 
-          if (blindTypeGroups.length === 0) return null;
+      // Sort: issues/returned first, then by width descending
+      windows.sort((a, b) => {
+        const pa = getWindowPriority(role, a);
+        const pb = getWindowPriority(role, b);
+        if (pa !== pb) return pa - pb;
+        const wa = a.width ?? -1;
+        const wb = b.width ?? -1;
+        return wb - wa;
+      });
 
-          return {
-            ...unit,
-            blindTypeGroups,
-            scheduledCount: blindTypeGroups.reduce((sum, group) => sum + group.windows.length, 0),
-          };
-        })
-        .filter((unit): unit is NonNullable<typeof unit> => Boolean(unit));
-
-      return {
-        ...bucket,
-        units,
-        scheduledCount: units.reduce((sum, unit) => sum + unit.scheduledCount, 0),
-      };
+      return { ...bucket, windows, scheduledCount: windows.length };
     })
-    .filter((bucket) => bucket.units.length > 0);
+    .filter((bucket) => bucket.windows.length > 0);
 
   return (
     <div
@@ -467,19 +429,31 @@ export function ManufacturingRoleQueue({
         ref={headerRef}
         className="sticky top-0 z-30 border-b border-border bg-card/95 px-4 pt-4 pb-4 backdrop-blur-md"
       >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.back()}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-secondary transition-colors hover:bg-surface"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
-            <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
-              {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
-            </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-secondary transition-colors hover:bg-surface"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
+              <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
+                {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
+              </p>
+            </div>
           </div>
+          {role === "cutter" && (
+            <button
+              type="button"
+              onClick={() => { setPrintModalOpen(true); setPrintSelectedDays([0]); }}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
+            >
+              <Printer size={15} />
+              Print labels
+            </button>
+          )}
         </div>
 
         <div className="mt-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
@@ -491,16 +465,6 @@ export function ManufacturingRoleQueue({
               </span>
             )}
           </div>
-          <FilterDropdown
-            multiple
-            label="Client"
-            values={clientFilter}
-            options={clientOptions}
-            onChange={(values) => {
-              setClientFilter(values);
-              setBuildingFilter([]);
-            }}
-          />
           <FilterDropdown
             multiple
             label="Building"
@@ -525,7 +489,6 @@ export function ManufacturingRoleQueue({
             <button
               type="button"
               onClick={() => {
-                setClientFilter([]);
                 setBuildingFilter([]);
                 setInstallDateFilter("all");
                 setStatusFilters([]);
@@ -578,346 +541,410 @@ export function ManufacturingRoleQueue({
             })()}
 
             <div className="pt-3">
-              {bucket.units.length === 0 ? (
+              {bucket.windows.length === 0 ? (
                 <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/70 px-4 py-4 text-sm text-tertiary">
                   Nothing queued here.
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                {bucket.units.map((unit) => (
-                  <div
-                    key={`${bucket.label}-${unit.unitId}`}
-                    className={[
-                      "overflow-hidden rounded-[var(--radius-lg)] border bg-card",
-                      unit.blindTypeGroups.some((group) =>
-                        group.windows.some((item) => isReturnedToRole(item, role))
-                      )
-                        ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]"
-                        : "border-border",
-                    ].join(" ")}
-                  >
-                    <button
-                      onClick={() => router.push(`/${role}/units/${unit.unitId}`)}
-                      className={[
-                        "w-full border-b px-4 py-4 text-left",
-                        unit.blindTypeGroups.some((group) =>
-                          group.windows.some((item) => isReturnedToRole(item, role))
-                        )
-                          ? "border-red-100 bg-red-50/60"
-                          : "border-border/70",
-                      ].join(" ")}
-                    >
-                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                        <div>
-                          <p className="text-[15px] font-semibold tracking-tight text-foreground sm:text-[15px]">
-                            Unit {unit.unitNumber}
-                          </p>
-                          <p className="mt-1 text-[12px] text-secondary sm:text-[12px]">
-                            {unit.buildingName} · {unit.clientName}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end sm:text-[12px]">
-                          <span>{unit.scheduledCount} blinds</span>
-                          {unit.installationDate && <span>{formatInstallDate(unit.installationDate)}</span>}
-                          <span>{bucket.scheduledCount}/{bucket.capacity}</span>
-                        </div>
-                      </div>
-                    </button>
+                <div className="flex flex-col gap-3">
+                  {bucket.windows.map((item) => {
+                    const busy = isPending && busyWindowId === item.windowId;
+                    const returnedToRole = isReturnedToRole(item, role);
+                    return (
+                      <article
+                        key={item.windowId}
+                        className={[
+                          "overflow-hidden rounded-[var(--radius-lg)] border bg-card",
+                          returnedToRole
+                            ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]"
+                            : "border-border",
+                        ].join(" ")}
+                      >
+                        {/* Context header — tap to go to unit */}
+                        <button
+                          onClick={() => router.push(`/${role}/units/${item.unitId}`)}
+                          className={[
+                            "w-full border-b px-4 py-3 text-left",
+                            returnedToRole ? "border-red-100 bg-red-50/60" : "border-border/70 bg-surface/40",
+                          ].join(" ")}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                            <p className="text-[11px] font-medium text-secondary">
+                              Unit {item.unitNumber} · {item.buildingName}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
+                              {item.installationDate && (
+                                <span>{formatInstallDate(item.installationDate)}</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
 
-                    <div className="space-y-5 px-4 py-4">
-                      {unit.blindTypeGroups.map((group) => (
-                        <div key={`${unit.unitId}-${group.blindType}`}>
-                          <div className="flex items-center gap-3 border-b border-border/70 pb-2">
-                            <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-secondary">
-                              {group.blindType}
-                            </span>
-                            <span className="text-[12px] text-tertiary">
-                              {group.windows.length} scheduled
-                            </span>
+                        <div className="px-4 py-4 space-y-4">
+                          {/* Window identity + dimensions */}
+                          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="text-[18px] font-semibold tracking-tight text-foreground">
+                                {item.label}
+                              </h3>
+                              <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-secondary">
+                                {item.roomName}
+                              </span>
+                              <span className="rounded-full bg-surface px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-secondary">
+                                {item.blindType}
+                              </span>
+                              {returnedToRole && (
+                                <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-red-700">
+                                  Returned
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-mono text-[18px] font-semibold leading-none tracking-tight text-foreground">
+                              {item.width ?? "—"} × {item.height ?? "—"}{item.depth != null ? ` × ${item.depth}` : ""}
+                            </p>
                           </div>
 
-                          <div className="divide-y divide-border/60">
-                            {group.windows.map((item) => {
-                              const busy = isPending && busyWindowId === item.windowId;
-                              const returnedToRole = isReturnedToRole(item, role);
-                              return (
-                                <article
-                                  key={item.windowId}
-                                  className={[
-                                    "grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start",
-                                    returnedToRole ? "rounded-[var(--radius-md)] bg-red-50/70 px-3 -mx-3" : "",
-                                  ].join(" ")}
-                                >
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
-                                      <h3 className="text-[15px] font-semibold tracking-tight text-foreground sm:text-[15px]">
-                                        {item.label}
-                                      </h3>
-                                      <span className="rounded-full bg-surface px-2 py-1 text-[11px] font-medium text-secondary">
-                                        {item.roomName}
-                                      </span>
-                                      {returnedToRole && (
-                                        <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-700">
-                                          Returned
-                                        </span>
-                                      )}
-                                    </div>
+                          {/* Ready date + issue */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
+                            {item.targetReadyDate && (
+                              <span>{formatReadyDate(item.targetReadyDate)}</span>
+                            )}
+                            {item.issueStatus === "open" && (
+                              <span className={`inline-flex items-center gap-1 font-medium ${returnedToRole ? "text-red-700" : "text-amber-700"}`}>
+                                <WarningCircle size={13} weight="fill" />
+                                {returnedToRole
+                                  ? `Returned ${item.escalation?.sourceRole ?? "upstream"} → ${item.escalation?.targetRole ?? role}`
+                                  : item.escalation
+                                    ? `${item.escalation.sourceRole} → ${item.escalation.targetRole}: ${item.issueReason || "Escalation open"}`
+                                    : item.issueReason || "Issue open"}
+                              </span>
+                            )}
+                          </div>
 
-                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-tertiary">
-                                      <span>{formatReadyDate(item.targetReadyDate)}</span>
-                                      {item.issueStatus === "open" && (
-                                        <span className={`inline-flex items-center gap-1 font-medium ${returnedToRole ? "text-red-700" : "text-amber-700"}`}>
-                                          <WarningCircle size={13} weight="fill" />
-                                          {returnedToRole
-                                            ? `Returned ${item.escalation?.sourceRole ?? "upstream"} -> ${item.escalation?.targetRole ?? role}`
-                                            : item.escalation
-                                              ? `${item.escalation.sourceRole} -> ${item.escalation.targetRole}: ${item.issueReason || "Escalation open"}`
-                                              : item.issueReason || "Issue open"}
-                                        </span>
-                                      )}
-                                    </div>
+                          {item.notes && (
+                            <p className="text-[12px] leading-6 text-secondary max-w-[65ch]">
+                              {item.notes}
+                            </p>
+                          )}
 
-                                    {item.notes && (
-                                      <p className="mt-2 max-w-[65ch] text-[12px] leading-6 text-secondary">
-                                        {item.notes}
-                                      </p>
-                                    )}
-                                    {item.issueStatus === "open" && item.issueNotes && (
-                                      <div className={`mt-3 max-w-[65ch] rounded-[var(--radius-md)] border px-3 py-3 text-[12px] leading-6 ${returnedToRole ? "border-red-200 bg-white/90 text-red-800" : "border-amber-200 bg-amber-50/80 text-amber-800"}`}>
-                                        <p className="font-semibold">
-                                          {item.issueReason || (returnedToRole ? "Returned for rework" : "Issue open")}
-                                        </p>
-                                        <p className="mt-1">{item.issueNotes}</p>
-                                      </div>
-                                    )}
+                          {item.issueStatus === "open" && item.issueNotes && (
+                            <div className={`max-w-[65ch] rounded-[var(--radius-md)] border px-3 py-3 text-[12px] leading-6 ${returnedToRole ? "border-red-200 bg-white/90 text-red-800" : "border-amber-200 bg-amber-50/80 text-amber-800"}`}>
+                              <p className="font-semibold">
+                                {item.issueReason || (returnedToRole ? "Returned for rework" : "Issue open")}
+                              </p>
+                              <p className="mt-1">{item.issueNotes}</p>
+                            </div>
+                          )}
 
-                                    <div className="mt-4 flex flex-wrap gap-2.5">
-                                      {role === "cutter" ? (
-                                        item.productionStatus === "pending" ? (
-                                          <>
-                                            <ActionButton
-                                              label="Mark cut"
-                                              tone="primary"
-                                              busy={busy}
-                                              onClick={() =>
-                                                runWindowAction(item.windowId, () =>
-                                                  markWindowCut(item.windowId)
-                                                , {
-                                                  optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
-                                                })
-                                              }
-                                            />
-                                            <ActionButton
-                                              label="Move earlier"
-                                              tone="secondary"
-                                              busy={busy}
-                                              onClick={() => handleMove(item, "earlier")}
-                                            />
-                                            <ActionButton
-                                              label="Move later"
-                                              tone="secondary"
-                                              busy={busy}
-                                              onClick={() => handleMove(item, "later")}
-                                            />
-                                          </>
-                                        ) : (
-                                          <>
-                                            <StatusChip
-                                              label="Cut complete"
-                                              tone="success"
-                                              icon={<CheckCircle size={13} weight="fill" />}
-                                            />
-                                            <ActionButton
-                                              label="Move earlier"
-                                              tone="secondary"
-                                              busy={false}
-                                              disabled
-                                              onClick={() => undefined}
-                                            />
-                                            <ActionButton
-                                              label="Move later"
-                                              tone="secondary"
-                                              busy={false}
-                                              disabled
-                                              onClick={() => undefined}
-                                            />
-                                          </>
-                                        )
-                                      ) : role === "assembler" ? (
-                                        <>
-                                          {item.productionStatus === "cut" ? (
-                                            <ActionButton
-                                              label="Mark assembled"
-                                              tone="primary"
-                                              busy={busy}
-                                              onClick={() =>
-                                                runWindowAction(item.windowId, () =>
-                                                  markWindowAssembled(item.windowId)
-                                                , {
-                                                  optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
-                                                })
-                                              }
-                                            />
-                                          ) : (
-                                            <StatusChip label="Not ready" tone="muted" />
-                                          )}
-                                          <ActionButton
-                                            label="Return to cutter"
-                                            tone="warning"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "cut"}
-                                            onClick={() => handleReturnToCutter(item)}
-                                          />
-                                          <ActionButton
-                                            label="Move earlier"
-                                            tone="secondary"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "cut"}
-                                            onClick={() => handleMove(item, "earlier")}
-                                          />
-                                          <ActionButton
-                                            label="Move later"
-                                            tone="secondary"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "cut"}
-                                            onClick={() => handleMove(item, "later")}
-                                          />
-                                        </>
-                                      ) : (
-                                        <>
-                                          {item.productionStatus === "assembled" ? (
-                                            <ActionButton
-                                              label="Approve QC"
-                                              tone="success"
-                                              busy={busy}
-                                              onClick={() =>
-                                                runWindowAction(item.windowId, () =>
-                                                  markWindowQCApproved(item.windowId)
-                                                , {
-                                                  optimisticUpdate: (current) =>
-                                                    updateWindowInSchedule(current, role, item.windowId, () => null),
-                                                })
-                                              }
-                                            />
-                                          ) : (
-                                            <StatusChip
-                                              label={item.productionStatus === "qc_approved" ? "Built fully" : "Waiting on assembly"}
-                                              tone={item.productionStatus === "qc_approved" ? "success" : "muted"}
-                                              icon={item.productionStatus === "qc_approved" ? <CheckCircle size={13} weight="fill" /> : undefined}
-                                            />
-                                          )}
-                                          <ActionButton
-                                            label="Return to assembler"
-                                            tone="warning"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "assembled"}
-                                            onClick={() => handleReturnToAssembler(item)}
-                                          />
-                                          <ActionButton
-                                            label="Return to cutter"
-                                            tone="warning"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "assembled"}
-                                            onClick={() => handleReturnToCutter(item)}
-                                          />
-                                          <ActionButton
-                                            label="Move earlier"
-                                            tone="secondary"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "assembled"}
-                                            onClick={() => handleMove(item, "earlier")}
-                                          />
-                                          <ActionButton
-                                            label="Move later"
-                                            tone="secondary"
-                                            busy={busy}
-                                            disabled={item.productionStatus !== "assembled"}
-                                            onClick={() => handleMove(item, "later")}
-                                          />
-                                        </>
-                                      )}
+                          {/* Manufacturing summary */}
+                          <ManufacturingSummaryCard
+                            width={item.width}
+                            height={item.height}
+                            depth={item.depth}
+                            windowInstallation={item.windowInstallation}
+                            wandChain={item.wandChain}
+                            fabricAdjustmentSide={item.fabricAdjustmentSide}
+                            fabricAdjustmentInches={item.fabricAdjustmentInches}
+                            blindType={item.blindType}
+                            chainSide={item.chainSide}
+                          />
 
-                                      {role === "cutter" && item.productionStatus === "cut" && (
-                                        <ActionButton
-                                          label="Undo cut"
-                                          tone="ghost"
-                                          busy={busy}
-                                          onClick={() =>
-                                            runWindowAction(item.windowId, () =>
-                                              undoWindowCut(item.windowId)
-                                            , {
-                                              optimisticUpdate: (current) =>
-                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                  ...currentItem,
-                                                  productionStatus: "pending",
-                                                })),
-                                            })
-                                          }
-                                        />
-                                      )}
+                          {/* Actions */}
+                          <div className="flex flex-wrap gap-2.5">
+                            {role === "cutter" ? (
+                              item.productionStatus === "pending" ? (
+                                <>
+                                  <ActionButton
+                                    label="Mark cut"
+                                    tone="primary"
+                                    busy={busy}
+                                    onClick={() =>
+                                      runWindowAction(item.windowId, () =>
+                                        markWindowCut(item.windowId)
+                                      , {
+                                        optimisticUpdate: (current) =>
+                                          updateWindowInSchedule(current, role, item.windowId, () => null),
+                                      })
+                                    }
+                                  />
+                                  <ActionButton
+                                    label="Move earlier"
+                                    tone="secondary"
+                                    busy={busy}
+                                    onClick={() => handleMove(item, "earlier")}
+                                  />
+                                  <ActionButton
+                                    label="Move later"
+                                    tone="secondary"
+                                    busy={busy}
+                                    onClick={() => handleMove(item, "later")}
+                                  />
+                                </>
+                              ) : (
+                                <>
+                                  <StatusChip
+                                    label="Cut complete"
+                                    tone="success"
+                                    icon={<CheckCircle size={13} weight="fill" />}
+                                  />
+                                  <ActionButton
+                                    label="Move earlier"
+                                    tone="secondary"
+                                    busy={false}
+                                    disabled
+                                    onClick={() => undefined}
+                                  />
+                                  <ActionButton
+                                    label="Move later"
+                                    tone="secondary"
+                                    busy={false}
+                                    disabled
+                                    onClick={() => undefined}
+                                  />
+                                </>
+                              )
+                            ) : role === "assembler" ? (
+                              <>
+                                {item.productionStatus === "cut" ? (
+                                  <ActionButton
+                                    label="Mark assembled"
+                                    tone="primary"
+                                    busy={busy}
+                                    onClick={() =>
+                                      runWindowAction(item.windowId, () =>
+                                        markWindowAssembled(item.windowId)
+                                      , {
+                                        optimisticUpdate: (current) =>
+                                          updateWindowInSchedule(current, role, item.windowId, () => null),
+                                      })
+                                    }
+                                  />
+                                ) : (
+                                  <StatusChip label="Not ready" tone="muted" />
+                                )}
+                                <ActionButton
+                                  label="Return to cutter"
+                                  tone="warning"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "cut"}
+                                  onClick={() => handleReturnToCutter(item)}
+                                />
+                                <ActionButton
+                                  label="Move earlier"
+                                  tone="secondary"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "cut"}
+                                  onClick={() => handleMove(item, "earlier")}
+                                />
+                                <ActionButton
+                                  label="Move later"
+                                  tone="secondary"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "cut"}
+                                  onClick={() => handleMove(item, "later")}
+                                />
+                              </>
+                            ) : (
+                              <>
+                                {item.productionStatus === "assembled" ? (
+                                  <ActionButton
+                                    label="Approve QC"
+                                    tone="success"
+                                    busy={busy}
+                                    onClick={() =>
+                                      runWindowAction(item.windowId, () =>
+                                        markWindowQCApproved(item.windowId)
+                                      , {
+                                        optimisticUpdate: (current) =>
+                                          updateWindowInSchedule(current, role, item.windowId, () => null),
+                                      })
+                                    }
+                                  />
+                                ) : (
+                                  <StatusChip
+                                    label={item.productionStatus === "qc_approved" ? "Built fully" : "Waiting on assembly"}
+                                    tone={item.productionStatus === "qc_approved" ? "success" : "muted"}
+                                    icon={item.productionStatus === "qc_approved" ? <CheckCircle size={13} weight="fill" /> : undefined}
+                                  />
+                                )}
+                                <ActionButton
+                                  label="Return to assembler"
+                                  tone="warning"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "assembled"}
+                                  onClick={() => handleReturnToAssembler(item)}
+                                />
+                                <ActionButton
+                                  label="Return to cutter"
+                                  tone="warning"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "assembled"}
+                                  onClick={() => handleReturnToCutter(item)}
+                                />
+                                <ActionButton
+                                  label="Move earlier"
+                                  tone="secondary"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "assembled"}
+                                  onClick={() => handleMove(item, "earlier")}
+                                />
+                                <ActionButton
+                                  label="Move later"
+                                  tone="secondary"
+                                  busy={busy}
+                                  disabled={item.productionStatus !== "assembled"}
+                                  onClick={() => handleMove(item, "later")}
+                                />
+                              </>
+                            )}
 
-                                      {role === "assembler" && item.productionStatus === "assembled" && (
-                                        <ActionButton
-                                          label="Undo assembly"
-                                          tone="ghost"
-                                          busy={busy}
-                                          onClick={() =>
-                                            runWindowAction(item.windowId, () =>
-                                              undoWindowAssembly(item.windowId)
-                                            , {
-                                              optimisticUpdate: (current) =>
-                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                  ...currentItem,
-                                                  productionStatus: "cut",
-                                                })),
-                                            })
-                                          }
-                                        />
-                                      )}
+                            {role === "cutter" && item.productionStatus === "cut" && (
+                              <ActionButton
+                                label="Undo cut"
+                                tone="ghost"
+                                busy={busy}
+                                onClick={() =>
+                                  runWindowAction(item.windowId, () =>
+                                    undoWindowCut(item.windowId)
+                                  , {
+                                    optimisticUpdate: (current) =>
+                                      updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                        ...currentItem,
+                                        productionStatus: "pending",
+                                      })),
+                                  })
+                                }
+                              />
+                            )}
 
-                                      {role === "qc" && item.productionStatus === "qc_approved" && (
-                                        <ActionButton
-                                          label="Undo QC"
-                                          tone="ghost"
-                                          busy={busy}
-                                          onClick={() =>
-                                            runWindowAction(item.windowId, () =>
-                                              undoWindowQC(item.windowId)
-                                            , {
-                                              optimisticUpdate: (current) =>
-                                                updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
-                                                  ...currentItem,
-                                                  productionStatus: "assembled",
-                                                })),
-                                            })
-                                          }
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
+                            {role === "assembler" && item.productionStatus === "assembled" && (
+                              <ActionButton
+                                label="Undo assembly"
+                                tone="ghost"
+                                busy={busy}
+                                onClick={() =>
+                                  runWindowAction(item.windowId, () =>
+                                    undoWindowAssembly(item.windowId)
+                                  , {
+                                    optimisticUpdate: (current) =>
+                                      updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                        ...currentItem,
+                                        productionStatus: "cut",
+                                      })),
+                                  })
+                                }
+                              />
+                            )}
 
-                                  <div className="md:min-w-[9rem] md:text-right">
-                                    <p className="font-mono text-[15px] font-semibold leading-none tracking-tight text-foreground sm:text-[15px] md:text-[16px]">
-                                      {formatMeasurement(item)}
-                                    </p>
-                                  </div>
-                                </article>
-                              );
-                            })}
+                            {role === "qc" && item.productionStatus === "qc_approved" && (
+                              <ActionButton
+                                label="Undo QC"
+                                tone="ghost"
+                                busy={busy}
+                                onClick={() =>
+                                  runWindowAction(item.windowId, () =>
+                                    undoWindowQC(item.windowId)
+                                  , {
+                                    optimisticUpdate: (current) =>
+                                      updateWindowInSchedule(current, role, item.windowId, (currentItem) => ({
+                                        ...currentItem,
+                                        productionStatus: "assembled",
+                                      })),
+                                  })
+                                }
+                              />
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>
           </section>
         ))}
       </div>
+
+      {printModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+          onClick={() => setPrintModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 shadow-xl sm:rounded-[var(--radius-xl)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-foreground">Print labels</h2>
+              <button
+                type="button"
+                onClick={() => setPrintModalOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-tertiary hover:bg-surface"
+              >
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <p className="mb-4 text-[12px] text-tertiary">
+              Select which days to print. Only uncut blinds are included.
+            </p>
+            <div className="space-y-2">
+              {printDayOptions.length === 0 ? (
+                <p className="text-[12px] text-tertiary italic">No scheduled cutting days found.</p>
+              ) : printDayOptions.map((option, idx) => {
+                const checked = printSelectedDays.includes(idx);
+                const empty = option.pendingIds.length === 0;
+                return (
+                  <label
+                    key={option.date}
+                    className={[
+                      "flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 transition-colors",
+                      empty ? "cursor-not-allowed opacity-40 border-border" : checked ? "border-accent bg-accent/5" : "border-border hover:bg-surface",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        disabled={empty}
+                        checked={checked}
+                        onChange={() => {
+                          if (empty) return;
+                          setPrintSelectedDays((prev) =>
+                            prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
+                          );
+                        }}
+                        className="accent-accent h-4 w-4 rounded"
+                      />
+                      <span className="text-[13px] font-medium text-foreground">{option.label}</span>
+                    </div>
+                    <span className="text-[12px] text-tertiary">
+                      {option.pendingIds.length} uncut
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="mt-5 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPrintModalOpen(false)}
+                className="flex-1 rounded-xl border border-border bg-card py-2.5 text-[13px] font-semibold text-secondary hover:bg-surface"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={printSelectedDays.length === 0 || printSelectedDays.every((idx) => printDayOptions[idx]?.pendingIds.length === 0)}
+                onClick={handlePrint}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+              >
+                <Printer size={14} />
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
