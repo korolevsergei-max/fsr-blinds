@@ -475,26 +475,6 @@ export function ManufacturingRoleQueue({
     );
   }
 
-  const printDayOptions = localSchedule.buckets
-    .filter((b) => b.date !== null)
-    .slice(0, 3)
-    .map((bucket, idx) => {
-      const pendingIds = bucket.units
-        .flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))
-        .filter((w) => w.productionStatus === "pending")
-        .map((w) => w.windowId);
-      const dayLabel = idx === 0 ? "Today" : idx === 1 ? "Next working day" : "Working day after";
-      return { label: dayLabel, date: bucket.date!, pendingIds };
-    });
-
-  const handlePrint = () => {
-    const ids = printSelectedDays
-      .flatMap((idx) => printDayOptions[idx]?.pendingIds ?? []);
-    if (ids.length === 0) return;
-    const url = `/cutter/queue/print?ids=${ids.join(",")}`;
-    window.open(url, "_blank");
-    setPrintModalOpen(false);
-  };
 
   // Flatten to per-bucket window list, with optional multi-level sort
   const visibleBuckets = localSchedule.buckets
@@ -555,6 +535,28 @@ export function ManufacturingRoleQueue({
     })
     .filter((bucket) => bucket.windows.length > 0);
 
+  // Build print options from the already-filtered + sorted visibleBuckets
+  // so Print labels always reflects exactly what the user sees on screen.
+  const printDayOptions = visibleBuckets
+    .filter((b) => b.date !== null)
+    .slice(0, 3)
+    .map((bucket, idx) => {
+      const pendingIds = bucket.windows
+        .filter((w) => w.productionStatus === "pending")
+        .map((w) => w.windowId);
+      const dayLabel = idx === 0 ? "Today" : idx === 1 ? "Next working day" : "Working day after";
+      return { label: dayLabel, date: bucket.date!, pendingIds };
+    });
+
+  const handlePrint = () => {
+    const ids = printSelectedDays
+      .flatMap((idx) => printDayOptions[idx]?.pendingIds ?? []);
+    if (ids.length === 0) return;
+    const url = `/cutter/queue/print?ids=${ids.join(",")}`;
+    window.open(url, "_blank");
+    setPrintModalOpen(false);
+  };
+
   return (
     <div
       className="pb-6"
@@ -600,6 +602,21 @@ export function ManufacturingRoleQueue({
               </span>
             )}
           </div>
+          {/* Sort button — first */}
+          <button
+            type="button"
+            id="queue-sort-button"
+            onClick={openSortModal}
+            className={[
+              "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+              activeSortCount > 0
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-card text-secondary hover:border-zinc-300",
+            ].join(" ")}
+          >
+            <SortAscending size={13} weight="bold" />
+            {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
+          </button>
           <FilterDropdown
             multiple
             label="Building"
@@ -627,21 +644,6 @@ export function ManufacturingRoleQueue({
             options={fabricTypeOptions}
             onChange={setFabricTypeFilter}
           />
-          {/* Sort button */}
-          <button
-            type="button"
-            id="queue-sort-button"
-            onClick={openSortModal}
-            className={[
-              "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
-              activeSortCount > 0
-                ? "border-accent bg-accent text-white"
-                : "border-border bg-card text-secondary hover:border-zinc-300",
-            ].join(" ")}
-          >
-            <SortAscending size={13} weight="bold" />
-            {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
-          </button>
           {(activeFilterCount > 0 || activeSortCount > 0) && (
             <button
               type="button"
