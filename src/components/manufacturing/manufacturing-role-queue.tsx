@@ -4,9 +4,13 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   CheckCircle,
   FunnelSimple,
   Printer,
+  SortAscending,
+  Trash,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
@@ -81,6 +85,71 @@ type QueueStatusFilter =
   | "today"
   | "next_day"
   | "unscheduled";
+
+type SortField =
+  | "unitNumber"
+  | "buildingName"
+  | "blindType"
+  | "fabricWidth"
+  | "windowWidth";
+
+type SortDirection = "asc" | "desc";
+
+type SortLevel = {
+  field: SortField;
+  direction: SortDirection;
+};
+
+const SORT_FIELD_LABELS: Record<SortField, string> = {
+  unitNumber: "Unit Number",
+  buildingName: "Building",
+  blindType: "Fabric Type",
+  fabricWidth: "Fabric Width",
+  windowWidth: "Window Width",
+};
+
+function computeFabricWidth(item: ManufacturingWindowItem): number | null {
+  if (item.width == null) return null;
+  if (item.fabricAdjustmentSide !== "none" && item.fabricAdjustmentInches != null) {
+    return item.width - item.fabricAdjustmentInches;
+  }
+  return item.width;
+}
+
+function getSortValue(item: ManufacturingWindowItem, field: SortField): string | number | null {
+  switch (field) {
+    case "unitNumber": return item.unitNumber;
+    case "buildingName": return item.buildingName;
+    case "blindType": return item.blindType;
+    case "fabricWidth": return computeFabricWidth(item);
+    case "windowWidth": return item.width;
+  }
+}
+
+function multiLevelSort(
+  windows: ManufacturingWindowItem[],
+  levels: SortLevel[]
+): ManufacturingWindowItem[] {
+  if (levels.length === 0) return windows;
+  return [...windows].sort((a, b) => {
+    for (const level of levels) {
+      const va = getSortValue(a, level.field);
+      const vb = getSortValue(b, level.field);
+      // nulls last
+      if (va == null && vb == null) continue;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      let cmp: number;
+      if (typeof va === "number" && typeof vb === "number") {
+        cmp = va - vb;
+      } else {
+        cmp = String(va).localeCompare(String(vb));
+      }
+      if (cmp !== 0) return level.direction === "asc" ? cmp : -cmp;
+    }
+    return 0;
+  });
+}
 
 function getWindowPriority(
   role: "cutter" | "assembler" | "qc",
@@ -198,6 +267,10 @@ export function ManufacturingRoleQueue({
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDateFilter, setInstallDateFilter] = useState<ScheduleInstallDateFilter>("all");
   const [statusFilters, setStatusFilters] = useState<QueueStatusFilter[]>([]);
+  const [fabricTypeFilter, setFabricTypeFilter] = useState<string[]>([]);
+  const [sortLevels, setSortLevels] = useState<SortLevel[]>([]);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printSelectedDays, setPrintSelectedDays] = useState<number[]>([0]);
   const todayKey = formatDateKey(new Date());
@@ -361,7 +434,46 @@ export function ManufacturingRoleQueue({
     buildingFilter.length > 0,
     installDateFilter !== "all",
     statusFilters.length > 0,
+    fabricTypeFilter.length > 0,
   ].filter(Boolean).length;
+
+  const activeSortCount = sortLevels.length;
+
+  const fabricTypeOptions = [
+    { value: "all", label: "All types" },
+    { value: "screen", label: "Screen" },
+    { value: "blackout", label: "Blackout" },
+  ];
+
+  const sortFieldOptions = Object.entries(SORT_FIELD_LABELS).map(([value, label]) => ({ value, label }));
+
+  function openSortModal() {
+    setDraftSortLevels(sortLevels);
+    setSortModalOpen(true);
+  }
+
+  function applySort() {
+    setSortLevels(draftSortLevels);
+    setSortModalOpen(false);
+  }
+
+  function addDraftLevel() {
+    if (draftSortLevels.length >= 3) return;
+    const usedFields = new Set(draftSortLevels.map((l) => l.field));
+    const nextField = (Object.keys(SORT_FIELD_LABELS) as SortField[]).find((f) => !usedFields.has(f));
+    if (!nextField) return;
+    setDraftSortLevels((prev) => [...prev, { field: nextField, direction: "asc" }]);
+  }
+
+  function removeDraftLevel(idx: number) {
+    setDraftSortLevels((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function updateDraftLevel(idx: number, patch: Partial<SortLevel>) {
+    setDraftSortLevels((prev) =>
+      prev.map((level, i) => (i === idx ? { ...level, ...patch } : level))
+    );
+  }
 
   const printDayOptions = localSchedule.buckets
     .filter((b) => b.date !== null)
@@ -384,7 +496,7 @@ export function ManufacturingRoleQueue({
     setPrintModalOpen(false);
   };
 
-  // Flatten to per-bucket window list, sorted by width descending (widest first)
+  // Flatten to per-bucket window list, with optional multi-level sort
   const visibleBuckets = localSchedule.buckets
     .map((bucket) => {
       const windows: ManufacturingWindowItem[] = [];
@@ -401,20 +513,43 @@ export function ManufacturingRoleQueue({
               bucketDate: bucket.date,
               bucketLabel: bucket.label,
             })) continue;
+            if (fabricTypeFilter.length > 0 && !fabricTypeFilter.includes(item.blindType)) continue;
             windows.push(item);
           }
         }
       }
 
-      // Sort: issues/returned first, then by width descending
-      windows.sort((a, b) => {
-        const pa = getWindowPriority(role, a);
-        const pb = getWindowPriority(role, b);
-        if (pa !== pb) return pa - pb;
-        const wa = a.width ?? -1;
-        const wb = b.width ?? -1;
-        return wb - wa;
-      });
+      if (sortLevels.length > 0) {
+        // Custom multi-level sort — still keeps issues/returned at top
+        const priority = (w: ManufacturingWindowItem) => getWindowPriority(role, w);
+        const byPriority = (a: ManufacturingWindowItem, b: ManufacturingWindowItem) => priority(a) - priority(b);
+        windows.sort((a, b) => {
+          const pd = byPriority(a, b);
+          if (pd !== 0) return pd;
+          return 0;
+        });
+        // Apply multi-level sort within each priority group
+        const priorityGroups = new Map<number, ManufacturingWindowItem[]>();
+        for (const w of windows) {
+          const p = priority(w);
+          if (!priorityGroups.has(p)) priorityGroups.set(p, []);
+          priorityGroups.get(p)!.push(w);
+        }
+        windows.length = 0;
+        for (const [, group] of [...priorityGroups.entries()].sort(([a], [b]) => a - b)) {
+          windows.push(...multiLevelSort(group, sortLevels));
+        }
+      } else {
+        // Default: issues/returned first, then by width descending
+        windows.sort((a, b) => {
+          const pa = getWindowPriority(role, a);
+          const pb = getWindowPriority(role, b);
+          if (pa !== pb) return pa - pb;
+          const wa = a.width ?? -1;
+          const wb = b.width ?? -1;
+          return wb - wa;
+        });
+      }
 
       return { ...bucket, windows, scheduledCount: windows.length };
     })
@@ -485,13 +620,37 @@ export function ManufacturingRoleQueue({
             options={queueStatusOptions}
             onChange={(values) => setStatusFilters(values as QueueStatusFilter[])}
           />
-          {activeFilterCount > 0 && (
+          <FilterDropdown
+            multiple
+            label="Fabric Type"
+            values={fabricTypeFilter}
+            options={fabricTypeOptions}
+            onChange={setFabricTypeFilter}
+          />
+          {/* Sort button */}
+          <button
+            type="button"
+            id="queue-sort-button"
+            onClick={openSortModal}
+            className={[
+              "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+              activeSortCount > 0
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-card text-secondary hover:border-zinc-300",
+            ].join(" ")}
+          >
+            <SortAscending size={13} weight="bold" />
+            {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
+          </button>
+          {(activeFilterCount > 0 || activeSortCount > 0) && (
             <button
               type="button"
               onClick={() => {
                 setBuildingFilter([]);
                 setInstallDateFilter("all");
                 setStatusFilters([]);
+                setFabricTypeFilter([]);
+                setSortLevels([]);
               }}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
             >
@@ -865,6 +1024,130 @@ export function ManufacturingRoleQueue({
           </section>
         ))}
       </div>
+
+      {/* Sort Modal */}
+      {sortModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+          onClick={() => setSortModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6 max-h-[85dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-foreground">Sort queue</h2>
+              <button
+                type="button"
+                onClick={() => setSortModalOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-tertiary hover:bg-surface"
+              >
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <p className="mb-4 text-[12px] text-tertiary">
+              Add up to 3 sort levels. Sort applies within each day bucket, after priority items.
+            </p>
+
+            <div className="space-y-2">
+              {draftSortLevels.map((level, idx) => {
+                const usedFields = new Set(
+                  draftSortLevels.filter((_, i) => i !== idx).map((l) => l.field)
+                );
+                const availableOptions = sortFieldOptions.filter(
+                  (o) => !usedFields.has(o.value as SortField)
+                );
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 rounded-xl border border-border bg-surface/50 px-3 py-2.5"
+                  >
+                    {/* Level badge */}
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                      {idx + 1}
+                    </span>
+                    {/* Field select */}
+                    <select
+                      id={`sort-field-${idx}`}
+                      value={level.field}
+                      onChange={(e) => updateDraftLevel(idx, { field: e.target.value as SortField })}
+                      className="flex-1 min-w-0 rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium text-foreground focus:outline-none"
+                    >
+                      {availableOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    {/* Direction toggle */}
+                    <button
+                      type="button"
+                      id={`sort-direction-${idx}`}
+                      onClick={() =>
+                        updateDraftLevel(idx, {
+                          direction: level.direction === "asc" ? "desc" : "asc",
+                        })
+                      }
+                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-card text-secondary transition-colors hover:bg-surface"
+                      title={level.direction === "asc" ? "Ascending" : "Descending"}
+                    >
+                      {level.direction === "asc" ? (
+                        <ArrowUp size={13} weight="bold" />
+                      ) : (
+                        <ArrowDown size={13} weight="bold" />
+                      )}
+                    </button>
+                    {/* Remove */}
+                    <button
+                      type="button"
+                      id={`sort-remove-${idx}`}
+                      onClick={() => removeDraftLevel(idx)}
+                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
+                    >
+                      <Trash size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {draftSortLevels.length < 3 && (
+                <button
+                  type="button"
+                  id="sort-add-level"
+                  onClick={addDraftLevel}
+                  className="w-full rounded-xl border border-dashed border-border py-2.5 text-xs font-medium text-tertiary transition-colors hover:border-accent hover:text-accent"
+                >
+                  + Add sort level
+                </button>
+              )}
+            </div>
+
+            <div className="mt-5 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => { setDraftSortLevels([]); }}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] font-semibold text-secondary hover:bg-surface"
+              >
+                <Trash size={13} />
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortModalOpen(false)}
+                className="flex-1 rounded-xl border border-border bg-card py-2.5 text-[13px] font-semibold text-secondary hover:bg-surface"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="sort-apply"
+                onClick={applySort}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-[13px] font-semibold text-white"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {printModalOpen && (
         <div
