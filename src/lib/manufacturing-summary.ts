@@ -59,6 +59,7 @@ export function computeManufacturingSummary(input: ManufacturingSummaryInput): M
       { label: "Fabric width (post-cut)", value: fmt(fabricPostCut) },
       { label: "Valance width", value: fmt(width - 0.0625) },
       { label: "Tube width", value: fmt(width - 1.375) },
+      { label: "Bottom rail", value: fmt(fabricPostCut) },
       { label: "Wand & chain", value: wandChain != null ? `${wandChain}"` : "Not set" },
       { label: "Window installation", value: windowInstallation === "inside" ? "Inside" : "Outside" },
       { label: "Blind type", value: blindType === "blackout" ? "Blackout" : "Screen" },

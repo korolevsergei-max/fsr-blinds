@@ -872,7 +872,7 @@ export function ManufacturingRoleQueue({
           onClick={() => setPrintModalOpen(false)}
         >
           <div
-            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 shadow-xl sm:rounded-[var(--radius-xl)]"
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6 max-h-[85dvh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

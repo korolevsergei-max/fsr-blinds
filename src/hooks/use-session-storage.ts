@@ -1,20 +1,19 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 export function useSessionStorage<T>(key: string, initialValue: T) {
-  const [state, setState] = useState<T>(() => {
-    if (typeof window === "undefined") {
-      return initialValue;
-    }
+  const [state, setState] = useState<T>(initialValue);
+
+  useEffect(() => {
     try {
       const item = window.sessionStorage.getItem(key);
       if (item) {
-        return JSON.parse(item) as T;
+        setState(JSON.parse(item) as T);
       }
     } catch (error) {
       console.warn(`Error reading sessionStorage key "${key}":`, error);
     }
-    return initialValue;
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const setValue = useCallback((value: T | ((val: T) => T)) => {
     setState((prevState) => {

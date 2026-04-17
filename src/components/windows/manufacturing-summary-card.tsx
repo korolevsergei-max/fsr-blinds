@@ -36,11 +36,12 @@ export function ManufacturingSummaryCard(props: ManufacturingSummaryInput) {
           <Divider />
           <Row label={summary.rows[4].label} value={summary.rows[4].value} />
           <Row label={summary.rows[5].label} value={summary.rows[5].value} />
-          <Divider />
           <Row label={summary.rows[6].label} value={summary.rows[6].value} />
+          <Divider />
           <Row label={summary.rows[7].label} value={summary.rows[7].value} />
           <Row label={summary.rows[8].label} value={summary.rows[8].value} />
           <Row label={summary.rows[9].label} value={summary.rows[9].value} />
+          <Row label={summary.rows[10].label} value={summary.rows[10].value} />
         </>
       )}
     </div>

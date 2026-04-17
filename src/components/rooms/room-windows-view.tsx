@@ -10,6 +10,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WindowStageNav } from "@/components/window-stage-nav";
+import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
@@ -464,6 +465,26 @@ export function RoomWindowsView({
 
                 {win.notes && (
                   <p className="mt-2 text-xs italic text-zinc-500">{win.notes}</p>
+                )}
+
+                {activeNavStage === "before" && win.measured && (
+                  <div
+                    className="mt-3"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <ManufacturingSummaryCard
+                      width={win.width}
+                      height={win.height}
+                      depth={win.depth}
+                      windowInstallation={win.windowInstallation}
+                      wandChain={win.wandChain}
+                      fabricAdjustmentSide={win.fabricAdjustmentSide}
+                      fabricAdjustmentInches={win.fabricAdjustmentInches}
+                      blindType={win.blindType}
+                      chainSide={win.chainSide}
+                    />
+                  </div>
                 )}
 
                 {(getStageNavProps || onDeleteWindow) && (
