@@ -500,25 +500,15 @@ export function ManufacturingRoleQueue({
       }
 
       if (sortLevels.length > 0) {
-        // Custom multi-level sort — still keeps issues/returned at top
-        const priority = (w: ManufacturingWindowItem) => getWindowPriority(role, w);
-        const byPriority = (a: ManufacturingWindowItem, b: ManufacturingWindowItem) => priority(a) - priority(b);
-        windows.sort((a, b) => {
-          const pd = byPriority(a, b);
-          if (pd !== 0) return pd;
-          return 0;
-        });
-        // Apply multi-level sort within each priority group
-        const priorityGroups = new Map<number, ManufacturingWindowItem[]>();
-        for (const w of windows) {
-          const p = priority(w);
-          if (!priorityGroups.has(p)) priorityGroups.set(p, []);
-          priorityGroups.get(p)!.push(w);
-        }
+        // Pin true issue/returned items at the very top (priority 0),
+        // then sort ALL remaining items together as one unified group.
+        // Splitting by sub-priorities (1, 2, 3…) would fragment items of the
+        // same blind type across groups, breaking e.g. "sort by Fabric Type".
+        const isIssue = (w: ManufacturingWindowItem) => isReturnedToRole(w, role) || w.issueStatus === "open";
+        const issues = windows.filter(isIssue);
+        const rest   = windows.filter((w) => !isIssue(w));
         windows.length = 0;
-        for (const [, group] of [...priorityGroups.entries()].sort(([a], [b]) => a - b)) {
-          windows.push(...multiLevelSort(group, sortLevels));
-        }
+        windows.push(...issues, ...multiLevelSort(rest, sortLevels));
       } else {
         // Default: issues/returned first, then by width descending
         windows.sort((a, b) => {
