@@ -36,11 +36,10 @@ function FlagBadge({ flag }: { flag: UnitFlag }) {
 }
 
 export function SchedulerUnitsList({ data }: { data: AppDataset }) {
-  const { units, clients, buildings, installers } = data;
+  const { units, buildings, installers } = data;
   const today = new Date().toISOString().split("T")[0];
 
   const [search, setSearch] = useSessionStorage("scheduler-search", "");
-  const [clientFilter, setClientFilter] = useSessionStorage<string[]>("scheduler-clientFilter", []);
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-buildingFilter", []);
   const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("scheduler-statusFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-installerFilter", []);
@@ -53,18 +52,12 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);
 
-  const availableBuildings = useMemo(
-    () => (clientFilter.length === 0 ? buildings : buildings.filter((b) => clientFilter.includes(b.clientId))),
-    [buildings, clientFilter]
-  );
-
   const unitsForDateOptions = useMemo(() => {
     return units.filter((u) => {
-      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
       if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       return true;
     });
-  }, [units, clientFilter, buildingFilter]);
+  }, [units, buildingFilter]);
 
   const distinctAddedDates = useMemo(() => {
     const set = new Set<string>();
@@ -94,13 +87,11 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
           const q = search.toLowerCase();
           if (
             !u.unitNumber.toLowerCase().includes(q) &&
-            !u.buildingName.toLowerCase().includes(q) &&
-            !u.clientName.toLowerCase().includes(q)
+            !u.buildingName.toLowerCase().includes(q)
           ) {
             return false;
           }
         }
-        if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
         if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
         if (statusFilter.length > 0 && !statusFilter.includes(u.status)) return false;
         if (installerFilter.length > 0) {
@@ -124,7 +115,6 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     units,
     today,
     search,
-    clientFilter,
     buildingFilter,
     statusFilter,
     installerFilter,
@@ -158,13 +148,9 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     });
   }, [filteredUnits, sortOrder]);
 
-  const clientOptions = [
-    { value: "all", label: "All clients" },
-    ...clients.map((c) => ({ value: c.id, label: c.name })),
-  ];
   const buildingOptions = [
     { value: "all", label: "All buildings" },
-    ...availableBuildings.map((b) => ({ value: b.id, label: b.name })),
+    ...buildings.map((b) => ({ value: b.id, label: b.name })),
   ];
   const installerOptions = [
     { value: "all", label: "All installers" },
@@ -201,7 +187,6 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   ];
 
   const activeFilterCount = [
-    clientFilter.length > 0,
     buildingFilter.length > 0,
     statusFilter.length > 0,
     installerFilter.length > 0,
@@ -283,7 +268,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 <MagnifyingGlass size={15} className="text-zinc-400 flex-shrink-0" />
                 <input
                   type="search"
-                  placeholder="Search units, buildings, clients…"
+                  placeholder="Search units or buildings…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="flex-1 bg-transparent text-[13px] outline-none text-foreground placeholder:text-muted"
@@ -307,13 +292,6 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 )}
               </div>
               <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
-              <FilterDropdown
-                multiple
-                label="Client"
-                values={clientFilter}
-                options={clientOptions}
-                onChange={(v) => { setClientFilter(v); setBuildingFilter([]); }}
-              />
               <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
               <FilterDropdown multiple label="Status" values={statusFilter} options={statusOptions} onChange={setStatusFilter} />
               <FilterDropdown multiple label="Installer" values={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
@@ -335,7 +313,6 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setClientFilter([]);
                     setBuildingFilter([]);
                     setStatusFilter([]);
                     setInstallerFilter([]);
@@ -416,7 +393,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                       <div>
                         <p className="text-[14px] font-semibold text-foreground">{unit.unitNumber}</p>
                         <p className="text-[12px] text-tertiary">
-                          {unit.buildingName} · {unit.clientName}
+                          {unit.buildingName}
                         </p>
                       </div>
                     </div>

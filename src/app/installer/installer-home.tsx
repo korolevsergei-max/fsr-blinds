@@ -27,14 +27,13 @@ export function InstallerHome({
 
   const buildingMap = new Map<
     string,
-    { id: string; name: string; clientName: string; units: Unit[] }
+    { id: string; name: string; units: Unit[] }
   >();
   for (const unit of allUnits) {
     if (!buildingMap.has(unit.buildingId)) {
       buildingMap.set(unit.buildingId, {
         id: unit.buildingId,
         name: unit.buildingName,
-        clientName: unit.clientName,
         units: [],
       });
     }
@@ -137,9 +136,6 @@ export function InstallerHome({
                       <div>
                         <p className="text-[15px] font-semibold text-foreground tracking-tight leading-tight">
                           {building.name}
-                        </p>
-                        <p className="text-[12px] text-tertiary mt-0.5">
-                          {building.clientName}
                         </p>
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className="text-[11px] font-semibold text-accent">

@@ -17,6 +17,7 @@ export function InstallerSchedule({
       hrefBase="/installer/units"
       title="Schedule"
       subtitle="Your installation work"
+      hideClient
     />
   );
 }

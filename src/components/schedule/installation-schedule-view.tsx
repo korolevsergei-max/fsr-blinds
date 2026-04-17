@@ -37,6 +37,7 @@ export function InstallationScheduleView({
   scope: controlledScope,
   onScopeChange,
   showScopeToggle = true,
+  hideClient = false,
 }: {
   data: AppDataset;
   hrefBase: string;
@@ -48,6 +49,7 @@ export function InstallationScheduleView({
   scope?: ScheduleScope;
   onScopeChange?: (scope: ScheduleScope) => void;
   showScopeToggle?: boolean;
+  hideClient?: boolean;
 }) {
   const today = new Date();
   const todayKey = formatDateKey(today);
@@ -83,7 +85,7 @@ export function InstallationScheduleView({
   );
 
   const activeFilterCount = [
-    clientFilter.length > 0,
+    !hideClient && clientFilter.length > 0,
     buildingFilter.length > 0,
     installDateFilter !== "all",
   ].filter(Boolean).length;
@@ -145,16 +147,18 @@ export function InstallationScheduleView({
               </span>
             )}
           </div>
-          <FilterDropdown
-            multiple
-            label="Client"
-            values={clientFilter}
-            options={clientOptions}
-            onChange={(values) => {
-              setClientFilter(values);
-              setBuildingFilter([]);
-            }}
-          />
+          {!hideClient && (
+            <FilterDropdown
+              multiple
+              label="Client"
+              values={clientFilter}
+              options={clientOptions}
+              onChange={(values) => {
+                setClientFilter(values);
+                setBuildingFilter([]);
+              }}
+            />
+          )}
           <FilterDropdown
             multiple
             label="Building"
@@ -267,6 +271,7 @@ export function InstallationScheduleView({
                             isOverdue={isEntryOverdue(entry.unitId)}
                             installer={resolveInstaller(entry.unitId)}
                             variant="week"
+                            hideClient={hideClient}
                           />
                         ))}
                       </div>
@@ -309,6 +314,7 @@ export function InstallationScheduleView({
                         href={`${hrefBase}/${entry.unitId}`}
                         isOverdue={isEntryOverdue(entry.unitId)}
                         variant="month"
+                        hideClient={hideClient}
                       />
                     ))}
                     {entries.length > 2 && (

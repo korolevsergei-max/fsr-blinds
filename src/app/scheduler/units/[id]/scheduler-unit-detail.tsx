@@ -233,7 +233,7 @@ export function SchedulerUnitDetail({
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
         title={unit.unitNumber}
-        subtitle={`${unit.buildingName} · ${unit.clientName}`}
+        subtitle={unit.buildingName}
         backHref="/scheduler/units"
       />
 

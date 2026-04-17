@@ -11,6 +11,7 @@ export function SchedulerScheduleView({ data }: { data: AppDataset }) {
       showInstaller
       title="Schedule"
       subtitle="Installation schedule"
+      hideClient
     />
   );
 }

@@ -68,13 +68,10 @@ export function BuildingUnits({
     );
   }
 
-  const clientName = buildingUnits[0]?.clientName ?? "";
-
   return (
     <div className="flex flex-col">
       <PageHeader
         title={building.name}
-        subtitle={clientName}
         backHref="/installer"
       />
 

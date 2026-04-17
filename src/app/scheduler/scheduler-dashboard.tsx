@@ -45,12 +45,11 @@ export function SchedulerDashboard({
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
-  const { units, clients, buildings, installers } = data;
+  const { units, buildings, installers } = data;
 
   const today = new Date().toISOString().split("T")[0];
 
   // Scope filters
-  const [clientFilter, setClientFilter] = useSessionStorage<string[]>("scheduler-dashboard-clientFilter", []);
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-dashboard-buildingFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-dashboard-installerFilter", []);
   const [yearFilter, setYearFilter] = useSessionStorage<string>("scheduler-dashboard-yearFilter", "all");
@@ -60,19 +59,10 @@ export function SchedulerDashboard({
   const [selectedStatus, setSelectedStatus] = useSessionStorage<UnitStatus | null>("scheduler-dashboard-selectedStatus", null);
   const [selectedIssue, setSelectedIssue] = useSessionStorage<DashboardIssue | null>("scheduler-dashboard-selectedIssue", null);
 
-  const availableBuildings = useMemo(
-    () =>
-      clientFilter.length === 0
-        ? buildings
-        : buildings.filter((b) => clientFilter.includes(b.clientId)),
-    [buildings, clientFilter]
-  );
-
   // All counts derived from scopedUnits — never global units
   const scopedUnits = useMemo(() => {
     const effectiveMonth = yearFilter === "all" ? "all" : monthFilter;
     return units.filter((u) => {
-      if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
       if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
       if (installerFilter.length > 0) {
         const wantsUnassigned = installerFilter.includes("__unassigned__");
@@ -83,7 +73,7 @@ export function SchedulerDashboard({
       if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
     });
-  }, [units, clientFilter, buildingFilter, installerFilter, yearFilter, monthFilter]);
+  }, [units, buildingFilter, installerFilter, yearFilter, monthFilter]);
 
   const yearOptions = useMemo(() => buildYearOptions(units), [units]);
   const monthOptions = useMemo(() => buildMonthFilterOptions(), []);
@@ -134,20 +124,15 @@ export function SchedulerDashboard({
   const showResults = selectedStatus !== null || selectedIssue !== null;
 
   const activeFilterCount = [
-    clientFilter.length > 0,
     buildingFilter.length > 0,
     installerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
 
-  const clientOptions = [
-    { value: "all", label: "All clients" },
-    ...clients.map((c) => ({ value: c.id, label: c.name })),
-  ];
   const buildingOptions = [
     { value: "all", label: "All buildings" },
-    ...availableBuildings.map((b) => ({ value: b.id, label: b.name })),
+    ...buildings.map((b) => ({ value: b.id, label: b.name })),
   ];
   const installerOptions = [
     { value: "all", label: "All installers" },
@@ -199,16 +184,6 @@ export function SchedulerDashboard({
             </div>
             <FilterDropdown
               multiple
-              label="Client"
-              values={clientFilter}
-              options={clientOptions}
-              onChange={(v) => {
-                setClientFilter(v);
-                setBuildingFilter([]);
-              }}
-            />
-            <FilterDropdown
-              multiple
               label="Building"
               values={buildingFilter}
               options={buildingOptions}
@@ -242,7 +217,6 @@ export function SchedulerDashboard({
               <button
                 type="button"
                 onClick={() => {
-                  setClientFilter([]);
                   setBuildingFilter([]);
                   setInstallerFilter([]);
                   setYearFilter("all");

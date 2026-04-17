@@ -225,9 +225,6 @@ export function UnitDetail({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <p className="text-[10px] font-bold text-muted uppercase tracking-[0.12em]">
-            {unit.clientName}
-          </p>
           <h2 className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
             {unit.buildingName}
           </h2>

@@ -19,6 +19,7 @@ interface ScheduleEntryCardProps {
   installer?: InstallerBadge | null;
   /** "week" renders a full card; "month" renders a compact inline pill */
   variant?: "week" | "month";
+  hideClient?: boolean;
 }
 
 export function ScheduleEntryCard({
@@ -27,6 +28,7 @@ export function ScheduleEntryCard({
   isOverdue,
   installer,
   variant = "week",
+  hideClient = false,
 }: ScheduleEntryCardProps) {
   const isMeasurement = entry.taskType === "measurement";
   const isBracketing = entry.taskType === "bracketing";
@@ -78,7 +80,7 @@ export function ScheduleEntryCard({
                 ? "bg-sky-100 text-sky-700"
                 : "bg-emerald-100 text-emerald-700"
         }`}
-        title={`${entry.clientName} — ${entry.buildingName} — ${entry.unitNumber}`}
+        title={hideClient ? `${entry.buildingName} — ${entry.unitNumber}` : `${entry.clientName} — ${entry.buildingName} — ${entry.unitNumber}`}
       >
         <Icon
           size={10}
@@ -115,9 +117,11 @@ export function ScheduleEntryCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.client}`}>
-              {entry.clientName}
-            </span>
+            {!hideClient && (
+              <span className={`min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-[0.14em] ${tone.client}`}>
+                {entry.clientName}
+              </span>
+            )}
             {isOverdue && (
               <Warning size={12} weight="fill" className="flex-shrink-0 text-red-500" />
             )}
