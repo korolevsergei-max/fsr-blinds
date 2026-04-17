@@ -439,7 +439,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                     <div>
                       <p className="text-[14px] font-semibold text-foreground">{unit.unitNumber}</p>
                       <p className="text-[12px] text-tertiary">
-                        {unit.buildingName} · {unit.clientName}
+                        {unit.buildingName}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

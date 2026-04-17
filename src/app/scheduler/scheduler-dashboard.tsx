@@ -368,6 +368,7 @@ export function SchedulerDashboard({
                 issueDetailsByUnitId={
                   selectedIssue === "escalations" ? escalationDetailsByUnitId : undefined
                 }
+                hideClient
               />
             </motion.div>
           )}

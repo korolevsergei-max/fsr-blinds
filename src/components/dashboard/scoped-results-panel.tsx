@@ -21,6 +21,7 @@ interface ScopedResultsPanelProps {
   onClearStatus: () => void;
   onClearIssue: () => void;
   issueDetailsByUnitId?: Map<string, string[]>;
+  hideClient?: boolean;
 }
 
 export function ScopedResultsPanel({
@@ -32,6 +33,7 @@ export function ScopedResultsPanel({
   onClearStatus,
   onClearIssue,
   issueDetailsByUnitId,
+  hideClient = false,
 }: ScopedResultsPanelProps) {
   const flaggedUnits = units.map((u) => ({
     ...u,
@@ -94,7 +96,7 @@ export function ScopedResultsPanel({
                     {unit.unitNumber}
                   </p>
                   <p className="text-[11px] text-tertiary truncate">
-                    {unit.buildingName} · {unit.clientName}
+                    {hideClient ? unit.buildingName : `${unit.buildingName} · ${unit.clientName}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
