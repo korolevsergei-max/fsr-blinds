@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus } from "@/lib/types";
+import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus, WindowInstallation, WandChain, FabricAdjustmentSide } from "@/lib/types";
 
 export interface CutterUnit {
   id: string;
@@ -24,12 +24,14 @@ export interface CutterWindow {
   roomId: string;
   label: string;
   blindType: BlindType;
+  chainSide: "left" | "right" | null;
   width: number | null;
   height: number | null;
   depth: number | null;
-  blindWidth: number | null;
-  blindHeight: number | null;
-  blindDepth: number | null;
+  windowInstallation: WindowInstallation;
+  wandChain: WandChain | null;
+  fabricAdjustmentSide: FabricAdjustmentSide;
+  fabricAdjustmentInches: number | null;
   notes: string;
   production: WindowProductionStatus | null;
 }
@@ -120,7 +122,7 @@ export async function loadCutterUnitDetail(
     supabase
       .from("windows")
       .select(
-        "id, room_id, label, blind_type, width, height, depth, blind_width, blind_height, blind_depth, notes"
+        "id, room_id, label, blind_type, chain_side, width, height, depth, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, notes"
       )
       .order("label"),
     supabase
@@ -165,12 +167,14 @@ export async function loadCutterUnitDetail(
       roomId: w.room_id,
       label: w.label,
       blindType: w.blind_type as BlindType,
+      chainSide: (w.chain_side as "left" | "right" | null) ?? null,
       width: w.width ?? null,
       height: w.height ?? null,
       depth: w.depth ?? null,
-      blindWidth: w.blind_width ?? null,
-      blindHeight: w.blind_height ?? null,
-      blindDepth: w.blind_depth ?? null,
+      windowInstallation: (w.window_installation as WindowInstallation) ?? "inside",
+      wandChain: (w.wand_chain as WandChain | null) ?? null,
+      fabricAdjustmentSide: (w.fabric_adjustment_side as FabricAdjustmentSide) ?? "none",
+      fabricAdjustmentInches: w.fabric_adjustment_inches ?? null,
       notes: w.notes ?? "",
       production: productionMap.get(w.id) ?? null,
     }));

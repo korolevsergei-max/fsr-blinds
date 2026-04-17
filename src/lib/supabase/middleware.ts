@@ -43,10 +43,9 @@ export async function updateSession(request: NextRequest) {
   let authInvalidated = false;
   const pathname = request.nextUrl.pathname;
 
-  // Public auth routes should never trigger a refresh-token purge. Hitting /login
-  // with no session is normal, and purging here can wipe a freshly-created session
-  // on the next paint before the app has a chance to navigate away.
-  if (pathname === "/login" || pathname.startsWith("/auth/")) {
+  // Auth callback routes must never trigger a purge — they are in the middle of
+  // establishing a session and cookies are not yet stable.
+  if (pathname.startsWith("/auth/")) {
     return supabaseResponse;
   }
 
@@ -60,9 +59,19 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // Same guard as in server.ts: _emitInitialSession fires before getUser() acquires
+  // the lock and would console.error() on a stale refresh token. Return empty on
+  // the first getAll() (consumed by _emitInitialSession) so it exits cleanly, then
+  // return real cookies for the actual getUser() call.
+  let initEmitConsumed = false;
+
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
+        if (!initEmitConsumed) {
+          initEmitConsumed = true;
+          return [];
+        }
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
@@ -124,6 +133,12 @@ export async function updateSession(request: NextRequest) {
       }
     }
     user = null;
+  }
+
+  // Login page: token cleanup ran above (clears stale cookies so LoginPage's
+  // getCurrentUser() won't see an invalid token), but no redirect logic needed.
+  if (pathname === "/login") {
+    return finish(supabaseResponse, authInvalidated);
   }
 
   if (pathname === "/") {

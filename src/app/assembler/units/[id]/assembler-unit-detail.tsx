@@ -15,6 +15,7 @@ import { markWindowAssembled } from "@/app/actions/production-actions";
 import { returnWindowToCutter } from "@/app/actions/manufacturing-actions";
 import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/assembler-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
+import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
@@ -34,10 +35,6 @@ function AssemblerWindowCard({
   const router = useRouter();
   const production = window.production;
   const status = production?.status ?? "pending";
-
-  const w = window.blindWidth ?? window.width;
-  const h = window.blindHeight ?? window.height;
-  const d = window.blindDepth ?? window.depth;
 
   const statusColors: Record<string, string> = {
     pending: "bg-gray-50 text-gray-500 border-gray-200",
@@ -85,8 +82,8 @@ function AssemblerWindowCard({
       <div className="flex items-center gap-3 text-xs text-secondary">
         <span className="flex items-center gap-1">
           <Ruler size={12} />
-          {formatDim(w)} &times; {formatDim(h)}
-          {d !== null ? ` \u00d7 ${formatDim(d)}` : ""}
+          {formatDim(window.width)} &times; {formatDim(window.height)}
+          {window.depth !== null ? ` \u00d7 ${formatDim(window.depth)}` : ""}
         </span>
         <span className="px-1.5 py-0.5 bg-card border border-border rounded text-[10px] font-medium text-primary">
           {window.blindType === "blackout" ? "Blackout" : "Screen"}
@@ -120,6 +117,19 @@ function AssemblerWindowCard({
           Built fully {new Date(production.qcApprovedAt).toLocaleDateString()}
         </p>
       )}
+
+      {/* Manufacturing Summary */}
+      <ManufacturingSummaryCard
+        width={window.width}
+        height={window.height}
+        depth={window.depth}
+        windowInstallation={window.windowInstallation}
+        wandChain={window.wandChain}
+        fabricAdjustmentSide={window.fabricAdjustmentSide}
+        fabricAdjustmentInches={window.fabricAdjustmentInches}
+        blindType={window.blindType}
+        chainSide={window.chainSide}
+      />
 
       {/* Actions */}
       {status === "cut" && (

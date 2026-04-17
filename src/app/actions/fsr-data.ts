@@ -91,27 +91,6 @@ function validateIncomingImageFile(
   return null;
 }
 
-function isMissingSchemaColumn(message: string, column: string): boolean {
-  const escapedColumn = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const missingPattern = new RegExp(`could not find the ['"]${escapedColumn}['"] column`, "i");
-  return missingPattern.test(message);
-}
-
-function removeUnsupportedBlindSizeColumns(
-  payload: Record<string, unknown>,
-  errorMessage: string
-): { payload: Record<string, unknown>; removedAny: boolean } {
-  const next = { ...payload };
-  let removedAny = false;
-  const blindSizeColumns = ["blind_width", "blind_height", "blind_depth"] as const;
-  for (const column of blindSizeColumns) {
-    if (isMissingSchemaColumn(errorMessage, column)) {
-      delete next[column];
-      removedAny = true;
-    }
-  }
-  return { payload: next, removedAny };
-}
 
 /**
  * Targeted revalidation for unit-specific mutations (window/room CRUD, photos, status).
@@ -1455,12 +1434,12 @@ export async function createWindowWithPhoto(
     const windowId = `win-${crypto.randomUUID()}`;
     const dn = depth.trim() ? parseFloat(depth) : null;
 
-    const blindWidth = String(formData.get("blindWidth") ?? "").trim();
-    const blindHeight = String(formData.get("blindHeight") ?? "").trim();
-    const blindDepth = String(formData.get("blindDepth") ?? "").trim();
-    const bw = blindWidth ? parseFloat(blindWidth) : null;
-    const bh = blindHeight ? parseFloat(blindHeight) : null;
-    const bd = blindDepth ? parseFloat(blindDepth) : null;
+    const windowInstallation = String(formData.get("windowInstallation") ?? "inside");
+    const wandChainRaw = String(formData.get("wandChain") ?? "").trim();
+    const wandChain = wandChainRaw ? parseInt(wandChainRaw, 10) : null;
+    const fabricAdjustmentSide = String(formData.get("fabricAdjustmentSide") ?? "none");
+    const fabricAdjustmentInchesRaw = String(formData.get("fabricAdjustmentInches") ?? "").trim();
+    const fabricAdjustmentInches = fabricAdjustmentInchesRaw ? parseFloat(fabricAdjustmentInchesRaw) : null;
 
     const windowInsertPayload: Record<string, unknown> = {
       id: windowId,
@@ -1471,9 +1450,10 @@ export async function createWindowWithPhoto(
       width: wn,
       height: hn,
       depth: dn !== null && Number.isFinite(dn) ? dn : null,
-      blind_width: bw !== null && Number.isFinite(bw) ? bw : null,
-      blind_height: bh !== null && Number.isFinite(bh) ? bh : null,
-      blind_depth: bd !== null && Number.isFinite(bd) ? bd : null,
+      window_installation: ["inside", "outside"].includes(windowInstallation) ? windowInstallation : "inside",
+      wand_chain: wandChain !== null && [30, 40, 50].includes(wandChain) ? wandChain : null,
+      fabric_adjustment_side: ["none", "left", "right", "centred"].includes(fabricAdjustmentSide) ? fabricAdjustmentSide : "none",
+      fabric_adjustment_inches: fabricAdjustmentInches !== null && Number.isFinite(fabricAdjustmentInches) ? fabricAdjustmentInches : null,
       notes: notes.trim(),
       risk_flag: riskFlag,
       photo_url: publicUrl,
@@ -1481,17 +1461,7 @@ export async function createWindowWithPhoto(
       bracketed: false,
       installed: false,
     };
-    let insertPayload = windowInsertPayload;
-    let { error: insErr } = await supabase.from("windows").insert(insertPayload);
-    while (insErr) {
-      const fallback = removeUnsupportedBlindSizeColumns(insertPayload, insErr.message);
-      if (!fallback.removedAny) {
-        break;
-      }
-      insertPayload = fallback.payload;
-      const retry = await supabase.from("windows").insert(insertPayload);
-      insErr = retry.error;
-    }
+    const { error: insErr } = await supabase.from("windows").insert(windowInsertPayload);
     if (insErr) {
       if (storagePath) {
         await supabase.storage.from(BUCKET).remove([storagePath]);
@@ -1687,12 +1657,12 @@ export async function updateWindowWithOptionalPhoto(
 
     const dn = depth.trim() ? parseFloat(depth) : null;
 
-    const blindWidth = String(formData.get("blindWidth") ?? "").trim();
-    const blindHeight = String(formData.get("blindHeight") ?? "").trim();
-    const blindDepth = String(formData.get("blindDepth") ?? "").trim();
-    const bw = blindWidth ? parseFloat(blindWidth) : null;
-    const bh = blindHeight ? parseFloat(blindHeight) : null;
-    const bd = blindDepth ? parseFloat(blindDepth) : null;
+    const windowInstallation2 = String(formData.get("windowInstallation") ?? "inside");
+    const wandChainRaw2 = String(formData.get("wandChain") ?? "").trim();
+    const wandChain2 = wandChainRaw2 ? parseInt(wandChainRaw2, 10) : null;
+    const fabricAdjustmentSide2 = String(formData.get("fabricAdjustmentSide") ?? "none");
+    const fabricAdjustmentInchesRaw2 = String(formData.get("fabricAdjustmentInches") ?? "").trim();
+    const fabricAdjustmentInches2 = fabricAdjustmentInchesRaw2 ? parseFloat(fabricAdjustmentInchesRaw2) : null;
 
     const patch: Record<string, unknown> = {
       label,
@@ -1701,9 +1671,10 @@ export async function updateWindowWithOptionalPhoto(
       width: wn,
       height: hn,
       depth: dn !== null && Number.isFinite(dn) ? dn : null,
-      blind_width: bw !== null && Number.isFinite(bw) ? bw : null,
-      blind_height: bh !== null && Number.isFinite(bh) ? bh : null,
-      blind_depth: bd !== null && Number.isFinite(bd) ? bd : null,
+      window_installation: ["inside", "outside"].includes(windowInstallation2) ? windowInstallation2 : "inside",
+      wand_chain: wandChain2 !== null && [30, 40, 50].includes(wandChain2) ? wandChain2 : null,
+      fabric_adjustment_side: ["none", "left", "right", "centred"].includes(fabricAdjustmentSide2) ? fabricAdjustmentSide2 : "none",
+      fabric_adjustment_inches: fabricAdjustmentInches2 !== null && Number.isFinite(fabricAdjustmentInches2) ? fabricAdjustmentInches2 : null,
       notes: notes.trim(),
       risk_flag: riskFlag,
       measured: true,
@@ -1712,17 +1683,7 @@ export async function updateWindowWithOptionalPhoto(
       patch.photo_url = publicUrl;
     }
 
-    let updatePatch = patch;
-    let { error: upWin } = await supabase.from("windows").update(updatePatch).eq("id", windowId);
-    while (upWin) {
-      const fallback = removeUnsupportedBlindSizeColumns(updatePatch, upWin.message);
-      if (!fallback.removedAny) {
-        break;
-      }
-      updatePatch = fallback.payload;
-      const retry = await supabase.from("windows").update(updatePatch).eq("id", windowId);
-      upWin = retry.error;
-    }
+    const { error: upWin } = await supabase.from("windows").update(patch).eq("id", windowId);
     if (upWin) {
       if (storagePath) {
         await supabase.storage.from(BUCKET).remove([storagePath]);

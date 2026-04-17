@@ -76,9 +76,6 @@ type WindowRow = {
   width: number | null;
   height: number | null;
   depth: number | null;
-  blind_width: number | null;
-  blind_height: number | null;
-  blind_depth: number | null;
   notes: string | null;
 };
 
@@ -120,9 +117,6 @@ export interface ManufacturingWindowItem {
   width: number | null;
   height: number | null;
   depth: number | null;
-  blindWidth: number | null;
-  blindHeight: number | null;
-  blindDepth: number | null;
   notes: string;
   productionStatus: ProductionStatus;
   issueStatus: ManufacturingIssueStatus;
@@ -353,7 +347,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     roomIds.length > 0
       ? supabase
           .from("windows")
-          .select("id, room_id, label, blind_type, width, height, depth, blind_width, blind_height, blind_depth, notes")
+          .select("id, room_id, label, blind_type, width, height, depth, notes")
           .in("room_id", roomIds)
           .order("label")
       : Promise.resolve({ data: [] as WindowRow[] }),
@@ -678,7 +672,7 @@ export async function loadManufacturingRoleSchedule(
     windowIds.length > 0
       ? supabase
           .from("windows")
-          .select("id, room_id, label, blind_type, width, height, depth, blind_width, blind_height, blind_depth, notes")
+          .select("id, room_id, label, blind_type, width, height, depth, notes")
           .in("id", windowIds)
       : Promise.resolve({ data: [] as WindowRow[] }),
     windowIds.length > 0
@@ -757,9 +751,6 @@ export async function loadManufacturingRoleSchedule(
       width: window.width,
       height: window.height,
       depth: window.depth,
-      blindWidth: window.blind_width,
-      blindHeight: window.blind_height,
-      blindDepth: window.blind_depth,
       notes: window.notes ?? "",
       productionStatus,
       issueStatus,

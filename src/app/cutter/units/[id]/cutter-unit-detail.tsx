@@ -12,6 +12,7 @@ import {
 import { markWindowCut } from "@/app/actions/production-actions";
 import type { CutterUnitDetail as DetailType, CutterWindow } from "@/lib/cutter-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
+import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
@@ -22,10 +23,6 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
   const [pending, startTransition] = useTransition();
   const production = win.production;
   const status = production?.status ?? "pending";
-
-  const w = win.blindWidth ?? win.width;
-  const h = win.blindHeight ?? win.height;
-  const d = win.blindDepth ?? win.depth;
 
   const statusColors: Record<string, string> = {
     pending: "bg-gray-100 text-gray-500 border-gray-200",
@@ -62,8 +59,8 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
       <div className="flex items-center gap-3 text-xs text-secondary">
         <span className="flex items-center gap-1">
           <Ruler size={12} />
-          {formatDim(w)} &times; {formatDim(h)}
-          {d !== null ? ` \u00d7 ${formatDim(d)}` : ""}
+          {formatDim(win.width)} &times; {formatDim(win.height)}
+          {win.depth !== null ? ` \u00d7 ${formatDim(win.depth)}` : ""}
         </span>
         <span className="px-1.5 py-0.5 bg-card border border-border rounded text-[10px] font-medium text-primary">
           {blindTypeLabel}
@@ -99,6 +96,19 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
           <span className="text-tertiary ml-1">&mdash; awaiting QC</span>
         </p>
       )}
+
+      {/* Manufacturing Summary */}
+      <ManufacturingSummaryCard
+        width={win.width}
+        height={win.height}
+        depth={win.depth}
+        windowInstallation={win.windowInstallation}
+        wandChain={win.wandChain}
+        fabricAdjustmentSide={win.fabricAdjustmentSide}
+        fabricAdjustmentInches={win.fabricAdjustmentInches}
+        blindType={win.blindType}
+        chainSide={win.chainSide}
+      />
 
       {/* Action */}
       {status === "pending" && (

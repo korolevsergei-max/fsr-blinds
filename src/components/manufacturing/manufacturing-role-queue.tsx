@@ -36,10 +36,7 @@ import {
 } from "@/app/actions/production-actions";
 
 function formatMeasurement(item: ManufacturingWindowItem): string {
-  const width = item.blindWidth ?? item.width;
-  const height = item.blindHeight ?? item.height;
-  const depth = item.blindDepth ?? item.depth;
-  return `${width ?? "—"} × ${height ?? "—"}${depth != null ? ` × ${depth}` : ""}`;
+  return `${item.width ?? "—"} × ${item.height ?? "—"}${item.depth != null ? ` × ${item.depth}` : ""}`;
 }
 
 function formatBucketDate(date: string | null) {

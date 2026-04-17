@@ -80,10 +80,6 @@ export function SummaryView({
         if (w.width != null && w.height != null)
           body += `, ${w.width}" x ${w.height}"`;
         if (w.depth != null) body += ` x ${w.depth}"`;
-        if (w.blindWidth != null || w.blindHeight != null) {
-          body += ` | Blind: ${w.blindWidth ?? "—"}" x ${w.blindHeight ?? "—"}"`;
-          if (w.blindDepth != null) body += ` x ${w.blindDepth}"`;
-        }
         if (w.notes) body += ` — ${w.notes}`;
         body += "\n";
       });
@@ -218,23 +214,6 @@ export function SummaryView({
                             )}
                           </div>
 
-                          {/* Blind size — shown only if any value is filled */}
-                          {(w.blindWidth != null || w.blindHeight != null) && (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1 min-w-[56px]">
-                                <Ruler size={12} className="text-accent flex-shrink-0" />
-                                <span className="text-[10px] font-bold text-accent uppercase tracking-wider">
-                                  Blind
-                                </span>
-                              </div>
-                              <span className="text-xs font-mono font-semibold text-accent">
-                                {w.blindWidth ?? "—"}&quot; × {w.blindHeight ?? "—"}&quot;
-                                {w.blindDepth != null && (
-                                  <span className="text-teal-500"> × {w.blindDepth}&quot;</span>
-                                )}
-                              </span>
-                            </div>
-                          )}
                         </div>
 
                         {w.notes && (

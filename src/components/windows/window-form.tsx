@@ -24,7 +24,16 @@ import {
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
-import { type BlindType, type ChainSide, type RiskFlag, type UnitActivityLog } from "@/lib/types";
+import {
+  type BlindType,
+  type ChainSide,
+  type RiskFlag,
+  type UnitActivityLog,
+  type WindowInstallation,
+  type WandChain,
+  type FabricAdjustmentSide,
+} from "@/lib/types";
+import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -148,14 +157,19 @@ export function WindowForm({
   const [depth, setDepth] = useState(
     existingWindow?.depth != null ? String(existingWindow.depth) : ""
   );
-  const [blindWidth, setBlindWidth] = useState(
-    existingWindow?.blindWidth != null ? String(existingWindow.blindWidth) : ""
+  const [windowInstallation, setWindowInstallation] = useState<WindowInstallation>(
+    existingWindow?.windowInstallation ?? "inside"
   );
-  const [blindHeight, setBlindHeight] = useState(
-    existingWindow?.blindHeight != null ? String(existingWindow.blindHeight) : ""
+  const [wandChain, setWandChain] = useState<WandChain | null>(
+    existingWindow?.wandChain ?? null
   );
-  const [blindDepth, setBlindDepth] = useState(
-    existingWindow?.blindDepth != null ? String(existingWindow.blindDepth) : ""
+  const [fabricAdjustmentSide, setFabricAdjustmentSide] = useState<FabricAdjustmentSide>(
+    existingWindow?.fabricAdjustmentSide ?? "none"
+  );
+  const [fabricAdjustmentInches, setFabricAdjustmentInches] = useState(
+    existingWindow?.fabricAdjustmentInches != null
+      ? String(existingWindow.fabricAdjustmentInches)
+      : ""
   );
   const [notes, setNotes] = useState(existingWindow?.notes ?? "");
   const [photoPreview, setPhotoPreview] = useState<string | null>(
@@ -215,6 +229,13 @@ export function WindowForm({
       if (duplicate) e.label = "A window with this name already exists in this room";
     }
     if (!chainSide) e.chainSide = "Chain side is required";
+    if (!wandChain) e.wandChain = "Wand & chain selection is required";
+    if (fabricAdjustmentSide !== "none") {
+      const inches = parseFloat(fabricAdjustmentInches);
+      if (!fabricAdjustmentInches || !Number.isFinite(inches) || inches <= 0) {
+        e.fabricAdjustmentInches = "Enter number of inches for fabric adjustment";
+      }
+    }
     if (!width || parseFloat(width) <= 0) e.width = "Valid width required";
     if (!height || parseFloat(height) <= 0) e.height = "Valid height required";
     if ((riskFlag === "yellow" || riskFlag === "red") && !notes.trim()) {
@@ -308,9 +329,10 @@ export function WindowForm({
       fd.set("width", width);
       fd.set("height", height);
       fd.set("depth", depth);
-      fd.set("blindWidth", blindWidth);
-      fd.set("blindHeight", blindHeight);
-      fd.set("blindDepth", blindDepth);
+      fd.set("windowInstallation", windowInstallation);
+      fd.set("wandChain", wandChain != null ? String(wandChain) : "");
+      fd.set("fabricAdjustmentSide", fabricAdjustmentSide);
+      fd.set("fabricAdjustmentInches", fabricAdjustmentInches);
       fd.set("notes", notes);
       try {
         if (photoFile) {
@@ -349,9 +371,9 @@ export function WindowForm({
         const parsedWidth = parseFloat(width) || null;
         const parsedHeight = parseFloat(height) || null;
         const parsedDepth = depth.trim() ? parseFloat(depth) || null : null;
-        const parsedBw = blindWidth.trim() ? parseFloat(blindWidth) || null : null;
-        const parsedBh = blindHeight.trim() ? parseFloat(blindHeight) || null : null;
-        const parsedBd = blindDepth.trim() ? parseFloat(blindDepth) || null : null;
+        const parsedFabricInches = fabricAdjustmentInches.trim()
+          ? parseFloat(fabricAdjustmentInches) || null
+          : null;
 
         datasetCtx.patchData((prev) => {
           const windowData = {
@@ -364,9 +386,10 @@ export function WindowForm({
             width: parsedWidth,
             height: parsedHeight,
             depth: parsedDepth,
-            blindWidth: parsedBw,
-            blindHeight: parsedBh,
-            blindDepth: parsedBd,
+            windowInstallation,
+            wandChain,
+            fabricAdjustmentSide,
+            fabricAdjustmentInches: parsedFabricInches,
             notes: notes.trim(),
             photoUrl: newPhotoUrl ?? existingWindow?.photoUrl ?? null,
             measured: true,
@@ -551,37 +574,92 @@ export function WindowForm({
             </div>
           </div>
 
-          <div>
-            <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-1">
-              Blind Size Measurements (inches)
-            </h2>
-            <p className="text-[11px] text-zinc-400 mb-3">Optional — fill in when blind sizing differs from window opening.</p>
-            <div className="grid grid-cols-3 gap-3">
-              <Input
-                label="Width"
-                type="number"
-                step="0.25"
-                placeholder="47"
-                value={blindWidth}
-                onChange={(e) => setBlindWidth(e.target.value)}
-              />
-              <Input
-                label="Height"
-                type="number"
-                step="0.25"
-                placeholder="70"
-                value={blindHeight}
-                onChange={(e) => setBlindHeight(e.target.value)}
-              />
-              <Input
-                label="Depth"
-                type="number"
-                step="0.25"
-                placeholder="3"
-                value={blindDepth}
-                onChange={(e) => setBlindDepth(e.target.value)}
-              />
+          {/* Window Installation */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Window Installation
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["inside", "outside"] as WindowInstallation[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setWindowInstallation(opt)}
+                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                    windowInstallation === opt
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-white text-zinc-600 hover:bg-surface"
+                  }`}
+                >
+                  {opt === "inside" ? "Inside" : "Outside"}
+                </button>
+              ))}
             </div>
+          </div>
+
+          {/* Wand & Chain */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Wand &amp; Chain <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {([30, 40, 50] as WandChain[]).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => setWandChain(size)}
+                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                    wandChain === size
+                      ? "border-accent bg-accent text-white"
+                      : errors.wandChain
+                        ? "border-red-300 bg-red-50 text-red-600"
+                        : "border-border bg-white text-zinc-600 hover:bg-surface"
+                  }`}
+                >
+                  {size}&quot;
+                </button>
+              ))}
+            </div>
+            {errors.wandChain && (
+              <p className="text-xs text-red-500">{errors.wandChain}</p>
+            )}
+          </div>
+
+          {/* Fabric Adjustment */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Fabric Adjustment
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(["none", "left", "right", "centred"] as FabricAdjustmentSide[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => {
+                    setFabricAdjustmentSide(opt);
+                    if (opt === "none") setFabricAdjustmentInches("");
+                  }}
+                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                    fabricAdjustmentSide === opt
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-white text-zinc-600 hover:bg-surface"
+                  }`}
+                >
+                  {opt === "none" ? "No" : opt.charAt(0).toUpperCase() + opt.slice(1)}
+                </button>
+              ))}
+            </div>
+            {fabricAdjustmentSide !== "none" && (
+              <Input
+                label="Inches"
+                type="number"
+                step="any"
+                placeholder="e.g. 2.5"
+                value={fabricAdjustmentInches}
+                onChange={(e) => setFabricAdjustmentInches(e.target.value)}
+                error={errors.fabricAdjustmentInches}
+              />
+            )}
           </div>
         </motion.div>
 
@@ -898,6 +976,22 @@ export function WindowForm({
             >
               {formError}
             </div>
+          )}
+
+          {existingWindow && (
+            <ManufacturingSummaryCard
+              width={parseFloat(width) || null}
+              height={parseFloat(height) || null}
+              depth={depth.trim() ? parseFloat(depth) || null : null}
+              windowInstallation={windowInstallation}
+              wandChain={wandChain}
+              fabricAdjustmentSide={fabricAdjustmentSide}
+              fabricAdjustmentInches={
+                fabricAdjustmentInches.trim() ? parseFloat(fabricAdjustmentInches) || null : null
+              }
+              blindType={blindType}
+              chainSide={chainSide}
+            />
           )}
 
           {existingWindow && (

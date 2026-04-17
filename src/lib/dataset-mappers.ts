@@ -16,6 +16,9 @@ import type {
   Window,
   BlindType,
   RiskFlag,
+  WindowInstallation,
+  WandChain,
+  FabricAdjustmentSide,
 } from "./types";
 
 // ── Row types (match Supabase column names) ──────────────────────────
@@ -97,9 +100,10 @@ export type WindowRow = {
   width: number | null;
   height: number | null;
   depth: number | null;
-  blind_width: number | null;
-  blind_height: number | null;
-  blind_depth: number | null;
+  window_installation: WindowInstallation;
+  wand_chain: number | null;
+  fabric_adjustment_side: FabricAdjustmentSide;
+  fabric_adjustment_inches: number | null;
   notes: string;
   risk_flag: RiskFlag;
   photo_url: string | null;
@@ -237,9 +241,10 @@ export function mapWindow(r: WindowRow): Window {
     width: r.width,
     height: r.height,
     depth: r.depth,
-    blindWidth: r.blind_width,
-    blindHeight: r.blind_height,
-    blindDepth: r.blind_depth,
+    windowInstallation: r.window_installation ?? "inside",
+    wandChain: (r.wand_chain as WandChain | null) ?? null,
+    fabricAdjustmentSide: r.fabric_adjustment_side ?? "none",
+    fabricAdjustmentInches: r.fabric_adjustment_inches ?? null,
     notes: r.notes || "",
     photoUrl: r.photo_url,
     measured: r.measured,

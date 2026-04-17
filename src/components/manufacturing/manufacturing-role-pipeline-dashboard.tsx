@@ -97,9 +97,7 @@ const CATEGORY_COPY: Record<
 };
 
 function formatMeasurement(item: ManufacturingWindowItem) {
-  return `${item.blindWidth ?? item.width ?? "—"} × ${item.blindHeight ?? item.height ?? "—"}${
-    item.blindDepth != null ? ` × ${item.blindDepth}` : item.depth != null ? ` × ${item.depth}` : ""
-  }`;
+  return `${item.width ?? "—"} × ${item.height ?? "—"}${item.depth != null ? ` × ${item.depth}` : ""}`;
 }
 
 function DashboardUnitCard({

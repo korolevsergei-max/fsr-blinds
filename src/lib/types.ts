@@ -196,6 +196,10 @@ export interface Room {
 
 export type ChainSide = "left" | "right";
 
+export type WindowInstallation = "inside" | "outside";
+export type WandChain = 30 | 40 | 50;
+export type FabricAdjustmentSide = "none" | "left" | "right" | "centred";
+
 export interface Window {
   id: string;
   roomId: string;
@@ -206,9 +210,10 @@ export interface Window {
   width: number | null;
   height: number | null;
   depth: number | null;
-  blindWidth: number | null;
-  blindHeight: number | null;
-  blindDepth: number | null;
+  windowInstallation: WindowInstallation;
+  wandChain: WandChain | null;
+  fabricAdjustmentSide: FabricAdjustmentSide;
+  fabricAdjustmentInches: number | null;
   notes: string;
   photoUrl: string | null;
   measured: boolean;
