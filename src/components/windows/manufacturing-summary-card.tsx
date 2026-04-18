@@ -11,12 +11,16 @@ const HIGHLIGHT_ROWS: Record<ManufacturingHighlightSection, Set<number>> = {
   tube_rail: new Set([5, 6]),
 };
 
-function Row({ label, value, highlighted }: { label: string; value: string; highlighted?: boolean }) {
+function Row({ label, value, highlighted, even }: { label: string; value: string; highlighted?: boolean; even?: boolean }) {
   return (
     <div
       className={[
-        "flex items-baseline justify-between gap-3",
-        highlighted ? "-mx-1.5 rounded-md bg-sky-100/80 px-1.5 py-0.5" : "",
+        "flex items-baseline justify-between gap-3 -mx-1.5 rounded-md px-1.5 py-0.5",
+        highlighted
+          ? "bg-sky-100/80"
+          : even
+          ? "bg-zinc-50"
+          : "",
       ].join(" ")}
     >
       <span className="text-[11px] text-zinc-500 shrink-0">{label}</span>
@@ -47,20 +51,20 @@ export function ManufacturingSummaryCard(
         <p className="text-[11px] text-zinc-400 italic">Enter window measurements above to see calculations.</p>
       ) : (
         <>
-          <Row label={summary.rows[0].label} value={summary.rows[0].value} />
+          <Row label={summary.rows[0].label} value={summary.rows[0].value} even />
           <Divider />
           <Row label={summary.rows[1].label} value={summary.rows[1].value} highlighted={isHl(1)} />
-          <Row label={summary.rows[2].label} value={summary.rows[2].value} highlighted={isHl(2)} />
+          <Row label={summary.rows[2].label} value={summary.rows[2].value} highlighted={isHl(2)} even />
           <Row label={summary.rows[3].label} value={summary.rows[3].value} highlighted={isHl(3)} />
           <Divider />
-          <Row label={summary.rows[4].label} value={summary.rows[4].value} highlighted={isHl(4)} />
+          <Row label={summary.rows[4].label} value={summary.rows[4].value} highlighted={isHl(4)} even />
           <Row label={summary.rows[5].label} value={summary.rows[5].value} highlighted={isHl(5)} />
-          <Row label={summary.rows[6].label} value={summary.rows[6].value} highlighted={isHl(6)} />
+          <Row label={summary.rows[6].label} value={summary.rows[6].value} highlighted={isHl(6)} even />
           <Divider />
           <Row label={summary.rows[7].label} value={summary.rows[7].value} />
-          <Row label={summary.rows[8].label} value={summary.rows[8].value} />
+          <Row label={summary.rows[8].label} value={summary.rows[8].value} even />
           <Row label={summary.rows[9].label} value={summary.rows[9].value} />
-          <Row label={summary.rows[10].label} value={summary.rows[10].value} />
+          <Row label={summary.rows[10].label} value={summary.rows[10].value} even />
         </>
       )}
     </div>

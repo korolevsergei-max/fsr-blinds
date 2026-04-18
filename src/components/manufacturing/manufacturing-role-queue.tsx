@@ -612,14 +612,65 @@ export function ManufacturingRoleQueue({
             </div>
           </div>
           {role === "cutter" && (
-            <button
-              type="button"
-              onClick={() => { setPrintModalOpen(true); setPrintSelectedDays([0]); }}
-              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
-            >
-              <Printer size={15} />
-              Print labels
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const ids = visibleBuckets.flatMap((b) => b.windows.map((w) => w.windowId));
+                  if (ids.length === 0) return;
+
+                  const filterParts: string[] = [];
+                  if (buildingFilter.length > 0) {
+                    const names = buildingFilter.map((id) => buildingOptions.find((o) => o.value === id)?.label ?? id).join(", ");
+                    filterParts.push(`Building: ${names}`);
+                  }
+                  if (floorFilter.length > 0) {
+                    filterParts.push(`Floor: ${floorFilter.join(", ")}`);
+                  }
+                  if (installDates.length > 0) {
+                    const formatted = installDates.map((d) => {
+                      const [y, m, day] = d.split("-").map(Number);
+                      return new Date(y, m - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    });
+                    filterParts.push(`Install: ${formatted.join(", ")}`);
+                  }
+                  if (statusFilters.length > 0) {
+                    const labels = statusFilters.map((s) => queueStatusOptions.find((o) => o.value === s)?.label ?? s).join(", ");
+                    filterParts.push(`Status: ${labels}`);
+                  }
+                  if (fabricTypeFilter.length > 0) {
+                    const labels = fabricTypeFilter.map((v) => fabricTypeOptions.find((o) => o.value === v)?.label ?? v).join(", ");
+                    filterParts.push(`Fabric: ${labels}`);
+                  }
+                  if (componentFilter !== "all") {
+                    const label = componentOptions.find((o) => o.value === componentFilter)?.label ?? componentFilter;
+                    filterParts.push(`Component: ${label}`);
+                  }
+
+                  const sortSummary = sortLevels.length > 0
+                    ? `Sorted by: ${sortLevels.map((l) => `${SORT_FIELD_LABELS[l.field]} ${l.direction === "asc" ? "↑" : "↓"}`).join(", ")}`
+                    : "";
+
+                  const urlParams = new URLSearchParams();
+                  urlParams.set("ids", ids.join(","));
+                  if (filterParts.length > 0) urlParams.set("f", filterParts.join(" • "));
+                  if (sortSummary) urlParams.set("s", sortSummary);
+                  window.open(`/cutter/queue/print-list?${urlParams}`, "_blank");
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
+              >
+                <Printer size={15} />
+                Print list
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPrintModalOpen(true); setPrintSelectedDays([0]); }}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
+              >
+                <Printer size={15} />
+                Print labels
+              </button>
+            </div>
           )}
         </div>
 
