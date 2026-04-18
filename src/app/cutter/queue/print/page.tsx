@@ -1,12 +1,18 @@
 import { loadWindowsForPrint } from "@/lib/manufacturing-print-data";
-import { CutLabelSheet } from "@/components/manufacturing/cut-label-sheet";
+import { CutLabelSheet, CutLabelPackedSheet } from "@/components/manufacturing/cut-label-sheet";
+import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
 import { AutoPrint } from "./auto-print";
 import { PrintToolbar } from "./print-toolbar";
+
+function parseHighlight(raw: string | undefined): ManufacturingHighlightSection | null {
+  if (raw === "fabric" || raw === "valance" || raw === "tube_rail") return raw;
+  return null;
+}
 
 export default async function CutterPrintPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ids?: string }>;
+  searchParams: Promise<{ ids?: string; component?: string }>;
 }) {
   const params = await searchParams;
   const rawIds = params.ids ?? "";
@@ -16,6 +22,7 @@ export default async function CutterPrintPage({
     .filter(Boolean);
 
   const windows = await loadWindowsForPrint(windowIds);
+  const highlight = parseHighlight(params.component);
 
   if (windows.length === 0) {
     return (
@@ -23,6 +30,14 @@ export default async function CutterPrintPage({
         <p style={{ fontSize: "14pt", color: "#666" }}>No windows found for printing.</p>
       </div>
     );
+  }
+
+  // Pack into groups of 3 units per sheet when a single component is selected.
+  const packedGroups: typeof windows[] = [];
+  if (highlight) {
+    for (let i = 0; i < windows.length; i += 3) {
+      packedGroups.push(windows.slice(i, i + 3));
+    }
   }
 
   return (
@@ -43,11 +58,17 @@ export default async function CutterPrintPage({
       <AutoPrint />
       <PrintToolbar count={windows.length} />
       <div style={{ paddingTop: "2.5rem", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        {windows.map((item) => (
-          <div key={item.windowId} className="print-sheet">
-            <CutLabelSheet item={item} />
-          </div>
-        ))}
+        {highlight
+          ? packedGroups.map((group, idx) => (
+              <div key={`sheet-${idx}`} className="print-sheet">
+                <CutLabelPackedSheet items={group} highlightSection={highlight} />
+              </div>
+            ))
+          : windows.map((item) => (
+              <div key={item.windowId} className="print-sheet">
+                <CutLabelSheet item={item} />
+              </div>
+            ))}
       </div>
     </>
   );

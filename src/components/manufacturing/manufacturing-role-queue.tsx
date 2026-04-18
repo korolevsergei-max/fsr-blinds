@@ -21,11 +21,8 @@ import type {
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
 import { StickyDayRail } from "@/components/schedule/sticky-day-rail";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import {
-  SCHEDULE_INSTALL_DATE_FILTER_LABELS,
-  matchesInstallDateFilter,
-  type ScheduleInstallDateFilter,
-} from "@/lib/schedule-ui";
+import { InstallDateCalendarFilter } from "@/components/ui/install-date-calendar-filter";
+import { getFloor } from "@/lib/app-dataset";
 import {
   shiftWindowManufacturingSchedule,
   returnWindowToAssembler,
@@ -39,7 +36,9 @@ import {
   markWindowCut,
   markWindowQCApproved,
 } from "@/app/actions/production-actions";
-import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
+import { ManufacturingSummaryCard, type ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
+
+type ComponentFilter = "all" | ManufacturingHighlightSection;
 
 function formatBucketDate(date: string | null) {
   return formatStoredDateLongEnglish(date) ?? date ?? "";
@@ -89,9 +88,12 @@ type QueueStatusFilter =
 type SortField =
   | "unitNumber"
   | "buildingName"
+  | "floor"
   | "blindType"
   | "fabricWidth"
-  | "windowWidth";
+  | "windowWidth"
+  | "valanceWidth"
+  | "tubeWidth";
 
 type SortDirection = "asc" | "desc";
 
@@ -103,9 +105,12 @@ type SortLevel = {
 const SORT_FIELD_LABELS: Record<SortField, string> = {
   unitNumber: "Unit Number",
   buildingName: "Building",
+  floor: "Floor",
   blindType: "Fabric Type",
   fabricWidth: "Fabric Width",
   windowWidth: "Window Width",
+  valanceWidth: "Valance Width",
+  tubeWidth: "Tube Width",
 };
 
 function computeFabricWidth(item: ManufacturingWindowItem): number | null {
@@ -120,9 +125,16 @@ function getSortValue(item: ManufacturingWindowItem, field: SortField): string |
   switch (field) {
     case "unitNumber": return item.unitNumber;
     case "buildingName": return item.buildingName;
+    case "floor": {
+      const f = getFloor(item.unitNumber);
+      const n = Number(f);
+      return Number.isFinite(n) ? n : f;
+    }
     case "blindType": return item.blindType;
     case "fabricWidth": return computeFabricWidth(item);
     case "windowWidth": return item.width;
+    case "valanceWidth": return item.width != null ? item.width - 0.0625 : null;
+    case "tubeWidth": return item.width != null ? item.width - 1.375 : null;
   }
 }
 
@@ -265,9 +277,11 @@ export function ManufacturingRoleQueue({
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
-  const [installDateFilter, setInstallDateFilter] = useState<ScheduleInstallDateFilter>("all");
+  const [installDates, setInstallDates] = useState<string[]>([]);
   const [statusFilters, setStatusFilters] = useState<QueueStatusFilter[]>([]);
   const [fabricTypeFilter, setFabricTypeFilter] = useState<string[]>([]);
+  const [floorFilter, setFloorFilter] = useState<string[]>([]);
+  const [componentFilter, setComponentFilter] = useState<ComponentFilter>("all");
   const [sortLevels, setSortLevels] = useState<SortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
@@ -415,10 +429,9 @@ export function ManufacturingRoleQueue({
     ],
   ];
 
-  const installDateOptions = Object.entries(SCHEDULE_INSTALL_DATE_FILTER_LABELS).map(([value, label]) => ({
-    value,
-    label,
-  }));
+  const availableInstallDates = new Set(
+    localSchedule.allItems.map((item) => item.installationDate).filter((d): d is string => d != null)
+  );
 
   const queueStatusOptions = [
     { value: "all", label: "All queue states" },
@@ -432,9 +445,11 @@ export function ManufacturingRoleQueue({
 
   const activeFilterCount = [
     buildingFilter.length > 0,
-    installDateFilter !== "all",
+    installDates.length > 0,
     statusFilters.length > 0,
     fabricTypeFilter.length > 0,
+    floorFilter.length > 0,
+    componentFilter !== "all",
   ].filter(Boolean).length;
 
   const activeSortCount = sortLevels.length;
@@ -443,6 +458,28 @@ export function ManufacturingRoleQueue({
     { value: "all", label: "All types" },
     { value: "screen", label: "Screen" },
     { value: "blackout", label: "Blackout" },
+  ];
+
+  const componentOptions: { value: ComponentFilter; label: string }[] = [
+    { value: "all", label: "All components" },
+    { value: "fabric", label: "Fabric" },
+    { value: "valance", label: "Valance" },
+    { value: "tube_rail", label: "Tube / Bottom rail" },
+  ];
+
+  const highlightSection: ManufacturingHighlightSection | null =
+    componentFilter === "all" ? null : componentFilter;
+
+  const floorOptions = [
+    { value: "all", label: "All floors" },
+    ...[
+      ...new Map(
+        localSchedule.allItems.map((item) => {
+          const f = getFloor(item.unitNumber);
+          return [f, { value: f, label: `Floor ${f}` }];
+        })
+      ).values(),
+    ].sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true })),
   ];
 
   const sortFieldOptions = Object.entries(SORT_FIELD_LABELS).map(([value, label]) => ({ value, label }));
@@ -484,7 +521,8 @@ export function ManufacturingRoleQueue({
         for (const group of unit.blindTypeGroups) {
           for (const item of group.windows) {
             if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
-            if (!matchesInstallDateFilter(item.installationDate, installDateFilter, new Date())) continue;
+            if (floorFilter.length > 0 && !floorFilter.includes(getFloor(item.unitNumber))) continue;
+            if (installDates.length > 0 && (item.installationDate == null || !installDates.includes(item.installationDate))) continue;
             if (!matchesQueueStatusFilter({
               item,
               role,
@@ -542,7 +580,9 @@ export function ManufacturingRoleQueue({
     const ids = printSelectedDays
       .flatMap((idx) => printDayOptions[idx]?.pendingIds ?? []);
     if (ids.length === 0) return;
-    const url = `/cutter/queue/print?ids=${ids.join(",")}`;
+    const params = new URLSearchParams({ ids: ids.join(",") });
+    if (componentFilter !== "all") params.set("component", componentFilter);
+    const url = `/cutter/queue/print?${params.toString()}`;
     window.open(url, "_blank");
     setPrintModalOpen(false);
   };
@@ -607,6 +647,14 @@ export function ManufacturingRoleQueue({
             <SortAscending size={13} weight="bold" />
             {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
           </button>
+          {role === "cutter" && (
+            <FilterDropdown
+              label="Component"
+              value={componentFilter}
+              options={componentOptions}
+              onChange={(value) => setComponentFilter(value as ComponentFilter)}
+            />
+          )}
           <FilterDropdown
             multiple
             label="Building"
@@ -615,10 +663,16 @@ export function ManufacturingRoleQueue({
             onChange={setBuildingFilter}
           />
           <FilterDropdown
-            label="Installation Date"
-            value={installDateFilter}
-            options={installDateOptions}
-            onChange={(value) => setInstallDateFilter(value as ScheduleInstallDateFilter)}
+            multiple
+            label="Floor"
+            values={floorFilter}
+            options={floorOptions}
+            onChange={setFloorFilter}
+          />
+          <InstallDateCalendarFilter
+            selectedDates={installDates}
+            onChange={setInstallDates}
+            availableDates={availableInstallDates}
           />
           <FilterDropdown
             multiple
@@ -639,9 +693,11 @@ export function ManufacturingRoleQueue({
               type="button"
               onClick={() => {
                 setBuildingFilter([]);
-                setInstallDateFilter("all");
+                setFloorFilter([]);
+                setInstallDates([]);
                 setStatusFilters([]);
                 setFabricTypeFilter([]);
+                setComponentFilter("all");
                 setSortLevels([]);
               }}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
@@ -798,6 +854,7 @@ export function ManufacturingRoleQueue({
                             fabricAdjustmentInches={item.fabricAdjustmentInches}
                             blindType={item.blindType}
                             chainSide={item.chainSide}
+                            highlightSection={highlightSection}
                           />
 
                           {/* Actions */}
@@ -819,13 +876,13 @@ export function ManufacturingRoleQueue({
                                     }
                                   />
                                   <ActionButton
-                                    label="Move earlier"
+                                    label="Move 1 day back"
                                     tone="secondary"
                                     busy={busy}
                                     onClick={() => handleMove(item, "earlier")}
                                   />
                                   <ActionButton
-                                    label="Move later"
+                                    label="Move 1 day forward"
                                     tone="secondary"
                                     busy={busy}
                                     onClick={() => handleMove(item, "later")}
@@ -839,14 +896,14 @@ export function ManufacturingRoleQueue({
                                     icon={<CheckCircle size={13} weight="fill" />}
                                   />
                                   <ActionButton
-                                    label="Move earlier"
+                                    label="Move 1 day back"
                                     tone="secondary"
                                     busy={false}
                                     disabled
                                     onClick={() => undefined}
                                   />
                                   <ActionButton
-                                    label="Move later"
+                                    label="Move 1 day forward"
                                     tone="secondary"
                                     busy={false}
                                     disabled
@@ -881,14 +938,14 @@ export function ManufacturingRoleQueue({
                                   onClick={() => handleReturnToCutter(item)}
                                 />
                                 <ActionButton
-                                  label="Move earlier"
+                                  label="Move 1 day back"
                                   tone="secondary"
                                   busy={busy}
                                   disabled={item.productionStatus !== "cut"}
                                   onClick={() => handleMove(item, "earlier")}
                                 />
                                 <ActionButton
-                                  label="Move later"
+                                  label="Move 1 day forward"
                                   tone="secondary"
                                   busy={busy}
                                   disabled={item.productionStatus !== "cut"}
@@ -933,14 +990,14 @@ export function ManufacturingRoleQueue({
                                   onClick={() => handleReturnToCutter(item)}
                                 />
                                 <ActionButton
-                                  label="Move earlier"
+                                  label="Move 1 day back"
                                   tone="secondary"
                                   busy={busy}
                                   disabled={item.productionStatus !== "assembled"}
                                   onClick={() => handleMove(item, "earlier")}
                                 />
                                 <ActionButton
-                                  label="Move later"
+                                  label="Move 1 day forward"
                                   tone="secondary"
                                   busy={busy}
                                   disabled={item.productionStatus !== "assembled"}
@@ -1147,7 +1204,7 @@ export function ManufacturingRoleQueue({
           onClick={() => setPrintModalOpen(false)}
         >
           <div
-            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6 max-h-[85dvh] overflow-y-auto"
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6 max-h-[85dvh] min-h-[280px] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

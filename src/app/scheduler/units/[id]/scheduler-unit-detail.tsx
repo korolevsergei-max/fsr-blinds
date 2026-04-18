@@ -397,18 +397,8 @@ export function SchedulerUnitDetail({
           transition={{ delay: 0.22, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3 pt-2 pb-4"
         >
-          <Link href={`/scheduler/units/${unit.id}/dates`}>
-            <Button fullWidth size="lg">
-              Edit dates
-            </Button>
-          </Link>
-          <Link href={`/scheduler/units/${unit.id}/assign`}>
-            <Button variant="secondary" fullWidth size="lg">
-              Assign installer
-            </Button>
-          </Link>
           <Link href={`/scheduler/units/${unit.id}/rooms`}>
-            <Button variant="secondary" fullWidth size="lg">
+            <Button fullWidth size="lg">
               Manage rooms
             </Button>
           </Link>

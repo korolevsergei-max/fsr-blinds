@@ -1,5 +1,6 @@
 import { computeManufacturingSummary } from "@/lib/manufacturing-summary";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
+import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
 
 function fmtDate(date: string | null) {
   if (!date) return null;
@@ -7,9 +8,39 @@ function fmtDate(date: string | null) {
   return d.toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" });
 }
 
+const HIGHLIGHT_BG = "#dbeafe"; // sky-100 equivalent, prints predictably
+
+// Which summaryPairs cell each highlight section should tint.
+// summaryPairs layout:
+//   [0] W×H   | Bottom rail
+//   [1] Fabric adj | Wand & chain
+//   [2] Machine    | Window installation
+//   [3] Post-cut   | Blind type
+//   [4] Valance    | Tube
+function isCellHighlighted(
+  section: ManufacturingHighlightSection,
+  pairIdx: number,
+  side: "left" | "right"
+) {
+  if (section === "fabric") {
+    return side === "left" && (pairIdx === 1 || pairIdx === 2 || pairIdx === 3);
+  }
+  if (section === "valance") {
+    return side === "left" && pairIdx === 4;
+  }
+  // tube_rail → Bottom rail (pair 0, right) + Tube (pair 4, right)
+  return side === "right" && (pairIdx === 0 || pairIdx === 4);
+}
+
 // Each physical Avery 2315 label: 3" wide × 2" tall
 // Safety margin: 0.125" from each edge → usable: 2.75" × 1.75"
-function LabelContent({ item }: { item: ManufacturingWindowItem }) {
+function LabelContent({
+  item,
+  highlightSection,
+}: {
+  item: ManufacturingWindowItem;
+  highlightSection?: ManufacturingHighlightSection | null;
+}) {
   const s = computeManufacturingSummary({
     width: item.width,
     height: item.height,
@@ -95,26 +126,84 @@ function LabelContent({ item }: { item: ManufacturingWindowItem }) {
           <div style={{ display: "flex", justifyContent: "space-between", gap: "0.1in" }}>
             <span style={{ fontSize: "6.5pt", color: "#555", lineHeight: 1 }}>Window W × H</span>
             <span style={{ fontSize: "6.5pt", fontWeight: "700", lineHeight: 1 }}>{summaryPairs[0][0]}</span>
-            <span style={{ fontSize: "6.5pt", color: "#555", lineHeight: 1, marginLeft: "0.05in" }}>{s.rows[6].label}</span>
-            <span style={{ fontSize: "6.5pt", fontWeight: "700", lineHeight: 1 }}>{summaryPairs[0][1]}</span>
+            <span
+              style={{
+                fontSize: "6.5pt",
+                color: "#555",
+                lineHeight: 1,
+                marginLeft: "0.05in",
+                background:
+                  highlightSection && isCellHighlighted(highlightSection, 0, "right") ? HIGHLIGHT_BG : "transparent",
+                padding: "0.01in 0.03in",
+                borderRadius: "0.02in",
+              }}
+            >
+              {s.rows[6].label}
+            </span>
+            <span
+              style={{
+                fontSize: "6.5pt",
+                fontWeight: "700",
+                lineHeight: 1,
+                background:
+                  highlightSection && isCellHighlighted(highlightSection, 0, "right") ? HIGHLIGHT_BG : "transparent",
+                padding: "0.01in 0.03in",
+                borderRadius: "0.02in",
+              }}
+            >
+              {summaryPairs[0][1]}
+            </span>
           </div>
 
           <div style={{ borderTop: "0.5pt solid #ccc" }} />
 
           {/* 2-column rows for remaining specs */}
-          {summaryPairs.slice(1).map(([left, right], i) => (
-            <div key={i} style={{ display: "flex", gap: "0.06in" }}>
-              <span style={{ fontSize: "6pt", lineHeight: 1.25, flex: 1, borderRight: "0.5pt solid #ddd", paddingRight: "0.05in" }}>{left}</span>
-              <span style={{ fontSize: "6pt", lineHeight: 1.25, flex: 1 }}>{right}</span>
-            </div>
-          ))}
+          {summaryPairs.slice(1).map(([left, right], i) => {
+            const pairIdx = i + 1;
+            const leftHl = highlightSection ? isCellHighlighted(highlightSection, pairIdx, "left") : false;
+            const rightHl = highlightSection ? isCellHighlighted(highlightSection, pairIdx, "right") : false;
+            return (
+              <div key={i} style={{ display: "flex", gap: "0.06in" }}>
+                <span
+                  style={{
+                    fontSize: "6pt",
+                    lineHeight: 1.25,
+                    flex: 1,
+                    borderRight: "0.5pt solid #ddd",
+                    paddingRight: "0.05in",
+                    background: leftHl ? HIGHLIGHT_BG : "transparent",
+                    borderRadius: leftHl ? "0.02in" : undefined,
+                  }}
+                >
+                  {left}
+                </span>
+                <span
+                  style={{
+                    fontSize: "6pt",
+                    lineHeight: 1.25,
+                    flex: 1,
+                    background: rightHl ? HIGHLIGHT_BG : "transparent",
+                    borderRadius: rightHl ? "0.02in" : undefined,
+                  }}
+                >
+                  {right}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function Label({ item }: { item: ManufacturingWindowItem }) {
+function Label({
+  item,
+  highlightSection,
+}: {
+  item: ManufacturingWindowItem;
+  highlightSection?: ManufacturingHighlightSection | null;
+}) {
   return (
     <div style={{
       width: "3in",
@@ -122,13 +211,14 @@ function Label({ item }: { item: ManufacturingWindowItem }) {
       boxSizing: "border-box",
       flexShrink: 0,
     }}>
-      <LabelContent item={item} />
+      <LabelContent item={item} highlightSection={highlightSection} />
     </div>
   );
 }
 
 // Sheet = one physical Avery 2315 sheet: 4" × 6"
-// Labels centred horizontally with 0.5" margin each side, stacked 3-high
+// Labels centred horizontally with 0.5" margin each side, stacked 3-high.
+// Default sheet repeats one unit 3× (one for fabric, valance, tube).
 export function CutLabelSheet({ item }: { item: ManufacturingWindowItem }) {
   return (
     <div style={{
@@ -146,6 +236,35 @@ export function CutLabelSheet({ item }: { item: ManufacturingWindowItem }) {
       <Label item={item} />
       <Label item={item} />
       <Label item={item} />
+    </div>
+  );
+}
+
+// Packed sheet used when a single component is selected: one label per unit,
+// up to 3 different units packed on the same physical Avery 2315 sheet.
+export function CutLabelPackedSheet({
+  items,
+  highlightSection,
+}: {
+  items: ManufacturingWindowItem[];
+  highlightSection: ManufacturingHighlightSection;
+}) {
+  return (
+    <div style={{
+      width: "4in",
+      height: "6in",
+      boxSizing: "border-box",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      paddingLeft: "0.5in",
+      pageBreakAfter: "always",
+      breakAfter: "page",
+      flexShrink: 0,
+    }}>
+      {items.map((item) => (
+        <Label key={item.windowId} item={item} highlightSection={highlightSection} />
+      ))}
     </div>
   );
 }

@@ -37,7 +37,7 @@ export default async function CutterLayout({
           <main id="main-content">{children}</main>
         </div>
       </div>
-      <CutterNav />
+      <div className="print:hidden"><CutterNav /></div>
     </>
   );
 }

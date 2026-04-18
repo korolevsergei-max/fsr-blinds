@@ -813,27 +813,24 @@ export async function loadManufacturingRoleSchedule(
   for (const item of items) {
     const rawDate = item[roleDateKey];
     const date = rawDate && rawDate < currentWorkDate ? currentWorkDate : rawDate;
-    if (isReturnedToRole(role, item)) {
-      const list = byBucket.get("__returned__") ?? [];
-      list.push(item);
-      byBucket.set("__returned__", list);
-      continue;
-    }
-    if (item.issueStatus === "open") {
+    if (item.issueStatus === "open" && !isReturnedToRole(role, item)) {
       const list = byBucket.get("__issues__") ?? [];
       list.push(item);
       byBucket.set("__issues__", list);
       continue;
     }
-    if (!date) {
+    // Returned items go into their scheduled date bucket (or today if unscheduled)
+    // so they appear in dated buckets and are included in print label options.
+    if (!date && !isReturnedToRole(role, item)) {
       const list = byBucket.get("__unscheduled__") ?? [];
       list.push(item);
       byBucket.set("__unscheduled__", list);
       continue;
     }
-    const list = byBucket.get(date) ?? [];
-    list.push(item);
-    byBucket.set(date, list);
+    const bucketDate = date ?? currentWorkDate;
+    const bucketList = byBucket.get(bucketDate) ?? [];
+    bucketList.push(item);
+    byBucket.set(bucketDate, bucketList);
   }
 
   // Clamp the earliest scheduled date to today so the queue always starts with
@@ -851,7 +848,7 @@ export async function loadManufacturingRoleSchedule(
   }
 
   const orderedKeys = [...byBucket.keys()].sort((a, b) => {
-    const specialOrder = ["__returned__", "__issues__", "__unscheduled__"];
+    const specialOrder = ["__issues__", "__unscheduled__"];
     const aIdx = specialOrder.indexOf(a);
     const bIdx = specialOrder.indexOf(b);
     if (aIdx >= 0 || bIdx >= 0) {
@@ -925,9 +922,7 @@ export async function loadManufacturingRoleSchedule(
     return {
       date: key.startsWith("__") ? null : key,
       label:
-        key === "__returned__"
-          ? "Returned"
-          : key === "__issues__"
+        key === "__issues__"
           ? "Issues"
           : key === "__unscheduled__"
           ? "Unscheduled"
