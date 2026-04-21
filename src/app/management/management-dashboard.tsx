@@ -152,8 +152,6 @@ export function ManagementDashboard({
     return sortUnits(result, sortLevels);
   }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds, sortLevels]);
 
-  const showResults = selectedStatus !== null || selectedIssue !== null;
-
   const activeSortCount = sortLevels.length;
 
   const activeFilterCount = [
@@ -165,6 +163,8 @@ export function ManagementDashboard({
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
+
+  const showResults = selectedStatus !== null || selectedIssue !== null || activeFilterCount > 0;
 
   const clientOptions = [
     { value: "all", label: "All clients" },

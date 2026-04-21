@@ -135,8 +135,6 @@ export function SchedulerDashboard({
     return sortUnits(result, sortLevels);
   }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds, sortLevels]);
 
-  const showResults = selectedStatus !== null || selectedIssue !== null;
-
   const activeSortCount = sortLevels.length;
 
   const activeFilterCount = [
@@ -146,6 +144,8 @@ export function SchedulerDashboard({
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
+
+  const showResults = selectedStatus !== null || selectedIssue !== null || activeFilterCount > 0;
 
   const buildingOptions = [
     { value: "all", label: "All buildings" },

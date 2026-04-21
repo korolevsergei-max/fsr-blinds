@@ -556,13 +556,23 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
     <>
       <div className="min-h-[100dvh]">
         {/* Page Header */}
-        <div className="sticky top-0 z-20 bg-card border-b border-border-subtle px-4 pt-12 pb-3 shadow-[0_1px_0_var(--border-subtle)]">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-0.5">
-            Owner Reports
-          </p>
-          <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
-            Status Grid
-          </h1>
+        <div className="sticky top-0 z-20 bg-card border-b border-border-subtle px-4 pt-12 pb-3 shadow-[0_1px_0_var(--border-subtle)] flex items-end justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-0.5">
+              Owner Reports
+            </p>
+            <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
+              Status Grid
+            </h1>
+          </div>
+          <button
+            id="report-produce-btn"
+            onClick={() => setShowReport(true)}
+            className="flex items-center gap-1.5 bg-zinc-800 text-white text-[12px] font-semibold px-3 py-1.5 rounded-[8px] hover:bg-zinc-700 active:scale-95 transition-all mb-0.5"
+          >
+            <Printer size={14} />
+            Produce Report
+          </button>
         </div>
 
         {/* Filters */}
@@ -665,7 +675,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
           <>
             {/* Legend + Actions */}
             <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 {(
                   [
                     "measured",
@@ -674,38 +684,23 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
                     "installed",
                   ] as const
                 ).map((key) => (
-                  <div key={key} className="flex items-center gap-1.5">
-                    <span
-                      className="w-3 h-3 rounded-sm border"
-                      style={{
-                        backgroundColor: COLOR_MAP[key].dot + "44",
-                        borderColor: COLOR_MAP[key].dot,
-                      }}
-                    />
-                    <span className="text-[11px] text-muted font-medium capitalize">
-                      {COLOR_MAP[key].label}
-                    </span>
-                  </div>
-                ))}
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm border border-border bg-surface" />
-                  <span className="text-[11px] text-muted font-medium">
-                    Unscheduled
+                  <span
+                    key={key}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-md border"
+                    style={{
+                      backgroundColor: COLOR_MAP[key].dot + "22",
+                      borderColor: COLOR_MAP[key].dot,
+                      color: COLOR_MAP[key].dot,
+                    }}
+                  >
+                    {COLOR_MAP[key].label}
                   </span>
-                </div>
+                ))}
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-border text-muted bg-surface">
+                  Unscheduled
+                </span>
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  id="report-produce-btn"
-                  onClick={() => setShowReport(true)}
-                  className="flex items-center gap-1.5 bg-zinc-800 text-white text-[12px] font-semibold px-3 py-1.5 rounded-[8px] hover:bg-zinc-700 active:scale-95 transition-all"
-                >
-                  <Printer size={14} />
-                  Produce Report
-                </button>
-              </div>
             </div>
 
             {/* Badge legend */}
