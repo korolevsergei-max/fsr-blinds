@@ -214,6 +214,39 @@ export function SummaryView({
                             )}
                           </div>
 
+                          {/* Fabric adjustment */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider min-w-[56px]">
+                              Fab. adj.
+                            </span>
+                            <span className="text-xs font-mono font-semibold text-foreground">
+                              {w.fabricAdjustmentSide === "none"
+                                ? "None"
+                                : `${w.fabricAdjustmentSide.charAt(0).toUpperCase() + w.fabricAdjustmentSide.slice(1)} +${w.fabricAdjustmentInches}"`}
+                            </span>
+                          </div>
+
+                          {/* Wand & chain */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider min-w-[56px]">
+                              Wand
+                            </span>
+                            <span className="text-xs font-mono font-semibold text-foreground">
+                              {w.wandChain != null ? `${w.wandChain}"` : <span className="text-zinc-400 font-normal not-italic">Not set</span>}
+                            </span>
+                          </div>
+
+                          {/* Chain side */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider min-w-[56px]">
+                              Chain
+                            </span>
+                            <span className="text-xs font-mono font-semibold text-foreground">
+                              {w.chainSide != null
+                                ? w.chainSide.charAt(0).toUpperCase() + w.chainSide.slice(1)
+                                : <span className="text-zinc-400 font-normal">Not set</span>}
+                            </span>
+                          </div>
                         </div>
 
                         {w.notes && (
