@@ -21,7 +21,7 @@ import type {
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
 import { StickyDayRail } from "@/components/schedule/sticky-day-rail";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import { InstallDateCalendarFilter } from "@/components/ui/install-date-calendar-filter";
+import { InstallDateCalendarFilter, NOT_SET_SENTINEL } from "@/components/ui/install-date-calendar-filter";
 import { getFloor } from "@/lib/app-dataset";
 import {
   shiftWindowManufacturingSchedule,
@@ -86,9 +86,12 @@ type QueueStatusFilter =
   | "unscheduled";
 
 type SortField =
+  | "clientName"
   | "unitNumber"
   | "buildingName"
   | "floor"
+  | "installationDate"
+  | "completionDate"
   | "blindType"
   | "fabricWidth"
   | "windowWidth"
@@ -103,9 +106,12 @@ type SortLevel = {
 };
 
 const SORT_FIELD_LABELS: Record<SortField, string> = {
+  clientName: "Client Name",
   unitNumber: "Unit Number",
   buildingName: "Building",
   floor: "Floor",
+  installationDate: "Installation Date",
+  completionDate: "Completion Date",
   blindType: "Fabric Type",
   fabricWidth: "Fabric Width",
   windowWidth: "Window Width",
@@ -121,8 +127,15 @@ function computeFabricWidth(item: ManufacturingWindowItem): number | null {
   return item.width;
 }
 
-function getSortValue(item: ManufacturingWindowItem, field: SortField): string | number | null {
+function getCompletionTimestamp(item: ManufacturingWindowItem, role: "cutter" | "assembler" | "qc"): string | null {
+  if (role === "cutter") return item.cutAt ?? null;
+  if (role === "assembler") return item.assembledAt ?? null;
+  return item.qcApprovedAt ?? null;
+}
+
+function getSortValue(item: ManufacturingWindowItem, field: SortField, role: "cutter" | "assembler" | "qc"): string | number | null {
   switch (field) {
+    case "clientName": return item.clientName;
     case "unitNumber": return item.unitNumber;
     case "buildingName": return item.buildingName;
     case "floor": {
@@ -130,6 +143,8 @@ function getSortValue(item: ManufacturingWindowItem, field: SortField): string |
       const n = Number(f);
       return Number.isFinite(n) ? n : f;
     }
+    case "installationDate": return item.installationDate ?? null;
+    case "completionDate": return getCompletionTimestamp(item, role);
     case "blindType": return item.blindType;
     case "fabricWidth": return computeFabricWidth(item);
     case "windowWidth": return item.width;
@@ -140,13 +155,14 @@ function getSortValue(item: ManufacturingWindowItem, field: SortField): string |
 
 function multiLevelSort(
   windows: ManufacturingWindowItem[],
-  levels: SortLevel[]
+  levels: SortLevel[],
+  role: "cutter" | "assembler" | "qc"
 ): ManufacturingWindowItem[] {
   if (levels.length === 0) return windows;
   return [...windows].sort((a, b) => {
     for (const level of levels) {
-      const va = getSortValue(a, level.field);
-      const vb = getSortValue(b, level.field);
+      const va = getSortValue(a, level.field, role);
+      const vb = getSortValue(b, level.field, role);
       // nulls last
       if (va == null && vb == null) continue;
       if (va == null) return 1;
@@ -278,6 +294,7 @@ export function ManufacturingRoleQueue({
   const [stickyTop, setStickyTop] = useState(188);
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDates, setInstallDates] = useState<string[]>([]);
+  const [completionDates, setCompletionDates] = useState<string[]>([]);
   const [statusFilters, setStatusFilters] = useState<QueueStatusFilter[]>([]);
   const [fabricTypeFilter, setFabricTypeFilter] = useState<string[]>([]);
   const [floorFilter, setFloorFilter] = useState<string[]>([]);
@@ -433,6 +450,13 @@ export function ManufacturingRoleQueue({
     localSchedule.allItems.map((item) => item.installationDate).filter((d): d is string => d != null)
   );
 
+  const availableCompletionDates = new Set(
+    localSchedule.allItems
+      .map((item) => getCompletionTimestamp(item, role))
+      .filter((t): t is string => t != null)
+      .map((t) => t.slice(0, 10))
+  );
+
   const queueStatusOptions = [
     { value: "all", label: "All queue states" },
     { value: "returned", label: "Returned" },
@@ -446,6 +470,7 @@ export function ManufacturingRoleQueue({
   const activeFilterCount = [
     buildingFilter.length > 0,
     installDates.length > 0,
+    completionDates.length > 0,
     statusFilters.length > 0,
     fabricTypeFilter.length > 0,
     floorFilter.length > 0,
@@ -522,7 +547,17 @@ export function ManufacturingRoleQueue({
           for (const item of group.windows) {
             if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
             if (floorFilter.length > 0 && !floorFilter.includes(getFloor(item.unitNumber))) continue;
-            if (installDates.length > 0 && (item.installationDate == null || !installDates.includes(item.installationDate))) continue;
+            if (installDates.length > 0) {
+              const wantsNotSet = installDates.includes(NOT_SET_SENTINEL);
+              const specificDates = installDates.filter((d) => d !== NOT_SET_SENTINEL);
+              const matchesNotSet = wantsNotSet && item.installationDate == null;
+              const matchesDate = item.installationDate != null && specificDates.includes(item.installationDate);
+              if (!matchesNotSet && !matchesDate) continue;
+            }
+            if (completionDates.length > 0) {
+              const ts = getCompletionTimestamp(item, role);
+              if (!ts || !completionDates.includes(ts.slice(0, 10))) continue;
+            }
             if (!matchesQueueStatusFilter({
               item,
               role,
@@ -546,7 +581,7 @@ export function ManufacturingRoleQueue({
         const issues = windows.filter(isIssue);
         const rest   = windows.filter((w) => !isIssue(w));
         windows.length = 0;
-        windows.push(...issues, ...multiLevelSort(rest, sortLevels));
+        windows.push(...issues, ...multiLevelSort(rest, sortLevels, role));
       } else {
         // Default: issues/returned first, then by width descending
         windows.sort((a, b) => {
@@ -724,6 +759,13 @@ export function ManufacturingRoleQueue({
             selectedDates={installDates}
             onChange={setInstallDates}
             availableDates={availableInstallDates}
+            showNotSet
+          />
+          <InstallDateCalendarFilter
+            label="Completion Date"
+            selectedDates={completionDates}
+            onChange={setCompletionDates}
+            availableDates={availableCompletionDates}
           />
           <FilterDropdown
             multiple
@@ -746,6 +788,7 @@ export function ManufacturingRoleQueue({
                 setBuildingFilter([]);
                 setFloorFilter([]);
                 setInstallDates([]);
+                setCompletionDates([]);
                 setStatusFilters([]);
                 setFabricTypeFilter([]);
                 setComponentFilter("all");
@@ -1128,7 +1171,7 @@ export function ManufacturingRoleQueue({
       {/* Sort Modal */}
       {sortModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
           onClick={() => setSortModalOpen(false)}
         >
           <div
@@ -1251,7 +1294,7 @@ export function ManufacturingRoleQueue({
 
       {printModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
           onClick={() => setPrintModalOpen(false)}
         >
           <div

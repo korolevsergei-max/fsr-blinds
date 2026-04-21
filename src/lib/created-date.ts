@@ -1,5 +1,5 @@
-/** "all" or local calendar day as `YYYY-MM-DD` (from `<input type="date">`). */
-export type AddedDateFilter = "all" | string;
+/** "all" shows everything, "not_set" shows items with no date, or a local calendar day as `YYYY-MM-DD`. */
+export type AddedDateFilter = "all" | "not_set" | string;
 
 /** Local calendar day (`YYYY-MM-DD`) for an ISO `created_at` timestamp. */
 export function createdAtToLocalYmd(createdAt: string | null | undefined): string | null {

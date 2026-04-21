@@ -14,13 +14,14 @@ import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
 import type { Unit } from "@/lib/types";
 
-type Filter = "all" | "today" | "overdue" | "completed";
+type Filter = "all" | "today" | "overdue" | "completed" | "no_dates";
 
 const filterLabels: Record<Filter, string> = {
   all: "ALL",
   today: "DUE TODAY",
   overdue: "OVERDUE",
   completed: "DONE",
+  no_dates: "NO DATES",
 };
 
 function filterUnits(units: Unit[], filter: Filter): Unit[] {
@@ -40,6 +41,8 @@ function filterUnits(units: Unit[], filter: Filter): Unit[] {
       );
     case "completed":
       return units.filter((u) => u.status === "installed");
+    case "no_dates":
+      return units.filter((u) => !u.bracketingDate && !u.installationDate);
     default:
       return units;
   }

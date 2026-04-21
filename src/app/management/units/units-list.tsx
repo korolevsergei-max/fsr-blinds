@@ -58,6 +58,9 @@ export function UnitsList({
   const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("management-floorFilter", []);
   const [dateAddedFilter, setDateAddedFilter] = useSessionStorage<AddedDateFilter>("management-dateAddedFilter", "all");
   const [completeByFilter, setCompleteByFilter] = useSessionStorage<AddedDateFilter>("management-completeByFilter", "all");
+  const [installDateFilter, setInstallDateFilter] = useSessionStorage<AddedDateFilter>("management-installDateFilter", "all");
+  const [measurementDateFilter, setMeasurementDateFilter] = useSessionStorage<AddedDateFilter>("management-measurementDateFilter", "all");
+  const [bracketDateFilter, setBracketDateFilter] = useSessionStorage<AddedDateFilter>("management-bracketDateFilter", "all");
   const [sortOrder, setSortOrder] = useSessionStorage<string>("management-sortOrder", "none");
   const [issueFilter, setIssueFilter] = useSessionStorage<"all" | "has_issues" | "no_issues">("management-issueFilter", "all");
 
@@ -183,6 +186,30 @@ export function UnitsList({
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [unitsForDateOptions]);
 
+  const distinctInstallDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      if (u.installationDate) set.add(u.installationDate);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
+  const distinctMeasurementDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      if (u.measurementDate) set.add(u.measurementDate);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
+  const distinctBracketDates = useMemo(() => {
+    const set = new Set<string>();
+    for (const u of unitsForDateOptions) {
+      if (u.bracketingDate) set.add(u.bracketingDate);
+    }
+    return [...set].sort((a, b) => b.localeCompare(a));
+  }, [unitsForDateOptions]);
+
   const filtered = useMemo(() => {
     return units.filter((u) => {
       if (search) {
@@ -214,7 +241,14 @@ export function UnitsList({
       
       if (floorFilter.length > 0 && !floorFilter.includes(getFloor(u.unitNumber))) return false;
       if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
-      if (completeByFilter !== "all" && !isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false;
+      if (completeByFilter === "not_set") { if (u.completeByDate) return false; }
+      else if (completeByFilter !== "all") { if (!isStoredDateOnLocalDay(u.completeByDate, completeByFilter)) return false; }
+      if (installDateFilter === "not_set") { if (u.installationDate) return false; }
+      else if (installDateFilter !== "all") { if (!isStoredDateOnLocalDay(u.installationDate, installDateFilter)) return false; }
+      if (measurementDateFilter === "not_set") { if (u.measurementDate) return false; }
+      else if (measurementDateFilter !== "all") { if (!isStoredDateOnLocalDay(u.measurementDate, measurementDateFilter)) return false; }
+      if (bracketDateFilter === "not_set") { if (u.bracketingDate) return false; }
+      else if (bracketDateFilter !== "all") { if (!isStoredDateOnLocalDay(u.bracketingDate, bracketDateFilter)) return false; }
       if (issueFilter === "has_issues" && !unitIdsWithIssues.has(u.id)) return false;
       if (issueFilter === "no_issues" && unitIdsWithIssues.has(u.id)) return false;
       return true;
@@ -230,6 +264,9 @@ export function UnitsList({
     floorFilter,
     dateAddedFilter,
     completeByFilter,
+    installDateFilter,
+    measurementDateFilter,
+    bracketDateFilter,
     issueFilter,
     unitIdsWithIssues,
   ]);
@@ -266,6 +303,9 @@ export function UnitsList({
     floorFilter.length > 0,
     dateAddedFilter !== "all",
     completeByFilter !== "all",
+    installDateFilter !== "all",
+    measurementDateFilter !== "all",
+    bracketDateFilter !== "all",
     sortOrder !== "none",
     issueFilter !== "all",
   ].filter(Boolean).length;
@@ -422,6 +462,28 @@ export function UnitsList({
                   onChange={setCompleteByFilter}
                   label="Complete by"
                   distinctDates={distinctCompleteByDates}
+                  showNotSet
+                />
+                <CreatedDateFilter
+                  value={installDateFilter}
+                  onChange={setInstallDateFilter}
+                  label="Install Date"
+                  distinctDates={distinctInstallDates}
+                  showNotSet
+                />
+                <CreatedDateFilter
+                  value={measurementDateFilter}
+                  onChange={setMeasurementDateFilter}
+                  label="Measurement Date"
+                  distinctDates={distinctMeasurementDates}
+                  showNotSet
+                />
+                <CreatedDateFilter
+                  value={bracketDateFilter}
+                  onChange={setBracketDateFilter}
+                  label="Bracket Date"
+                  distinctDates={distinctBracketDates}
+                  showNotSet
                 />
                 <FilterDropdown
                   label="Issues"
@@ -441,6 +503,9 @@ export function UnitsList({
                       setFloorFilter([]);
                       setDateAddedFilter("all");
                       setCompleteByFilter("all");
+                      setInstallDateFilter("all");
+                      setMeasurementDateFilter("all");
+                      setBracketDateFilter("all");
                       setIssueFilter("all");
                       setSortOrder("none");
                     }}

@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, X } from "@phosphor-icons/react";
+import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, SortAscending, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
-import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
+import { getFloor, getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
@@ -27,6 +27,8 @@ import {
 } from "@/lib/dashboard-issues";
 import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-issues";
 import { useSessionStorage } from "@/hooks/use-session-storage";
+import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
+import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
 
 function fadeUp(delay = 0) {
   return {
@@ -45,7 +47,7 @@ export function ManagementDashboard({
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
-  const { units, clients, buildings, installers } = data;
+  const { units, clients, buildings, installers, schedulers } = data;
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -53,12 +55,19 @@ export function ManagementDashboard({
   const [clientFilter, setClientFilter] = useSessionStorage<string[]>("management-dashboard-clientFilter", []);
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("management-dashboard-buildingFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("management-dashboard-installerFilter", []);
+  const [schedulerFilter, setSchedulerFilter] = useSessionStorage<string[]>("management-dashboard-schedulerFilter", []);
+  const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("management-dashboard-floorFilter", []);
   const [yearFilter, setYearFilter] = useSessionStorage<string>("management-dashboard-yearFilter", "all");
   const [monthFilter, setMonthFilter] = useSessionStorage<string>("management-dashboard-monthFilter", "all");
 
   // Selection state — status + issue can combine
   const [selectedStatus, setSelectedStatus] = useSessionStorage<UnitStatus | null>("management-dashboard-selectedStatus", null);
   const [selectedIssue, setSelectedIssue] = useSessionStorage<DashboardIssue | null>("management-dashboard-selectedIssue", null);
+
+  // Sort state
+  const [sortLevels, setSortLevels] = useState<UnitSortLevel[]>([]);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [draftSortLevels, setDraftSortLevels] = useState<UnitSortLevel[]>([]);
 
   const availableBuildings = useMemo(
     () =>
@@ -68,8 +77,8 @@ export function ManagementDashboard({
     [buildings, clientFilter]
   );
 
-  // All counts derived from scopedUnits — never global units
-  const scopedUnits = useMemo(() => {
+  // Pre-floor scope: used to derive dynamic floor options
+  const preFloorUnits = useMemo(() => {
     const effectiveMonth = yearFilter === "all" ? "all" : monthFilter;
     return units.filter((u) => {
       if (clientFilter.length > 0 && !clientFilter.includes(u.clientId)) return false;
@@ -80,10 +89,22 @@ export function ManagementDashboard({
         const matchSpecific = u.assignedInstallerId && installerFilter.includes(u.assignedInstallerId);
         if (!matchUnassigned && !matchSpecific) return false;
       }
+      if (schedulerFilter.length > 0) {
+        const wantsUnassigned = schedulerFilter.includes("__unassigned__");
+        const matchUnassigned = wantsUnassigned && !u.assignedSchedulerId;
+        const matchSpecific = u.assignedSchedulerId && schedulerFilter.includes(u.assignedSchedulerId);
+        if (!matchUnassigned && !matchSpecific) return false;
+      }
       if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
     });
-  }, [units, clientFilter, buildingFilter, installerFilter, yearFilter, monthFilter]);
+  }, [units, clientFilter, buildingFilter, installerFilter, schedulerFilter, yearFilter, monthFilter]);
+
+  // All counts derived from scopedUnits — never global units
+  const scopedUnits = useMemo(() => {
+    if (floorFilter.length === 0) return preFloorUnits;
+    return preFloorUnits.filter((u) => floorFilter.includes(getFloor(u.unitNumber)));
+  }, [preFloorUnits, floorFilter]);
 
   const yearOptions = useMemo(() => buildYearOptions(units), [units]);
   const monthOptions = useMemo(() => buildMonthFilterOptions(), []);
@@ -128,15 +149,19 @@ export function ManagementDashboard({
       result = result.filter((u) =>
         getUnitIssues(u, today, escalationIds).includes(selectedIssue)
       );
-    return result;
-  }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds]);
+    return sortUnits(result, sortLevels);
+  }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds, sortLevels]);
 
   const showResults = selectedStatus !== null || selectedIssue !== null;
+
+  const activeSortCount = sortLevels.length;
 
   const activeFilterCount = [
     clientFilter.length > 0,
     buildingFilter.length > 0,
+    floorFilter.length > 0,
     installerFilter.length > 0,
+    schedulerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
@@ -154,6 +179,19 @@ export function ManagementDashboard({
     { value: "__unassigned__", label: "Unassigned" },
     ...installers.map((i) => ({ value: i.id, label: i.name })),
   ];
+
+  const schedulerOptions = [
+    { value: "all", label: "All schedulers" },
+    { value: "__unassigned__", label: "Unassigned" },
+    ...schedulers.map((s) => ({ value: s.id, label: s.name })),
+  ];
+
+  const floorOptions = useMemo(() => [
+    { value: "all", label: "All floors" },
+    ...[...new Map(
+      preFloorUnits.map((u) => { const f = getFloor(u.unitNumber); return [f, { value: f, label: `Floor ${f}` }]; })
+    ).values()].sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true })),
+  ], [preFloorUnits]);
 
   return (
     <div className="flex flex-col pb-32">
@@ -197,6 +235,19 @@ export function ManagementDashboard({
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => { setDraftSortLevels(sortLevels); setSortModalOpen(true); }}
+              className={[
+                "flex h-7 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+                activeSortCount > 0
+                  ? "border-accent bg-accent text-white"
+                  : "border-border bg-card text-secondary hover:border-zinc-300",
+              ].join(" ")}
+            >
+              <SortAscending size={12} weight="bold" />
+              {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
+            </button>
             <FilterDropdown
               multiple
               label="Client"
@@ -216,10 +267,24 @@ export function ManagementDashboard({
             />
             <FilterDropdown
               multiple
+              label="Floor"
+              values={floorFilter}
+              options={floorOptions}
+              onChange={setFloorFilter}
+            />
+            <FilterDropdown
+              multiple
               label="Installer"
               values={installerFilter}
               options={installerOptions}
               onChange={setInstallerFilter}
+            />
+            <FilterDropdown
+              multiple
+              label="Scheduler"
+              values={schedulerFilter}
+              options={schedulerOptions}
+              onChange={setSchedulerFilter}
             />
             <FilterDropdown
               label="Year"
@@ -238,15 +303,18 @@ export function ManagementDashboard({
                 onChange={setMonthFilter}
               />
             )}
-            {activeFilterCount > 0 && (
+            {(activeFilterCount > 0 || activeSortCount > 0) && (
               <button
                 type="button"
                 onClick={() => {
                   setClientFilter([]);
                   setBuildingFilter([]);
+                  setFloorFilter([]);
                   setInstallerFilter([]);
+                  setSchedulerFilter([]);
                   setYearFilter("all");
                   setMonthFilter("all");
+                  setSortLevels([]);
                 }}
                 className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
               >
@@ -399,6 +467,15 @@ export function ManagementDashboard({
           )}
         </AnimatePresence>
       </div>
+
+      {sortModalOpen && (
+        <UnitSortModal
+          draftLevels={draftSortLevels}
+          onClose={() => setSortModalOpen(false)}
+          onApply={(levels) => { setSortLevels(levels); setSortModalOpen(false); }}
+          onChange={setDraftSortLevels}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { CalendarBlank, CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type DateInputProps = {
   value: string;
@@ -86,8 +87,25 @@ export function DateInput({
 }: DateInputProps) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, "-") || undefined;
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
   const selectedDate = useMemo(() => parseDate(value), [value]);
   const [open, setOpen] = useState(false);
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
+
+  function openWithPosition() {
+    if (!triggerRef.current) { setOpen(true); return; }
+    const rect = triggerRef.current.getBoundingClientRect();
+    const calendarHeight = 380;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openAbove = spaceBelow < calendarHeight && rect.top > calendarHeight;
+    setPopupStyle(
+      openAbove
+        ? { position: "fixed", bottom: window.innerHeight - rect.top + 8, left: rect.left, width: 320, zIndex: 9999 }
+        : { position: "fixed", top: rect.bottom + 8, left: rect.left, width: 320, zIndex: 9999 }
+    );
+    setOpen(true);
+  }
   const [visibleMonth, setVisibleMonth] = useState<Date>(
     startOfMonth(selectedDate ?? new Date())
   );
@@ -104,7 +122,11 @@ export function DateInput({
     if (!open) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        !rootRef.current?.contains(target) &&
+        !(popupRef.current?.contains(target))
+      ) {
         setOpen(false);
       }
     }
@@ -149,27 +171,28 @@ export function DateInput({
       )}
 
       <button
+        ref={triggerRef}
         id={inputId}
         type="button"
         disabled={disabled}
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => (open ? setOpen(false) : openWithPosition())}
         onKeyDown={(event) => {
           if (disabled) return;
           if (event.key === "ArrowDown") {
             event.preventDefault();
-            setOpen(true);
+            openWithPosition();
             setVisibleMonth((prev) => addMonths(prev, 1));
           }
           if (event.key === "ArrowUp") {
             event.preventDefault();
-            setOpen(true);
+            openWithPosition();
             setVisibleMonth((prev) => addMonths(prev, -1));
           }
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setOpen((prev) => !prev);
+            open ? setOpen(false) : openWithPosition();
           }
         }}
         className={[baseTriggerClass, triggerTone, triggerClassName].filter(Boolean).join(" ")}
@@ -183,8 +206,9 @@ export function DateInput({
       {error && <p className="text-[13px] leading-snug text-danger">{error}</p>}
       {helper && !error && <p className="text-[13px] leading-snug text-tertiary">{helper}</p>}
 
-      {open && (
+      {open && createPortal(
         <div
+          ref={popupRef}
           role="dialog"
           aria-label={label ?? "Date picker"}
           onKeyDown={(event) => {
@@ -197,7 +221,8 @@ export function DateInput({
               setVisibleMonth((prev) => addMonths(prev, -1));
             }
           }}
-          className="absolute left-0 top-full z-50 mt-2 w-[20rem] rounded-2xl border border-border bg-white p-4 shadow-2xl"
+          style={popupStyle}
+          className="rounded-2xl border border-border bg-white p-4 shadow-2xl"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <button
@@ -285,7 +310,8 @@ export function DateInput({
               Today
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

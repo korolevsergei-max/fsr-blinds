@@ -11,8 +11,10 @@ type CreatedDateFilterProps = {
   value: AddedDateFilter;
   onChange: (value: AddedDateFilter) => void;
   label?: string;
-  /** When set, show these `YYYY-MM-DD` values as choices (actual dates units were added) instead of a free calendar. */
+  /** When set, show these `YYYY-MM-DD` values as choices instead of a free calendar. */
   distinctDates?: string[];
+  /** When true, show a "Not set" option to filter for units with no date. */
+  showNotSet?: boolean;
 };
 
 export function CreatedDateFilter({
@@ -20,6 +22,7 @@ export function CreatedDateFilter({
   onChange,
   label = "Date Added",
   distinctDates,
+  showNotSet,
 }: CreatedDateFilterProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
@@ -62,7 +65,13 @@ export function CreatedDateFilter({
             : "border-border bg-card text-secondary hover:border-zinc-300",
         ].join(" ")}
       >
-        <span className="truncate">{active ? formatAddedDateLabel(value) : label}</span>
+        <span className="truncate">
+          {active
+            ? value === "not_set"
+              ? `${label}: Not set`
+              : formatAddedDateLabel(value)
+            : label}
+        </span>
         <CaretDown
           size={11}
           weight="bold"
@@ -138,6 +147,23 @@ export function CreatedDateFilter({
                   </div>
                 )}
                 
+                {showNotSet && (
+                  <button
+                    type="button"
+                    onClick={() => { onChange("not_set"); setOpen(false); }}
+                    className={`mt-2 group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-all ${
+                      value === "not_set"
+                        ? "bg-accent text-white shadow-sm"
+                        : "bg-surface text-foreground hover:bg-zinc-100 hover:pl-4"
+                    }`}
+                  >
+                    <span className="text-[13px] font-semibold">Not set</span>
+                    {value === "not_set" && (
+                      <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                    )}
+                  </button>
+                )}
+
                 <div className="mt-3 pt-3 border-t border-border/50">
                   <button
                     type="button"

@@ -28,16 +28,23 @@ function getGridDays(year: number, month: number): (Date | null)[] {
   return cells;
 }
 
+export const NOT_SET_SENTINEL = "__not_set__";
+
 interface InstallDateCalendarFilterProps {
   selectedDates: string[];
   onChange: (dates: string[]) => void;
   availableDates: Set<string>;
+  /** When true, show a "Not set" toggle for items with no date. */
+  showNotSet?: boolean;
+  label?: string;
 }
 
 export function InstallDateCalendarFilter({
   selectedDates,
   onChange,
   availableDates,
+  showNotSet,
+  label = "Installation Date",
 }: InstallDateCalendarFilterProps) {
   const today = new Date();
   const todayKey = formatDateKey(today);
@@ -48,14 +55,18 @@ export function InstallDateCalendarFilter({
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  const notSetSelected = selectedDates.includes(NOT_SET_SENTINEL);
+  const realDates = selectedDates.filter((d) => d !== NOT_SET_SENTINEL);
   const active = selectedDates.length > 0;
 
-  let displayLabel = "Installation Date";
-  if (selectedDates.length === 1) {
-    const d = new Date(`${selectedDates[0]}T00:00:00`);
+  let displayLabel = label;
+  if (selectedDates.length === 1 && notSetSelected) {
+    displayLabel = `${label}: Not set`;
+  } else if (realDates.length === 1 && !notSetSelected) {
+    const d = new Date(`${realDates[0]}T00:00:00`);
     displayLabel = d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
   } else if (selectedDates.length > 1) {
-    displayLabel = `Installation Date (${selectedDates.length})`;
+    displayLabel = `${label} (${selectedDates.length})`;
   }
 
   function handleToggle() {
@@ -191,6 +202,28 @@ export function InstallDateCalendarFilter({
                       );
                     })}
                   </div>
+
+                  {/* Not set toggle */}
+                  {showNotSet && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (notSetSelected) {
+                          onChange(realDates);
+                        } else {
+                          onChange([...realDates, NOT_SET_SENTINEL]);
+                        }
+                      }}
+                      className={[
+                        "mt-2.5 w-full rounded-lg px-3 py-2 text-left text-[11px] font-semibold transition-colors",
+                        notSetSelected
+                          ? "bg-accent text-white"
+                          : "bg-surface text-foreground hover:bg-zinc-100",
+                      ].join(" ")}
+                    >
+                      Not set
+                    </button>
+                  )}
 
                   {/* Clear */}
                   {selectedDates.length > 0 && (

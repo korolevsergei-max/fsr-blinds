@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, X } from "@phosphor-icons/react";
+import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, SortAscending, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
-import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
+import { getFloor, getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
@@ -27,6 +27,8 @@ import {
 } from "@/lib/dashboard-issues";
 import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-issues";
 import { useSessionStorage } from "@/hooks/use-session-storage";
+import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
+import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
 
 function fadeUp(delay = 0) {
   return {
@@ -51,6 +53,7 @@ export function SchedulerDashboard({
 
   // Scope filters
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-dashboard-buildingFilter", []);
+  const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("scheduler-dashboard-floorFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-dashboard-installerFilter", []);
   const [yearFilter, setYearFilter] = useSessionStorage<string>("scheduler-dashboard-yearFilter", "all");
   const [monthFilter, setMonthFilter] = useSessionStorage<string>("scheduler-dashboard-monthFilter", "all");
@@ -59,8 +62,13 @@ export function SchedulerDashboard({
   const [selectedStatus, setSelectedStatus] = useSessionStorage<UnitStatus | null>("scheduler-dashboard-selectedStatus", null);
   const [selectedIssue, setSelectedIssue] = useSessionStorage<DashboardIssue | null>("scheduler-dashboard-selectedIssue", null);
 
-  // All counts derived from scopedUnits — never global units
-  const scopedUnits = useMemo(() => {
+  // Sort state
+  const [sortLevels, setSortLevels] = useState<UnitSortLevel[]>([]);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [draftSortLevels, setDraftSortLevels] = useState<UnitSortLevel[]>([]);
+
+  // Pre-floor scope: used to derive dynamic floor options
+  const preFloorUnits = useMemo(() => {
     const effectiveMonth = yearFilter === "all" ? "all" : monthFilter;
     return units.filter((u) => {
       if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
@@ -74,6 +82,12 @@ export function SchedulerDashboard({
       return true;
     });
   }, [units, buildingFilter, installerFilter, yearFilter, monthFilter]);
+
+  // All counts derived from scopedUnits — never global units
+  const scopedUnits = useMemo(() => {
+    if (floorFilter.length === 0) return preFloorUnits;
+    return preFloorUnits.filter((u) => floorFilter.includes(getFloor(u.unitNumber)));
+  }, [preFloorUnits, floorFilter]);
 
   const yearOptions = useMemo(() => buildYearOptions(units), [units]);
   const monthOptions = useMemo(() => buildMonthFilterOptions(), []);
@@ -118,13 +132,16 @@ export function SchedulerDashboard({
       result = result.filter((u) =>
         getUnitIssues(u, today, escalationIds).includes(selectedIssue)
       );
-    return result;
-  }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds]);
+    return sortUnits(result, sortLevels);
+  }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds, sortLevels]);
 
   const showResults = selectedStatus !== null || selectedIssue !== null;
 
+  const activeSortCount = sortLevels.length;
+
   const activeFilterCount = [
     buildingFilter.length > 0,
+    floorFilter.length > 0,
     installerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
@@ -139,6 +156,13 @@ export function SchedulerDashboard({
     { value: "__unassigned__", label: "Unassigned" },
     ...installers.map((i) => ({ value: i.id, label: i.name })),
   ];
+
+  const floorOptions = useMemo(() => [
+    { value: "all", label: "All floors" },
+    ...[...new Map(
+      preFloorUnits.map((u) => { const f = getFloor(u.unitNumber); return [f, { value: f, label: `Floor ${f}` }]; })
+    ).values()].sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true })),
+  ], [preFloorUnits]);
 
   return (
     <div className="flex flex-col pb-32">
@@ -182,12 +206,32 @@ export function SchedulerDashboard({
                 </span>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => { setDraftSortLevels(sortLevels); setSortModalOpen(true); }}
+              className={[
+                "flex h-7 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+                activeSortCount > 0
+                  ? "border-accent bg-accent text-white"
+                  : "border-border bg-card text-secondary hover:border-zinc-300",
+              ].join(" ")}
+            >
+              <SortAscending size={12} weight="bold" />
+              {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
+            </button>
             <FilterDropdown
               multiple
               label="Building"
               values={buildingFilter}
               options={buildingOptions}
               onChange={setBuildingFilter}
+            />
+            <FilterDropdown
+              multiple
+              label="Floor"
+              values={floorFilter}
+              options={floorOptions}
+              onChange={setFloorFilter}
             />
             <FilterDropdown
               multiple
@@ -213,14 +257,16 @@ export function SchedulerDashboard({
                 onChange={setMonthFilter}
               />
             )}
-            {activeFilterCount > 0 && (
+            {(activeFilterCount > 0 || activeSortCount > 0) && (
               <button
                 type="button"
                 onClick={() => {
                   setBuildingFilter([]);
+                  setFloorFilter([]);
                   setInstallerFilter([]);
                   setYearFilter("all");
                   setMonthFilter("all");
+                  setSortLevels([]);
                 }}
                 className="flex-shrink-0 flex items-center gap-1 h-7 px-2 rounded-full text-[11px] font-medium text-red-500 border border-red-200 bg-red-50"
               >
@@ -374,6 +420,15 @@ export function SchedulerDashboard({
           )}
         </AnimatePresence>
       </div>
+
+      {sortModalOpen && (
+        <UnitSortModal
+          draftLevels={draftSortLevels}
+          onClose={() => setSortModalOpen(false)}
+          onApply={(levels) => { setSortLevels(levels); setSortModalOpen(false); }}
+          onChange={setDraftSortLevels}
+        />
+      )}
     </div>
   );
 }
