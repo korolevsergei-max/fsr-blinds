@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ChartBar, Buildings, CalendarBlank, UsersFour, Bell } from "@phosphor-icons/react";
+import { ChartBar, Buildings, CalendarBlank, UsersFour, Bell, Factory } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   { href: "/scheduler", label: "Dashboard", Icon: ChartBar },
   { href: "/scheduler/units", label: "Units", Icon: Buildings },
   { href: "/scheduler/schedule", label: "Schedule", Icon: CalendarBlank },
+  { href: "/scheduler/process", label: "Process", Icon: Factory },
   { href: "/scheduler/installers", label: "Installers", Icon: UsersFour },
   { href: "/scheduler/notifications", label: "Alerts", Icon: Bell },
 ];
@@ -83,8 +84,9 @@ export function SchedulerNav({
             <Link
               key={href}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={[
-                "relative flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
+                "relative flex flex-1 flex-col items-center gap-1 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
                 "rounded-[var(--radius-md)] transition-colors duration-150",
                 active ? "text-accent" : "text-tertiary hover:text-secondary",
               ].join(" ")}
@@ -96,7 +98,7 @@ export function SchedulerNav({
                     active ? "bg-accent-light" : "",
                   ].join(" ")}
                 >
-                  <Icon size={22} weight={active ? "fill" : "regular"} />
+                  <Icon size={21} weight={active ? "fill" : "regular"} />
                 </div>
                 {showBadge && (
                   <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full bg-danger text-white text-[8px] font-bold leading-none">
@@ -104,7 +106,7 @@ export function SchedulerNav({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
+              <span className="text-[9px] sm:text-[10px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
                 {label}
               </span>
             </Link>

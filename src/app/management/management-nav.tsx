@@ -9,6 +9,7 @@ import {
   CalendarBlank,
   ChartLineUp,
   Gear,
+  Factory,
 } from "@phosphor-icons/react";
 
 const baseNavItems = [
@@ -16,6 +17,7 @@ const baseNavItems = [
   { href: "/management/clients", label: "Clients", Icon: AddressBook },
   { href: "/management/units", label: "Units", Icon: Buildings },
   { href: "/management/schedule", label: "Schedule", Icon: CalendarBlank },
+  { href: "/management/process", label: "Process", Icon: Factory },
   { href: "/management/reports", label: "Reports", Icon: ChartLineUp },
 ];
 
@@ -47,8 +49,11 @@ export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
               key={href}
               href={href}
               prefetch={href === "/management/settings" ? false : undefined}
+              aria-current={active ? "page" : undefined}
+              aria-label={label}
+              title={label}
               className={[
-                "flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
+                "flex flex-1 flex-col items-center justify-center gap-0 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
                 "rounded-[var(--radius-md)] transition-colors duration-150",
                 active ? "text-accent" : "text-tertiary hover:text-secondary",
               ].join(" ")}
@@ -61,7 +66,7 @@ export function ManagementNav({ showAccounts }: { showAccounts: boolean }) {
               >
                 <Icon size={22} weight={active ? "fill" : "regular"} />
               </div>
-              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
+              <span className="sr-only">
                 {label}
               </span>
             </Link>

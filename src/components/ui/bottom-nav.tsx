@@ -7,12 +7,14 @@ import {
   House,
   CalendarBlank,
   Bell,
+  Factory,
 } from "@phosphor-icons/react";
 import { createClient } from "@/lib/supabase/client";
 
 const navItems = [
   { href: "/installer",               label: "Home",     Icon: House },
   { href: "/installer/schedule",      label: "Schedule", Icon: CalendarBlank },
+  { href: "/installer/process",       label: "Process",  Icon: Factory },
   { href: "/installer/notifications", label: "Alerts",   Icon: Bell },
 ];
 
@@ -85,8 +87,9 @@ export function BottomNav({
             <Link
               key={href}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={[
-                "relative flex flex-1 flex-col items-center gap-1.5 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
+                "relative flex flex-1 flex-col items-center gap-1 px-0.5 py-1.5 min-w-0 transition-opacity active:opacity-70",
                 "rounded-[var(--radius-md)] transition-colors duration-150",
                 active ? "text-accent" : "text-tertiary hover:text-secondary",
               ].join(" ")}
@@ -109,7 +112,7 @@ export function BottomNav({
                   </span>
                 )}
               </div>
-              <span className="text-[10px] sm:text-[11px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
+              <span className="text-[9px] sm:text-[10px] font-medium tracking-tight leading-none truncate w-full text-center px-1">
                 {label}
               </span>
             </Link>
