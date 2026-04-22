@@ -1,6 +1,6 @@
 import { computeManufacturingSummary } from "@/lib/manufacturing-summary";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
-import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
+import type { LabelKind, PrintableLabelItem } from "@/lib/cut-labels";
 
 function fmtDate(date: string | null) {
   if (!date) return null;
@@ -8,38 +8,30 @@ function fmtDate(date: string | null) {
   return d.toLocaleDateString("en-CA", { year: "numeric", month: "short", day: "numeric" });
 }
 
-const HIGHLIGHT_BG = "#dbeafe"; // sky-100 equivalent, prints predictably
+function getLabelKindStyles(kind: LabelKind) {
+  if (kind === "manufacturing") {
+    return {
+      text: "MANUFACTURING",
+      background: "#111827",
+      color: "#ffffff",
+    };
+  }
 
-// Which summaryPairs cell each highlight section should tint.
-// summaryPairs layout:
-//   [0] W×H   | Bottom rail
-//   [1] Fabric adj | Wand & chain
-//   [2] Machine    | Window installation
-//   [3] Post-cut   | Blind type
-//   [4] Valance    | Tube
-function isCellHighlighted(
-  section: ManufacturingHighlightSection,
-  pairIdx: number,
-  side: "left" | "right"
-) {
-  if (section === "fabric") {
-    return side === "left" && (pairIdx === 1 || pairIdx === 2 || pairIdx === 3);
-  }
-  if (section === "valance") {
-    return side === "left" && pairIdx === 4;
-  }
-  // tube_rail → Bottom rail (pair 0, right) + Tube (pair 4, right)
-  return side === "right" && (pairIdx === 0 || pairIdx === 4);
+  return {
+    text: "PACKAGING",
+    background: "#d97706",
+    color: "#ffffff",
+  };
 }
 
 // Each physical Avery 2315 label: 3" wide × 2" tall
 // Safety margin: 0.125" from each edge → usable: 2.75" × 1.75"
 function LabelContent({
   item,
-  highlightSection,
+  kind,
 }: {
   item: ManufacturingWindowItem;
-  highlightSection?: ManufacturingHighlightSection | null;
+  kind: LabelKind;
 }) {
   const s = computeManufacturingSummary({
     width: item.width,
@@ -69,6 +61,7 @@ function LabelContent({
     fontFamily: "'Arial', 'Helvetica', sans-serif",
     color: "#000",
   };
+  const kindBadge = getLabelKindStyles(kind);
 
   return (
     <div style={{
@@ -83,15 +76,32 @@ function LabelContent({
       overflow: "hidden",
     }}>
       {/* Header: unit + building + install date */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: "7.5pt", fontWeight: "700", lineHeight: 1 }}>
-          Unit {item.unitNumber} · {item.buildingName}
-        </span>
-        {installDate && (
-          <span style={{ fontSize: "6.5pt", color: "#333", lineHeight: 1 }}>
-            Install {installDate}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.08in" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.04in", minWidth: 0 }}>
+          <span style={{ fontSize: "7.5pt", fontWeight: "700", lineHeight: 1 }}>
+            Unit {item.unitNumber} · {item.buildingName}
           </span>
-        )}
+          {installDate && (
+            <span style={{ fontSize: "6.5pt", color: "#333", lineHeight: 1 }}>
+              Install {installDate}
+            </span>
+          )}
+        </div>
+        <span
+          style={{
+            flexShrink: 0,
+            fontSize: "6.5pt",
+            fontWeight: "800",
+            lineHeight: 1,
+            letterSpacing: "0.06em",
+            padding: "0.045in 0.06in",
+            borderRadius: "999px",
+            background: kindBadge.background,
+            color: kindBadge.color,
+          }}
+        >
+          {kindBadge.text}
+        </span>
       </div>
 
       {/* Divider */}
@@ -132,10 +142,7 @@ function LabelContent({
                 color: "#555",
                 lineHeight: 1,
                 marginLeft: "0.05in",
-                background:
-                  highlightSection && isCellHighlighted(highlightSection, 0, "right") ? HIGHLIGHT_BG : "transparent",
                 padding: "0.01in 0.03in",
-                borderRadius: "0.02in",
               }}
             >
               {s.rows[6].label}
@@ -145,10 +152,7 @@ function LabelContent({
                 fontSize: "6.5pt",
                 fontWeight: "700",
                 lineHeight: 1,
-                background:
-                  highlightSection && isCellHighlighted(highlightSection, 0, "right") ? HIGHLIGHT_BG : "transparent",
                 padding: "0.01in 0.03in",
-                borderRadius: "0.02in",
               }}
             >
               {summaryPairs[0][1]}
@@ -159,9 +163,6 @@ function LabelContent({
 
           {/* 2-column rows for remaining specs */}
           {summaryPairs.slice(1).map(([left, right], i) => {
-            const pairIdx = i + 1;
-            const leftHl = highlightSection ? isCellHighlighted(highlightSection, pairIdx, "left") : false;
-            const rightHl = highlightSection ? isCellHighlighted(highlightSection, pairIdx, "right") : false;
             return (
               <div key={i} style={{ display: "flex", gap: "0.06in" }}>
                 <span
@@ -171,8 +172,6 @@ function LabelContent({
                     flex: 1,
                     borderRight: "0.5pt solid #ddd",
                     paddingRight: "0.05in",
-                    background: leftHl ? HIGHLIGHT_BG : "transparent",
-                    borderRadius: leftHl ? "0.02in" : undefined,
                   }}
                 >
                   {left}
@@ -182,8 +181,6 @@ function LabelContent({
                     fontSize: "6pt",
                     lineHeight: 1.25,
                     flex: 1,
-                    background: rightHl ? HIGHLIGHT_BG : "transparent",
-                    borderRadius: rightHl ? "0.02in" : undefined,
                   }}
                 >
                   {right}
@@ -199,10 +196,10 @@ function LabelContent({
 
 function Label({
   item,
-  highlightSection,
+  kind,
 }: {
   item: ManufacturingWindowItem;
-  highlightSection?: ManufacturingHighlightSection | null;
+  kind: LabelKind;
 }) {
   return (
     <div style={{
@@ -211,15 +208,15 @@ function Label({
       boxSizing: "border-box",
       flexShrink: 0,
     }}>
-      <LabelContent item={item} highlightSection={highlightSection} />
+      <LabelContent item={item} kind={kind} />
     </div>
   );
 }
 
 // Sheet = one physical Avery 2315 sheet: 4" × 6"
 // Labels centred horizontally with 0.5" margin each side, stacked 3-high.
-// Default sheet repeats one unit 3× (one for fabric, valance, tube).
-export function CutLabelSheet({ item }: { item: ManufacturingWindowItem }) {
+// Each page holds up to 3 explicit label instances in queue order.
+export function CutLabelSheet({ labels }: { labels: PrintableLabelItem[] }) {
   return (
     <div style={{
       width: "4in",
@@ -234,38 +231,8 @@ export function CutLabelSheet({ item }: { item: ManufacturingWindowItem }) {
       breakAfter: "page",
       flexShrink: 0,
     }}>
-      <Label item={item} />
-      <Label item={item} />
-      <Label item={item} />
-    </div>
-  );
-}
-
-// Packed sheet used when a single component is selected: one label per unit,
-// up to 3 different units packed on the same physical Avery 2315 sheet.
-export function CutLabelPackedSheet({
-  items,
-  highlightSection,
-}: {
-  items: ManufacturingWindowItem[];
-  highlightSection: ManufacturingHighlightSection;
-}) {
-  return (
-    <div style={{
-      width: "4in",
-      height: "6in",
-      boxSizing: "border-box",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "flex-start",
-      paddingLeft: "0.5in",
-      paddingTop: "0.15in",
-      pageBreakAfter: "always",
-      breakAfter: "page",
-      flexShrink: 0,
-    }}>
-      {items.map((item) => (
-        <Label key={item.windowId} item={item} highlightSection={highlightSection} />
+      {labels.map((label) => (
+        <Label key={label.key} item={label.item} kind={label.kind} />
       ))}
     </div>
   );

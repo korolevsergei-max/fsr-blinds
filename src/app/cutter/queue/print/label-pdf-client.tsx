@@ -2,19 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
-import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
-import { CutLabelSheet, CutLabelPackedSheet } from "@/components/manufacturing/cut-label-sheet";
+import { buildPrintableLabelItems, packPrintableLabelItems, type LabelMode } from "@/lib/cut-labels";
+import { CutLabelSheet } from "@/components/manufacturing/cut-label-sheet";
 
 interface Props {
   items: ManufacturingWindowItem[];
-  highlightSection: ManufacturingHighlightSection | null;
-  packedGroups: ManufacturingWindowItem[][];
+  labelMode: LabelMode;
 }
 
-export function LabelPdfClient({ items, highlightSection, packedGroups }: Props) {
+export function LabelPdfClient({ items, labelMode }: Props) {
   const [status, setStatus] = useState<"generating" | "done" | "error">("generating");
   const [errorMsg, setErrorMsg] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const labelPages = packPrintableLabelItems(buildPrintableLabelItems(items, labelMode));
 
   useEffect(() => {
     async function generate() {
@@ -62,7 +62,6 @@ export function LabelPdfClient({ items, highlightSection, packedGroups }: Props)
     }
 
     generate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -129,17 +128,11 @@ export function LabelPdfClient({ items, highlightSection, packedGroups }: Props)
           pointerEvents: "none",
         }}
       >
-        {highlightSection
-          ? packedGroups.map((group, idx) => (
-              <div key={idx} className="label-sheet" style={{ width: "4in", height: "6in", background: "#fff" }}>
-                <CutLabelPackedSheet items={group} highlightSection={highlightSection} />
-              </div>
-            ))
-          : items.map((item) => (
-              <div key={item.windowId} className="label-sheet" style={{ width: "4in", height: "6in", background: "#fff" }}>
-                <CutLabelSheet item={item} />
-              </div>
-            ))}
+        {labelPages.map((page, idx) => (
+          <div key={idx} className="label-sheet" style={{ width: "4in", height: "6in", background: "#fff" }}>
+            <CutLabelSheet labels={page} />
+          </div>
+        ))}
       </div>
     </div>
   );

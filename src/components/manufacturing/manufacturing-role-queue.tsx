@@ -40,10 +40,7 @@ import { ManufacturingSummaryCard, type ManufacturingHighlightSection } from "@/
 
 type ComponentFilter = "all" | ManufacturingHighlightSection;
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
-
-function formatBucketDate(date: string | null) {
-  return formatStoredDateLongEnglish(date) ?? date ?? "";
-}
+type PrintLabelMode = "manufacturing" | "packaging" | "both";
 
 function formatDateKey(date: Date) {
   const year = date.getFullYear();
@@ -305,7 +302,7 @@ export function ManufacturingRoleQueue({
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printSelectedDays, setPrintSelectedDays] = useState<number[]>([0]);
+  const [printLabelMode, setPrintLabelMode] = useState<PrintLabelMode>("manufacturing");
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
@@ -610,37 +607,31 @@ export function ManufacturingRoleQueue({
     .filter((bucket) => bucket.windows.length > 0);
 
   const maxVisibleItems = displayLimit === "all" ? Infinity : Number(displayLimit);
-  let remainingVisibleItems = maxVisibleItems;
+  const visibleBuckets = filteredBuckets.reduce<(typeof filteredBuckets)[number][]>((acc, bucket) => {
+    const usedCount = acc.reduce((sum, entry) => sum + entry.windows.length, 0);
+    const remainingVisibleItems = maxVisibleItems - usedCount;
+    if (remainingVisibleItems <= 0) return acc;
 
-  const visibleBuckets = filteredBuckets
-    .map((bucket) => {
-      if (remainingVisibleItems <= 0) return null;
-      const windows = bucket.windows.slice(0, remainingVisibleItems);
-      remainingVisibleItems -= windows.length;
-      if (windows.length === 0) return null;
-      return { ...bucket, windows, scheduledCount: windows.length };
-    })
-    .filter((bucket): bucket is (typeof filteredBuckets)[number] => bucket !== null);
+    const windows = bucket.windows.slice(0, remainingVisibleItems);
+    if (windows.length === 0) return acc;
 
-  // Build print options from the already-filtered + sorted visibleBuckets
-  // so Print labels always reflects exactly what the user sees on screen.
-  const printDayOptions = visibleBuckets
-    .filter((b) => b.date !== null)
-    .slice(0, 3)
-    .map((bucket, idx) => {
-      const pendingIds = bucket.windows
-        .filter((w) => w.productionStatus === "pending")
-        .map((w) => w.windowId);
-      const dayLabel = idx === 0 ? "Today" : idx === 1 ? "Next working day" : "Working day after";
-      return { label: dayLabel, date: bucket.date!, pendingIds };
-    });
+    acc.push({ ...bucket, windows, scheduledCount: windows.length });
+    return acc;
+  }, []);
+
+  const printableVisibleIds = visibleBuckets.flatMap((bucket) =>
+    bucket.windows
+      .filter((item) => item.productionStatus === "pending")
+      .map((item) => item.windowId)
+  );
 
   const handlePrint = () => {
-    const ids = printSelectedDays
-      .flatMap((idx) => printDayOptions[idx]?.pendingIds ?? []);
-    if (ids.length === 0) return;
-    const params = new URLSearchParams({ ids: ids.join(",") });
-    if (componentFilter !== "all") params.set("component", componentFilter);
+    if (printableVisibleIds.length === 0) return;
+
+    const params = new URLSearchParams({
+      ids: printableVisibleIds.join(","),
+      labelMode: printLabelMode,
+    });
     const url = `/cutter/queue/print?${params.toString()}`;
     window.open(url, "_blank");
     setPrintModalOpen(false);
@@ -723,7 +714,7 @@ export function ManufacturingRoleQueue({
               </button>
               <button
                 type="button"
-                onClick={() => { setPrintModalOpen(true); setPrintSelectedDays([0]); }}
+                onClick={() => { setPrintModalOpen(true); setPrintLabelMode("manufacturing"); }}
                 className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
               >
                 <Printer size={15} />
@@ -1343,43 +1334,60 @@ export function ManufacturingRoleQueue({
               </button>
             </div>
             <p className="mb-4 text-[12px] text-tertiary">
-              Select which days to print. Only uncut blinds are included.
+              Choose which label type to print. Only currently visible uncut blinds are included.
             </p>
             <div className="space-y-2">
-              {printDayOptions.length === 0 ? (
-                <p className="text-[12px] text-tertiary italic">No scheduled cutting days found.</p>
-              ) : printDayOptions.map((option, idx) => {
-                const checked = printSelectedDays.includes(idx);
-                const empty = option.pendingIds.length === 0;
-                return (
-                  <label
-                    key={option.date}
-                    className={[
-                      "flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 transition-colors",
-                      empty ? "cursor-not-allowed opacity-40 border-border" : checked ? "border-accent bg-accent/5" : "border-border hover:bg-surface",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        disabled={empty}
-                        checked={checked}
-                        onChange={() => {
-                          if (empty) return;
-                          setPrintSelectedDays((prev) =>
-                            prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
-                          );
-                        }}
-                        className="accent-accent h-4 w-4 rounded"
-                      />
-                      <span className="text-[13px] font-medium text-foreground">{option.label}</span>
-                    </div>
-                    <span className="text-[12px] text-tertiary">
-                      {option.pendingIds.length} uncut
-                    </span>
-                  </label>
-                );
-              })}
+              {printableVisibleIds.length === 0 ? (
+                <p className="text-[12px] text-tertiary italic">No visible uncut blinds found.</p>
+              ) : (
+                <>
+                  {[
+                    {
+                      value: "manufacturing",
+                      label: "Manufacturing",
+                      description: "Print 1 manufacturing label per visible blind.",
+                    },
+                    {
+                      value: "packaging",
+                      label: "Packaging",
+                      description: "Print 1 packaging label per visible blind.",
+                    },
+                    {
+                      value: "both",
+                      label: "Both",
+                      description: "Print manufacturing then packaging labels for each visible blind.",
+                    },
+                  ].map((option) => {
+                    const checked = printLabelMode === option.value;
+                    return (
+                      <label
+                        key={option.value}
+                        className={[
+                          "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors",
+                          checked ? "border-accent bg-accent/5" : "border-border hover:bg-surface",
+                        ].join(" ")}
+                      >
+                        <input
+                          type="radio"
+                          name="print-label-mode"
+                          checked={checked}
+                          onChange={() => setPrintLabelMode(option.value as PrintLabelMode)}
+                          className="mt-0.5 h-4 w-4 accent-accent"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[13px] font-medium text-foreground">{option.label}</span>
+                            <span className="text-[12px] text-tertiary">
+                              {option.value === "both" ? printableVisibleIds.length * 2 : printableVisibleIds.length} label{(option.value === "both" ? printableVisibleIds.length * 2 : printableVisibleIds.length) === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[12px] text-tertiary">{option.description}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </>
+              )}
             </div>
             <div className="mt-5 flex gap-2.5">
               <button
@@ -1391,7 +1399,7 @@ export function ManufacturingRoleQueue({
               </button>
               <button
                 type="button"
-                disabled={printSelectedDays.length === 0 || printSelectedDays.every((idx) => printDayOptions[idx]?.pendingIds.length === 0)}
+                disabled={printableVisibleIds.length === 0}
                 onClick={handlePrint}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
               >

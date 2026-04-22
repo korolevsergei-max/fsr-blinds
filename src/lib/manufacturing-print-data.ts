@@ -101,7 +101,7 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
   const productionByWindow = new Map(productionRows.map((p) => [p.window_id, p]));
   const scheduleByWindow = new Map(schedules.map((s) => [s.window_id, s]));
 
-  const items: ManufacturingWindowItem[] = [];
+  const itemsByWindowId = new Map<string, ManufacturingWindowItem>();
 
   for (const windowId of windowIds) {
     const schedule = scheduleByWindow.get(windowId);
@@ -115,7 +115,7 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
     const roomName = roomsById.get(win.room_id)?.name ?? "Room";
     const escalation = escalationByWindow.get(windowId) ?? null;
 
-    items.push({
+    const item: ManufacturingWindowItem = {
       windowId,
       unitId: schedule.unit_id,
       buildingId: unit.building_id,
@@ -150,8 +150,14 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
       fabricAdjustmentSide: (win.fabric_adjustment_side as FabricAdjustmentSide) ?? "none",
       fabricAdjustmentInches: win.fabric_adjustment_inches,
       chainSide: (win.chain_side as ChainSide | null) ?? null,
-    });
+    };
+
+    if (item.productionStatus !== "pending") continue;
+
+    itemsByWindowId.set(windowId, item);
   }
 
-  return items;
+  return windowIds
+    .map((windowId) => itemsByWindowId.get(windowId) ?? null)
+    .filter((item): item is ManufacturingWindowItem => item !== null);
 }

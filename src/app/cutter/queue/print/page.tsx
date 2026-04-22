@@ -1,16 +1,11 @@
 import { loadWindowsForPrint } from "@/lib/manufacturing-print-data";
-import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
+import { parseLabelMode } from "@/lib/cut-labels";
 import { LabelPdfClient } from "./label-pdf-client";
-
-function parseHighlight(raw: string | undefined): ManufacturingHighlightSection | null {
-  if (raw === "fabric" || raw === "valance" || raw === "tube_rail") return raw;
-  return null;
-}
 
 export default async function CutterPrintPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ids?: string; component?: string }>;
+  searchParams: Promise<{ ids?: string; labelMode?: string }>;
 }) {
   const params = await searchParams;
   const rawIds = params.ids ?? "";
@@ -20,7 +15,7 @@ export default async function CutterPrintPage({
     .filter(Boolean);
 
   const windows = await loadWindowsForPrint(windowIds);
-  const highlight = parseHighlight(params.component);
+  const labelMode = parseLabelMode(params.labelMode);
 
   if (windows.length === 0) {
     return (
@@ -30,18 +25,5 @@ export default async function CutterPrintPage({
     );
   }
 
-  const packedGroups: typeof windows[] = [];
-  if (highlight) {
-    for (let i = 0; i < windows.length; i += 3) {
-      packedGroups.push(windows.slice(i, i + 3));
-    }
-  }
-
-  return (
-    <LabelPdfClient
-      items={windows}
-      highlightSection={highlight}
-      packedGroups={packedGroups}
-    />
-  );
+  return <LabelPdfClient items={windows} labelMode={labelMode} />;
 }
