@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartBar, CheckCircle, ShieldCheck } from "@phosphor-icons/react";
+import { ChartBar, CheckCircle, Factory, ShieldCheck } from "@phosphor-icons/react";
 
 const navItems = [
   { href: "/qc", label: "Dashboard", Icon: ChartBar },
   { href: "/qc/queue", label: "Queue", Icon: ShieldCheck },
+  { href: "/qc/process", label: "Process", Icon: Factory },
   { href: "/qc/completed", label: "Completed", Icon: CheckCircle },
 ];
 

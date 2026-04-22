@@ -7,17 +7,20 @@ import { CaretDown, Check } from "@phosphor-icons/react";
 
 type Option = { value: string; label: string };
 
-type SingleProps = {
+type BaseProps = {
   label: string;
   options: Option[];
+  triggerClassName?: string;
+  labelClassName?: string;
+};
+
+type SingleProps = BaseProps & {
   multiple?: false;
   value: string;
   onChange: (value: string) => void;
 };
 
-type MultiProps = {
-  label: string;
-  options: Option[];
+type MultiProps = BaseProps & {
   multiple: true;
   values: string[];
   onChange: (values: string[]) => void;
@@ -26,7 +29,7 @@ type MultiProps = {
 type FilterDropdownProps = SingleProps | MultiProps;
 
 export function FilterDropdown(props: FilterDropdownProps) {
-  const { label, options } = props;
+  const { label, options, triggerClassName = "", labelClassName = "" } = props;
   const isMulti = props.multiple === true;
 
   const [open, setOpen] = useState(false);
@@ -98,17 +101,26 @@ export function FilterDropdown(props: FilterDropdownProps) {
         type="button"
         onClick={handleToggle}
         className={[
-          "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+          "flex h-8 min-w-0 flex-shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-all",
           active
             ? "border-accent bg-accent text-white"
             : "border-border bg-card text-secondary hover:border-zinc-300",
+          triggerClassName,
         ].join(" ")}
+        title={active ? displayLabel : label}
       >
-        {active ? displayLabel : label}
+        <span
+          className={[
+            "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left",
+            labelClassName,
+          ].join(" ")}
+        >
+          {active ? displayLabel : label}
+        </span>
         <CaretDown
           size={11}
           weight="bold"
-          className={`transition-transform ${open ? "rotate-180" : ""}`}
+          className={`flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
 

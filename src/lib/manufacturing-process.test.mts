@@ -254,6 +254,48 @@ test("aggregateManufacturingProcessRows groups by client building and floor with
   assert.equal(grouped[0]?.unitCount, 2);
 });
 
+test("aggregateManufacturingProcessRows can group by building and floor without client splits", () => {
+  const rows = buildManufacturingProcessRows(
+    [
+      createUnit({
+        id: "unit-1",
+        clientId: "client-1",
+        clientName: "Client One",
+        buildingId: "building-1",
+        buildingName: "Alpha",
+        unitNumber: "401",
+        completeByDate: "2026-05-10",
+        totalBlinds: 4,
+      }),
+      createUnit({
+        id: "unit-2",
+        clientId: "client-2",
+        clientName: "Client Two",
+        buildingId: "building-1",
+        buildingName: "Alpha",
+        unitNumber: "402",
+        completeByDate: "2026-05-02",
+        totalBlinds: 6,
+      }),
+    ],
+    [{ unitId: "unit-2", status: "qc_approved" }],
+    []
+  );
+
+  const grouped = aggregateManufacturingProcessRows(rows, "building_floor");
+
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0]?.buildingId, "building-1");
+  assert.equal(grouped[0]?.floor, "4");
+  assert.equal(grouped[0]?.completeByDate, "2026-05-02");
+  assert.equal(grouped[0]?.totalBlinds, 10);
+  assert.equal(grouped[0]?.cutCount, 1);
+  assert.equal(grouped[0]?.assembledCount, 1);
+  assert.equal(grouped[0]?.qcCount, 1);
+  assert.equal(grouped[0]?.installedCount, 0);
+  assert.equal(grouped[0]?.unitCount, 2);
+});
+
 test("sortManufacturingProcessRows sorts unit progress by percentage before raw count", () => {
   const rows = buildManufacturingProcessRows(
     [

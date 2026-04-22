@@ -91,7 +91,7 @@ export function buildManufacturingRiskNotificationBody(
   context: UnitNotificationContext,
   daysUntil: number
 ): string {
-  return `${formatUnitContextLine(context)} • Ready-by target in ${daysUntil} day(s); blinds are not built fully yet.`;
+  return `${formatUnitContextLine(context)} • Ready-by target in ${daysUntil} day(s); blinds are not QC-approved yet.`;
 }
 
 export function buildManufacturingPushbackNotificationBody(

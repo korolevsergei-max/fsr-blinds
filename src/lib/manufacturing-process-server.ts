@@ -134,13 +134,17 @@ async function loadUnitsForManufacturingProcess(scope: ManufacturingProcessScope
   return mapUnits(unitRows);
 }
 
+async function loadAllManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+  const scope: ManufacturingProcessScope = { role: "owner" };
+  const units = await loadUnitsForManufacturingProcess(scope);
+  return loadManufacturingProcessRowsForUnits(units, scope);
+}
+
 export async function loadOwnerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "owner") return [];
 
-  const scope: ManufacturingProcessScope = { role: "owner" };
-  const units = await loadUnitsForManufacturingProcess(scope);
-  return loadManufacturingProcessRowsForUnits(units, scope);
+  return loadAllManufacturingProcessRows();
 }
 
 export async function loadSchedulerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
@@ -167,4 +171,25 @@ export async function loadInstallerManufacturingProcessRows(): Promise<Manufactu
   const scope: ManufacturingProcessScope = { role: "installer", installerId };
   const units = await loadUnitsForManufacturingProcess(scope);
   return loadManufacturingProcessRowsForUnits(units, scope);
+}
+
+export async function loadCutterManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "cutter") return [];
+
+  return loadAllManufacturingProcessRows();
+}
+
+export async function loadAssemblerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "assembler") return [];
+
+  return loadAllManufacturingProcessRows();
+}
+
+export async function loadQcManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "qc") return [];
+
+  return loadAllManufacturingProcessRows();
 }

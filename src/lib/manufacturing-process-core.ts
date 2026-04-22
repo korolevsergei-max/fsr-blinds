@@ -47,6 +47,10 @@ export interface ManufacturingProcessFloorRow {
   unitCount: number;
 }
 
+export type ManufacturingProcessFloorGrouping =
+  | "client_building_floor"
+  | "building_floor";
+
 export interface ManufacturingProcessUnitInput {
   id: string;
   clientId: string;
@@ -189,6 +193,19 @@ export function compareManufacturingProcessFloorRows(
   return 0;
 }
 
+export function compareManufacturingProcessFloorRowsWithoutClient(
+  a: ManufacturingProcessFloorRow,
+  b: ManufacturingProcessFloorRow
+): number {
+  const buildingCompare = compareText(a.buildingName, b.buildingName);
+  if (buildingCompare !== 0) return buildingCompare;
+
+  const floorCompare = compareText(a.floor, b.floor);
+  if (floorCompare !== 0) return floorCompare;
+
+  return compareText(a.groupKey, b.groupKey);
+}
+
 function compareManufacturingProcessDisplayRows(
   a: ManufacturingProcessRow | ManufacturingProcessFloorRow,
   b: ManufacturingProcessRow | ManufacturingProcessFloorRow
@@ -278,12 +295,16 @@ export function buildManufacturingProcessRows(
 }
 
 export function aggregateManufacturingProcessRows(
-  rows: ManufacturingProcessRow[]
+  rows: ManufacturingProcessRow[],
+  grouping: ManufacturingProcessFloorGrouping = "client_building_floor"
 ): ManufacturingProcessFloorRow[] {
   const grouped = new Map<string, ManufacturingProcessFloorRow>();
 
   for (const row of rows) {
-    const key = `${row.clientId}::${row.buildingId}::${row.floor}`;
+    const key =
+      grouping === "building_floor"
+        ? `${row.buildingId}::${row.floor}`
+        : `${row.clientId}::${row.buildingId}::${row.floor}`;
     const existing = grouped.get(key);
     if (!existing) {
       grouped.set(key, {
@@ -322,7 +343,11 @@ export function aggregateManufacturingProcessRows(
     existing.isInstalled = existing.totalBlinds > 0 && existing.installedCount >= existing.totalBlinds;
   }
 
-  return [...grouped.values()].sort(compareManufacturingProcessFloorRows);
+  return [...grouped.values()].sort(
+    grouping === "building_floor"
+      ? compareManufacturingProcessFloorRowsWithoutClient
+      : compareManufacturingProcessFloorRows
+  );
 }
 
 export function filterManufacturingProcessRows(

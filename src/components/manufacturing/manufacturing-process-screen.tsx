@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -23,6 +23,7 @@ import {
   MANUFACTURING_PROCESS_SORT_FIELD_LABELS,
   sortManufacturingProcessRows,
   type ManufacturingProcessFilters,
+  type ManufacturingProcessFloorGrouping,
   type ManufacturingProcessFloorRow,
   type ManufacturingProcessInstallStatusFilter,
   type ManufacturingProcessRow,
@@ -201,17 +202,27 @@ export function ManufacturingProcessScreen({
   title = "Manufacturing Process",
   backHref,
   unitHrefBase,
+  hideClient = false,
+  floorGrouping = "client_building_floor",
+  compactFilterRail = false,
 }: {
   rows: ManufacturingProcessRow[];
   title?: string;
   backHref: string;
   unitHrefBase: string;
+  hideClient?: boolean;
+  floorGrouping?: ManufacturingProcessFloorGrouping;
+  compactFilterRail?: boolean;
 }) {
   const router = useRouter();
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const totalsRowRef = useRef<HTMLTableRowElement | null>(null);
   const [showByUnit, setShowByUnit] = useState(true);
   const [sortLevels, setSortLevels] = useState<ManufacturingProcessSortLevel[]>([]);
   const [draftSortLevels, setDraftSortLevels] = useState<ManufacturingProcessSortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [stickyTop, setStickyTop] = useState(132);
+  const [totalsRowHeight, setTotalsRowHeight] = useState(38);
   const [filters, setFilters] = useState<ManufacturingProcessFilters>({
     clientId: "all",
     buildingId: "all",
@@ -255,14 +266,22 @@ export function ManufacturingProcessScreen({
     [normalizedFilters, rows]
   );
 
-  const groupedRows = useMemo(() => aggregateManufacturingProcessRows(filteredRows), [filteredRows]);
+  const groupedRows = useMemo(
+    () => aggregateManufacturingProcessRows(filteredRows, floorGrouping),
+    [filteredRows, floorGrouping]
+  );
 
   const visibleSortFieldOptions = useMemo(
-    () =>
-      showByUnit
-        ? sortFieldOptions
-        : sortFieldOptions.filter((option) => option.value !== "unitNumber"),
-    [showByUnit]
+    () => {
+      let options = hideClient
+        ? sortFieldOptions.filter((option) => option.value !== "clientName")
+        : sortFieldOptions;
+      if (!showByUnit) {
+        options = options.filter((option) => option.value !== "unitNumber");
+      }
+      return options;
+    },
+    [hideClient, showByUnit]
   );
 
   const normalizedSortLevels = useMemo(
@@ -284,7 +303,7 @@ export function ManufacturingProcessScreen({
   const displayRows = showByUnit ? sortedUnitRows : sortedGroupedRows;
 
   const activeFilterCount = [
-    normalizedFilters.clientId !== "all",
+    !hideClient && normalizedFilters.clientId !== "all",
     normalizedFilters.buildingId !== "all",
     normalizedFilters.floor !== "all",
     normalizedFilters.installStatus !== "all",
@@ -333,150 +352,215 @@ export function ManufacturingProcessScreen({
     "sticky left-0 z-20 min-w-[3.25rem] bg-inherit shadow-[1px_0_0_0_theme(colors.border)]";
   const unitStickyClass =
     "sticky left-[3.25rem] z-20 min-w-[4.25rem] bg-inherit shadow-[1px_0_0_0_theme(colors.border)]";
+  const filterRailClass = compactFilterRail
+    ? "flex items-center gap-1.5 overflow-x-auto no-scrollbar"
+    : "flex items-center gap-2 overflow-x-auto no-scrollbar";
+  const compactFilterTriggerClass = compactFilterRail
+    ? "max-w-[10.5rem] pr-2.5"
+    : "";
+  const compactFloorTriggerClass = compactFilterRail ? "w-[5.5rem] pr-2.5" : "";
+  const compactInstallTriggerClass = compactFilterRail ? "max-w-[9.5rem] pr-2.5" : "";
+  const compactDateTriggerClass = compactFilterRail
+    ? "h-8 w-[9.5rem] min-w-[9.5rem] justify-between rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary hover:border-zinc-300"
+    : "h-8 rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary hover:border-zinc-300";
+  const compactDateClass = compactFilterRail ? "w-[9.5rem] min-w-[9.5rem] flex-shrink-0" : "min-w-[12rem] flex-shrink-0";
+  const stickyTotalsCellClass =
+    "sticky top-[var(--process-sticky-top)] z-20 bg-card";
+  const stickyTotalsPinnedCellClass =
+    `${stickyTotalsCellClass} z-30`;
+  const stickyColumnHeaderCellClass =
+    "sticky top-[calc(var(--process-sticky-top)+var(--process-totals-row-height))] z-10 bg-surface";
+  const stickyColumnHeaderPinnedCellClass =
+    `${stickyColumnHeaderCellClass} z-20`;
+
+  useEffect(() => {
+    const headerNode = headerRef.current;
+    const totalsNode = totalsRowRef.current;
+
+    if (!headerNode || !totalsNode) return;
+
+    const updateMeasurements = () => {
+      const nextHeaderHeight = Math.ceil(headerNode.getBoundingClientRect().height);
+      if (nextHeaderHeight > 0) {
+        setStickyTop(nextHeaderHeight);
+      }
+
+      const nextTotalsHeight = Math.ceil(totalsNode.getBoundingClientRect().height);
+      if (nextTotalsHeight > 0) {
+        setTotalsRowHeight(nextTotalsHeight);
+      }
+    };
+
+    updateMeasurements();
+
+    const observer = new ResizeObserver(() => updateMeasurements());
+    observer.observe(headerNode);
+    observer.observe(totalsNode);
+    window.addEventListener("resize", updateMeasurements);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateMeasurements);
+    };
+  }, [showByUnit]);
 
   return (
-    <div className="flex min-h-[100dvh] flex-col">
-      <PageHeader
-        title={title}
-        subtitle={subtitle}
-        backHref={backHref}
-        actions={
-          <label className="ml-auto flex items-center gap-3 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-secondary shadow-[var(--shadow-xs)]">
-            <span>Show by unit</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={showByUnit}
-              onClick={() => {
-                setShowByUnit((current) => {
-                  const next = !current;
-                  if (!next) {
-                    setDraftSortLevels((levels) =>
-                      levels.filter((level) => level.field !== "unitNumber")
-                    );
-                    setSortLevels((levels) =>
-                      levels.filter((level) => level.field !== "unitNumber")
-                    );
-                  }
-                  return next;
-                });
-              }}
-              className={[
-                "inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full border px-0.5 transition-all",
-                showByUnit
-                  ? "justify-end border-accent bg-accent"
-                  : "justify-start border-zinc-400 bg-zinc-200",
-              ].join(" ")}
-            >
-              <span
-                className="h-5 w-5 rounded-full border border-zinc-300 bg-white shadow-sm transition-transform"
-              />
-            </button>
-          </label>
-        }
-        belowTitle={
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-1.5 pr-1 text-tertiary">
-              <FunnelSimple size={14} />
-              {activeFilterCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
-                  {activeFilterCount}
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setDraftSortLevels(normalizedSortLevels);
-                setSortModalOpen(true);
-              }}
-              className={[
-                "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
-                activeSortCount > 0
-                  ? "border-accent bg-accent text-white"
-                  : "border-border bg-card text-secondary hover:border-zinc-300",
-              ].join(" ")}
-            >
-              <SortAscending size={12} weight="bold" />
-              {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
-            </button>
-            <FilterDropdown
-              label="Client"
-              value={normalizedFilters.clientId}
-              options={clientOptions}
-              onChange={(value) =>
-                setFilters((current) => ({
-                  ...current,
-                  clientId: value,
-                  buildingId: "all",
-                  floor: "all",
-                }))
-              }
-            />
-            <FilterDropdown
-              label="Building"
-              value={normalizedFilters.buildingId}
-              options={buildingOptions}
-              onChange={(value) =>
-                setFilters((current) => ({
-                  ...current,
-                  buildingId: value,
-                  floor: "all",
-                }))
-              }
-            />
-            <FilterDropdown
-              label="Floor"
-              value={normalizedFilters.floor}
-              options={floorOptions}
-              onChange={(value) =>
-                setFilters((current) => ({
-                  ...current,
-                  floor: value,
-                }))
-              }
-            />
-            <FilterDropdown
-              label="Install status"
-              value={normalizedFilters.installStatus}
-              options={INSTALL_STATUS_OPTIONS}
-              onChange={(value) =>
-                setFilters((current) => ({
-                  ...current,
-                  installStatus: value as ManufacturingProcessInstallStatusFilter,
-                }))
-              }
-            />
-            <DateInput
-              value={normalizedFilters.completeByDate}
-              onChange={(value) =>
-                setFilters((current) => ({
-                  ...current,
-                  completeByDate: value,
-                }))
-              }
-              placeholder="Complete by"
-              compact
-              className="min-w-[12rem] flex-shrink-0"
-              triggerClassName="h-8 rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary hover:border-zinc-300"
-            />
-            {(activeFilterCount > 0 || activeSortCount > 0) && (
+    <div
+      className="flex min-h-[100dvh] flex-col"
+      style={{
+        ["--process-sticky-top" as string]: `${stickyTop}px`,
+        ["--process-totals-row-height" as string]: `${totalsRowHeight}px`,
+      }}
+    >
+      <div ref={headerRef}>
+        <PageHeader
+          title={title}
+          subtitle={subtitle}
+          backHref={backHref}
+          actions={
+            <label className="ml-auto flex items-center gap-3 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-secondary shadow-[var(--shadow-xs)]">
+              <span>Show by unit</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showByUnit}
+                onClick={() => {
+                  setShowByUnit((current) => {
+                    const next = !current;
+                    if (!next) {
+                      setDraftSortLevels((levels) =>
+                        levels.filter((level) => level.field !== "unitNumber")
+                      );
+                      setSortLevels((levels) =>
+                        levels.filter((level) => level.field !== "unitNumber")
+                      );
+                    }
+                    return next;
+                  });
+                }}
+                className={[
+                  "inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full border px-0.5 transition-all",
+                  showByUnit
+                    ? "justify-end border-accent bg-accent"
+                    : "justify-start border-zinc-400 bg-zinc-200",
+                ].join(" ")}
+              >
+                <span
+                  className="h-5 w-5 rounded-full border border-zinc-300 bg-white shadow-sm transition-transform"
+                />
+              </button>
+            </label>
+          }
+          belowTitle={
+            <div className={filterRailClass}>
+              <div className="flex flex-shrink-0 items-center gap-1.5 pr-1 text-tertiary">
+                <FunnelSimple size={14} />
+                {activeFilterCount > 0 && (
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
-                  resetFilters();
-                  setSortLevels([]);
-                  setDraftSortLevels([]);
+                  setDraftSortLevels(normalizedSortLevels);
+                  setSortModalOpen(true);
                 }}
-                className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary transition-colors hover:border-zinc-300 hover:text-foreground"
+                className={[
+                  "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+                  activeSortCount > 0
+                    ? "border-accent bg-accent text-white"
+                    : "border-border bg-card text-secondary hover:border-zinc-300",
+                  compactFilterRail ? "pr-2.5" : "",
+                ].join(" ")}
               >
-                <X size={11} weight="bold" />
-                Clear
+                <SortAscending size={12} weight="bold" />
+                {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
               </button>
-            )}
-          </div>
-        }
-      />
+              {!hideClient && (
+                <FilterDropdown
+                  label="Client"
+                  value={normalizedFilters.clientId}
+                  options={clientOptions}
+                  onChange={(value) =>
+                    setFilters((current) => ({
+                      ...current,
+                      clientId: value,
+                      buildingId: "all",
+                      floor: "all",
+                    }))
+                  }
+                />
+              )}
+              <FilterDropdown
+                label="Building"
+                value={normalizedFilters.buildingId}
+                options={buildingOptions}
+                triggerClassName={compactFilterTriggerClass}
+                onChange={(value) =>
+                  setFilters((current) => ({
+                    ...current,
+                    buildingId: value,
+                    floor: "all",
+                  }))
+                }
+              />
+              <FilterDropdown
+                label="Floor"
+                value={normalizedFilters.floor}
+                options={floorOptions}
+                triggerClassName={compactFloorTriggerClass}
+                onChange={(value) =>
+                  setFilters((current) => ({
+                    ...current,
+                    floor: value,
+                  }))
+                }
+              />
+              <FilterDropdown
+                label="Install status"
+                value={normalizedFilters.installStatus}
+                options={INSTALL_STATUS_OPTIONS}
+                triggerClassName={compactInstallTriggerClass}
+                onChange={(value) =>
+                  setFilters((current) => ({
+                    ...current,
+                    installStatus: value as ManufacturingProcessInstallStatusFilter,
+                  }))
+                }
+              />
+              <DateInput
+                value={normalizedFilters.completeByDate}
+                onChange={(value) =>
+                  setFilters((current) => ({
+                    ...current,
+                    completeByDate: value,
+                  }))
+                }
+                placeholder="Complete by"
+                compact
+                className={compactDateClass}
+                triggerClassName={compactDateTriggerClass}
+              />
+              {(activeFilterCount > 0 || activeSortCount > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetFilters();
+                    setSortLevels([]);
+                    setDraftSortLevels([]);
+                  }}
+                  className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary transition-colors hover:border-zinc-300 hover:text-foreground"
+                >
+                  <X size={11} weight="bold" />
+                  Clear
+                </button>
+              )}
+            </div>
+          }
+        />
+      </div>
 
       {rows.length === 0 ? (
         <EmptyState
@@ -508,53 +592,53 @@ export function ManufacturingProcessScreen({
           <div className="overflow-x-auto overflow-y-visible rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
             <table className="w-full min-w-[640px] border-separate border-spacing-0 text-center">
               <thead>
-                <tr className="bg-card text-[11px] text-secondary">
-                  <th className={`${floorStickyClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
+                <tr ref={totalsRowRef} className="bg-card text-[11px] text-secondary">
+                  <th className={`${floorStickyClass} ${stickyTotalsPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
                     Totals
                   </th>
                   {showByUnit ? (
                     <>
-                      <th className={`${unitStickyClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
+                      <th className={`${unitStickyClass} ${stickyTotalsPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
                         {countLabel}
                       </th>
-                      <th className="border-b border-border px-2.5 py-2.5 text-center text-tertiary">—</th>
+                      <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center text-tertiary`}>—</th>
                     </>
                   ) : (
-                    <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">
+                    <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
                       {countLabel}
                     </th>
                   )}
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground">
+                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
                     {totals.totalBlinds}
                   </th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground">
+                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
                     {formatPercent(totals.cutCount, totals.totalBlinds)}
                   </th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground">
+                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
                     {formatPercent(totals.assembledCount, totals.totalBlinds)}
                   </th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground">
+                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
                     {formatPercent(totals.qcCount, totals.totalBlinds)}
                   </th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground">
+                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
                     {formatPercent(totals.installedCount, totals.totalBlinds)}
                   </th>
                 </tr>
-                <tr className="sticky top-[8.25rem] z-10 bg-surface text-[11px] uppercase tracking-[0.08em] text-tertiary">
-                  <th className={`${floorStickyClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
+                <tr className="bg-surface text-[11px] uppercase tracking-[0.08em] text-tertiary">
+                  <th className={`${floorStickyClass} ${stickyColumnHeaderPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
                     FL
                   </th>
                   {showByUnit && (
-                    <th className={`${unitStickyClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
+                    <th className={`${unitStickyClass} ${stickyColumnHeaderPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
                       U
                     </th>
                   )}
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">DUE</th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">Blinds</th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">CUT</th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">ASSE</th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">QC</th>
-                  <th className="border-b border-border px-2.5 py-2.5 text-center font-semibold">INST</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>DUE</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>Blinds</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>CUT</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>ASSE</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>QC</th>
+                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>INST</th>
                 </tr>
               </thead>
               <tbody>

@@ -11,6 +11,7 @@ export {
 
 export type {
   ManufacturingProcessFilters,
+  ManufacturingProcessFloorGrouping,
   ManufacturingProcessFloorRow,
   ManufacturingProcessInstallStatusFilter,
   ManufacturingProcessRow,

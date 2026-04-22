@@ -39,6 +39,7 @@ import {
 import { ManufacturingSummaryCard, type ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
 
 type ComponentFilter = "all" | ManufacturingHighlightSection;
+type DisplayLimit = "all" | "25" | "50" | "75" | "100";
 
 function formatBucketDate(date: string | null) {
   return formatStoredDateLongEnglish(date) ?? date ?? "";
@@ -299,6 +300,7 @@ export function ManufacturingRoleQueue({
   const [fabricTypeFilter, setFabricTypeFilter] = useState<string[]>([]);
   const [floorFilter, setFloorFilter] = useState<string[]>([]);
   const [componentFilter, setComponentFilter] = useState<ComponentFilter>("all");
+  const [displayLimit, setDisplayLimit] = useState<DisplayLimit>("all");
   const [sortLevels, setSortLevels] = useState<SortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
@@ -475,6 +477,7 @@ export function ManufacturingRoleQueue({
     fabricTypeFilter.length > 0,
     floorFilter.length > 0,
     componentFilter !== "all",
+    displayLimit !== "all",
   ].filter(Boolean).length;
 
   const activeSortCount = sortLevels.length;
@@ -490,6 +493,14 @@ export function ManufacturingRoleQueue({
     { value: "fabric", label: "Fabric" },
     { value: "valance", label: "Valance" },
     { value: "tube_rail", label: "Tube / Bottom rail" },
+  ];
+
+  const displayLimitOptions: { value: DisplayLimit; label: string }[] = [
+    { value: "all", label: "No limit" },
+    { value: "25", label: "25 units" },
+    { value: "50", label: "50 units" },
+    { value: "75", label: "75 units" },
+    { value: "100", label: "100 units" },
   ];
 
   const highlightSection: ManufacturingHighlightSection | null =
@@ -539,7 +550,7 @@ export function ManufacturingRoleQueue({
 
 
   // Flatten to per-bucket window list, with optional multi-level sort
-  const visibleBuckets = localSchedule.buckets
+  const filteredBuckets = localSchedule.buckets
     .map((bucket) => {
       const windows: ManufacturingWindowItem[] = [];
       for (const unit of bucket.units) {
@@ -597,6 +608,19 @@ export function ManufacturingRoleQueue({
       return { ...bucket, windows, scheduledCount: windows.length };
     })
     .filter((bucket) => bucket.windows.length > 0);
+
+  const maxVisibleItems = displayLimit === "all" ? Infinity : Number(displayLimit);
+  let remainingVisibleItems = maxVisibleItems;
+
+  const visibleBuckets = filteredBuckets
+    .map((bucket) => {
+      if (remainingVisibleItems <= 0) return null;
+      const windows = bucket.windows.slice(0, remainingVisibleItems);
+      remainingVisibleItems -= windows.length;
+      if (windows.length === 0) return null;
+      return { ...bucket, windows, scheduledCount: windows.length };
+    })
+    .filter((bucket): bucket is (typeof filteredBuckets)[number] => bucket !== null);
 
   // Build print options from the already-filtered + sorted visibleBuckets
   // so Print labels always reflects exactly what the user sees on screen.
@@ -775,6 +799,12 @@ export function ManufacturingRoleQueue({
             onChange={(values) => setStatusFilters(values as QueueStatusFilter[])}
           />
           <FilterDropdown
+            label="Units"
+            value={displayLimit}
+            options={displayLimitOptions}
+            onChange={(value) => setDisplayLimit(value as DisplayLimit)}
+          />
+          <FilterDropdown
             multiple
             label="Fabric Type"
             values={fabricTypeFilter}
@@ -792,6 +822,7 @@ export function ManufacturingRoleQueue({
                 setStatusFilters([]);
                 setFabricTypeFilter([]);
                 setComponentFilter("all");
+                setDisplayLimit("all");
                 setSortLevels([]);
               }}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
