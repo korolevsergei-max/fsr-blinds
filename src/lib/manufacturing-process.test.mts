@@ -176,6 +176,7 @@ test("manufacturing process filter helpers narrow buildings, floors, and install
     buildingId: "all",
     floor: "all",
     installStatus: "installed",
+    installReadyOnly: false,
     completeByDate: "",
   });
   assert.deepEqual(installedOnly.map((row) => row.unitId), ["unit-2"]);
@@ -185,6 +186,7 @@ test("manufacturing process filter helpers narrow buildings, floors, and install
     buildingId: "building-1",
     floor: "1",
     installStatus: "not_installed",
+    installReadyOnly: false,
     completeByDate: "",
   });
   assert.deepEqual(notInstalledOnFloorOne.map((row) => row.unitId), ["unit-1"]);
@@ -194,9 +196,88 @@ test("manufacturing process filter helpers narrow buildings, floors, and install
     buildingId: "all",
     floor: "all",
     installStatus: "all",
+    installReadyOnly: false,
     completeByDate: "2026-05-02",
   });
   assert.deepEqual(completeByFiltered.map((row) => row.unitId), ["unit-2"]);
+});
+
+test("manufacturing process install ready filter only keeps units with more QC than installed", () => {
+  const rows = buildManufacturingProcessRows(
+    [
+      createUnit({
+        id: "unit-1",
+        buildingId: "building-1",
+        buildingName: "Alpha",
+        unitNumber: "101",
+        totalBlinds: 3,
+      }),
+      createUnit({
+        id: "unit-2",
+        buildingId: "building-1",
+        buildingName: "Alpha",
+        unitNumber: "102",
+        totalBlinds: 2,
+      }),
+      createUnit({
+        id: "unit-3",
+        buildingId: "building-1",
+        buildingName: "Alpha",
+        unitNumber: "103",
+        totalBlinds: 2,
+      }),
+      createUnit({
+        id: "unit-4",
+        buildingId: "building-2",
+        buildingName: "Beta",
+        unitNumber: "201",
+        totalBlinds: 2,
+        completeByDate: "2026-05-03",
+      }),
+    ],
+    [
+      { unitId: "unit-1", status: "qc_approved" },
+      { unitId: "unit-1", status: "qc_approved" },
+      { unitId: "unit-1", status: "qc_approved" },
+      { unitId: "unit-2", status: "qc_approved" },
+      { unitId: "unit-2", status: "qc_approved" },
+      { unitId: "unit-4", status: "qc_approved" },
+      { unitId: "unit-4", status: "qc_approved" },
+    ],
+    ["unit-2", "unit-2", "unit-4"]
+  );
+
+  const installReadyOnly = filterManufacturingProcessRows(rows, {
+    clientId: "all",
+    buildingId: "all",
+    floor: "all",
+    installStatus: "all",
+    installReadyOnly: true,
+    completeByDate: "",
+  });
+  assert.deepEqual(installReadyOnly.map((row) => row.unitId), ["unit-1", "unit-4"]);
+
+  const installReadyInBuildingTwo = filterManufacturingProcessRows(rows, {
+    clientId: "all",
+    buildingId: "building-2",
+    floor: "2",
+    installStatus: "not_installed",
+    installReadyOnly: true,
+    completeByDate: "2026-05-03",
+  });
+  assert.deepEqual(installReadyInBuildingTwo.map((row) => row.unitId), ["unit-4"]);
+
+  const groupedInstallReady = aggregateManufacturingProcessRows(installReadyOnly);
+  assert.deepEqual(groupedInstallReady.map((row) => row.groupKey), [
+    "client-1::building-1::1",
+    "client-1::building-2::2",
+  ]);
+  assert.equal(groupedInstallReady[0]?.totalBlinds, 3);
+  assert.equal(groupedInstallReady[0]?.qcCount, 3);
+  assert.equal(groupedInstallReady[0]?.installedCount, 0);
+  assert.equal(groupedInstallReady[1]?.totalBlinds, 2);
+  assert.equal(groupedInstallReady[1]?.qcCount, 2);
+  assert.equal(groupedInstallReady[1]?.installedCount, 1);
 });
 
 test("aggregateManufacturingProcessRows groups by client building and floor with earliest due date", () => {

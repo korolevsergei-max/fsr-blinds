@@ -11,8 +11,6 @@ export default async function QcProcessPage() {
       backHref="/qc"
       unitHrefBase="/qc/units"
       hideClient
-      floorGrouping="building_floor"
-      compactFilterRail
     />
   );
 }

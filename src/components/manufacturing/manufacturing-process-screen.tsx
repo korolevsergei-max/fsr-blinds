@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -56,6 +56,35 @@ function formatDueDate(value: string | null) {
 function formatPercent(completed: number, total: number) {
   if (total <= 0) return "0%";
   return `${Math.round((completed / total) * 100)}%`;
+}
+
+function ManufacturingProcessTableColGroup({ showByUnit }: { showByUnit: boolean }) {
+  if (!showByUnit) {
+    return (
+      <colgroup>
+        <col className="w-[12%] lg:w-[3.25rem]" />
+        <col className="w-[18%] lg:w-[5.5rem]" />
+        <col className="w-[10%] lg:w-[5rem]" />
+        <col className="w-[15%] lg:w-[5rem]" />
+        <col className="w-[15%] lg:w-[5rem]" />
+        <col className="w-[14%] lg:w-[4.75rem]" />
+        <col className="w-[16%] lg:w-[5rem]" />
+      </colgroup>
+    );
+  }
+
+  return (
+    <colgroup>
+      <col className="w-[9%] lg:w-[3.25rem]" />
+      <col className="w-[14%] lg:w-[4.25rem]" />
+      <col className="w-[15%] lg:w-[5.5rem]" />
+      <col className="w-[8%] lg:w-[5rem]" />
+      <col className="w-[14%] lg:w-[5rem]" />
+      <col className="w-[14%] lg:w-[5rem]" />
+      <col className="w-[12%] lg:w-[4.75rem]" />
+      <col className="w-[14%] lg:w-[5rem]" />
+    </colgroup>
+  );
 }
 
 function ManufacturingProcessSortModal({
@@ -215,19 +244,16 @@ export function ManufacturingProcessScreen({
   compactFilterRail?: boolean;
 }) {
   const router = useRouter();
-  const headerRef = useRef<HTMLDivElement | null>(null);
-  const totalsRowRef = useRef<HTMLTableRowElement | null>(null);
   const [showByUnit, setShowByUnit] = useState(true);
   const [sortLevels, setSortLevels] = useState<ManufacturingProcessSortLevel[]>([]);
   const [draftSortLevels, setDraftSortLevels] = useState<ManufacturingProcessSortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
-  const [stickyTop, setStickyTop] = useState(132);
-  const [totalsRowHeight, setTotalsRowHeight] = useState(38);
   const [filters, setFilters] = useState<ManufacturingProcessFilters>({
     clientId: "all",
     buildingId: "all",
     floor: "all",
     installStatus: "all",
+    installReadyOnly: false,
     completeByDate: "",
   });
 
@@ -307,6 +333,7 @@ export function ManufacturingProcessScreen({
     normalizedFilters.buildingId !== "all",
     normalizedFilters.floor !== "all",
     normalizedFilters.installStatus !== "all",
+    normalizedFilters.installReadyOnly,
     normalizedFilters.completeByDate !== "",
   ].filter(Boolean).length;
 
@@ -325,6 +352,7 @@ export function ManufacturingProcessScreen({
       buildingId: "all",
       floor: "all",
       installStatus: "all",
+      installReadyOnly: false,
       completeByDate: "",
     });
   }
@@ -349,9 +377,9 @@ export function ManufacturingProcessScreen({
 
   const countLabel = showByUnit ? `${displayRows.length} units` : `${displayRows.length} floors`;
   const floorStickyClass =
-    "sticky left-0 z-20 min-w-[3.25rem] bg-inherit shadow-[1px_0_0_0_theme(colors.border)]";
+    "sticky left-0 z-0 w-[9%] min-w-[9%] bg-inherit shadow-[1px_0_0_0_theme(colors.border)] lg:w-[3.25rem] lg:min-w-[3.25rem]";
   const unitStickyClass =
-    "sticky left-[3.25rem] z-20 min-w-[4.25rem] bg-inherit shadow-[1px_0_0_0_theme(colors.border)]";
+    "sticky left-[9%] z-0 w-[14%] min-w-[14%] bg-inherit shadow-[1px_0_0_0_theme(colors.border)] lg:left-[3.25rem] lg:w-[4.25rem] lg:min-w-[4.25rem]";
   const filterRailClass = compactFilterRail
     ? "flex items-center gap-1.5 overflow-x-auto no-scrollbar"
     : "flex items-center gap-2 overflow-x-auto no-scrollbar";
@@ -364,55 +392,17 @@ export function ManufacturingProcessScreen({
     ? "h-8 w-[9.5rem] min-w-[9.5rem] justify-between rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary hover:border-zinc-300"
     : "h-8 rounded-full border border-border bg-card px-3 text-xs font-medium text-secondary hover:border-zinc-300";
   const compactDateClass = compactFilterRail ? "w-[9.5rem] min-w-[9.5rem] flex-shrink-0" : "min-w-[12rem] flex-shrink-0";
-  const stickyTotalsCellClass =
-    "sticky top-[var(--process-sticky-top)] z-20 bg-card";
-  const stickyTotalsPinnedCellClass =
-    `${stickyTotalsCellClass} z-30`;
-  const stickyColumnHeaderCellClass =
-    "sticky top-[calc(var(--process-sticky-top)+var(--process-totals-row-height))] z-10 bg-surface";
-  const stickyColumnHeaderPinnedCellClass =
-    `${stickyColumnHeaderCellClass} z-20`;
-
-  useEffect(() => {
-    const headerNode = headerRef.current;
-    const totalsNode = totalsRowRef.current;
-
-    if (!headerNode || !totalsNode) return;
-
-    const updateMeasurements = () => {
-      const nextHeaderHeight = Math.ceil(headerNode.getBoundingClientRect().height);
-      if (nextHeaderHeight > 0) {
-        setStickyTop(nextHeaderHeight);
-      }
-
-      const nextTotalsHeight = Math.ceil(totalsNode.getBoundingClientRect().height);
-      if (nextTotalsHeight > 0) {
-        setTotalsRowHeight(nextTotalsHeight);
-      }
-    };
-
-    updateMeasurements();
-
-    const observer = new ResizeObserver(() => updateMeasurements());
-    observer.observe(headerNode);
-    observer.observe(totalsNode);
-    window.addEventListener("resize", updateMeasurements);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateMeasurements);
-    };
-  }, [showByUnit]);
+  const tableWrapClass = "w-full min-w-0 border-separate border-spacing-0 table-fixed text-center";
+  const totalsCellClass =
+    "border-b border-border bg-card px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+  const columnHeaderCellClass =
+    "border-b border-border bg-surface px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+  const tableBodyCellClass =
+    "border-b border-border px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
 
   return (
-    <div
-      className="flex min-h-[100dvh] flex-col"
-      style={{
-        ["--process-sticky-top" as string]: `${stickyTop}px`,
-        ["--process-totals-row-height" as string]: `${totalsRowHeight}px`,
-      }}
-    >
-      <div ref={headerRef}>
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
+      <div className="flex-shrink-0">
         <PageHeader
           title={title}
           subtitle={subtitle}
@@ -461,6 +451,25 @@ export function ManufacturingProcessScreen({
                   </span>
                 )}
               </div>
+              <button
+                type="button"
+                aria-pressed={normalizedFilters.installReadyOnly}
+                onClick={() =>
+                  setFilters((current) => ({
+                    ...current,
+                    installReadyOnly: !current.installReadyOnly,
+                  }))
+                }
+                className={[
+                  "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+                  normalizedFilters.installReadyOnly
+                    ? "border-accent bg-accent text-white"
+                    : "border-border bg-card text-secondary hover:border-zinc-300",
+                  compactFilterRail ? "pr-2.5" : "",
+                ].join(" ")}
+              >
+                Install Rdy
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -588,146 +597,159 @@ export function ManufacturingProcessScreen({
           }
         />
       ) : (
-        <div className="flex-1 px-4 py-4">
-          <div className="overflow-x-auto overflow-y-visible rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
-            <table className="w-full min-w-[640px] border-separate border-spacing-0 text-center">
-              <thead>
-                <tr ref={totalsRowRef} className="bg-card text-[11px] text-secondary">
-                  <th className={`${floorStickyClass} ${stickyTotalsPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
-                    Totals
-                  </th>
-                  {showByUnit ? (
-                    <>
-                      <th className={`${unitStickyClass} ${stickyTotalsPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
-                        {countLabel}
-                      </th>
-                      <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center text-tertiary`}>—</th>
-                    </>
-                  ) : (
-                    <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
-                      {countLabel}
-                    </th>
-                  )}
-                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
-                    {totals.totalBlinds}
-                  </th>
-                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
-                    {formatPercent(totals.cutCount, totals.totalBlinds)}
-                  </th>
-                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
-                    {formatPercent(totals.assembledCount, totals.totalBlinds)}
-                  </th>
-                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
-                    {formatPercent(totals.qcCount, totals.totalBlinds)}
-                  </th>
-                  <th className={`${stickyTotalsCellClass} border-b border-border px-2.5 py-2.5 text-center font-mono font-semibold text-foreground`}>
-                    {formatPercent(totals.installedCount, totals.totalBlinds)}
-                  </th>
-                </tr>
-                <tr className="bg-surface text-[11px] uppercase tracking-[0.08em] text-tertiary">
-                  <th className={`${floorStickyClass} ${stickyColumnHeaderPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
-                    FL
-                  </th>
-                  {showByUnit && (
-                    <th className={`${unitStickyClass} ${stickyColumnHeaderPinnedCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>
-                      U
-                    </th>
-                  )}
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>DUE</th>
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>Blinds</th>
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>CUT</th>
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>ASSE</th>
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>QC</th>
-                  <th className={`${stickyColumnHeaderCellClass} border-b border-border px-2.5 py-2.5 text-center font-semibold`}>INST</th>
-                </tr>
-              </thead>
-              <tbody>
-                {showByUnit
-                  ? (displayRows as ManufacturingProcessRow[]).map((row) => (
-                      <tr
-                        key={row.unitId}
-                        tabIndex={0}
-                        role="link"
-                        onClick={() => router.push(`${unitHrefBase}/${row.unitId}`)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            router.push(`${unitHrefBase}/${row.unitId}`);
-                          }
-                        }}
-                        className={[
-                          "cursor-pointer text-[13px] text-foreground transition-colors",
-                          row.isInstalled
-                            ? "bg-emerald-50/60 hover:bg-emerald-50"
-                            : "hover:bg-surface/70",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
-                        ].join(" ")}
-                      >
-                        <td
-                          className={`${floorStickyClass} border-b border-border px-2.5 py-2.5 text-center text-secondary`}
-                        >
-                          {row.floor}
-                        </td>
-                        <td
-                          className={`${unitStickyClass} border-b border-border px-2.5 py-2.5 text-center font-semibold tracking-tight text-foreground`}
-                        >
-                          {row.unitNumber}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center text-secondary">
-                          {formatDueDate(row.completeByDate)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {row.totalBlinds}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.cutCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.assembledCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.qcCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.installedCount, row.totalBlinds)}
-                        </td>
+        <div className="flex-1 min-h-0 px-2 py-3 sm:px-3 sm:py-4">
+          <div className="flex h-full min-h-0 flex-col rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
+            <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+              <div className="w-full pb-24">
+                <div className="sticky top-0 z-40 isolate bg-card">
+                  <table className={tableWrapClass}>
+                    <ManufacturingProcessTableColGroup showByUnit={showByUnit} />
+                    <thead>
+                      <tr className="text-[9px] text-secondary sm:text-[11px]">
+                        <th className={`${floorStickyClass} ${totalsCellClass} z-30 font-semibold`}>
+                          Totals
+                        </th>
+                        {showByUnit ? (
+                          <>
+                            <th
+                              className={`${unitStickyClass} ${totalsCellClass} z-30 font-semibold`}
+                              aria-label={countLabel}
+                              title={countLabel}
+                            >
+                              {displayRows.length}
+                            </th>
+                            <th className={`${totalsCellClass} text-tertiary`}>—</th>
+                          </>
+                        ) : (
+                          <th className={`${totalsCellClass} text-tertiary`}>—</th>
+                        )}
+                        <th className={`${totalsCellClass} font-mono font-semibold text-foreground`}>
+                          {totals.totalBlinds}
+                        </th>
+                        <th className={`${totalsCellClass} font-mono font-semibold text-foreground`}>
+                          {formatPercent(totals.cutCount, totals.totalBlinds)}
+                        </th>
+                        <th className={`${totalsCellClass} font-mono font-semibold text-foreground`}>
+                          {formatPercent(totals.assembledCount, totals.totalBlinds)}
+                        </th>
+                        <th className={`${totalsCellClass} font-mono font-semibold text-foreground`}>
+                          {formatPercent(totals.qcCount, totals.totalBlinds)}
+                        </th>
+                        <th className={`${totalsCellClass} font-mono font-semibold text-foreground`}>
+                          {formatPercent(totals.installedCount, totals.totalBlinds)}
+                        </th>
                       </tr>
-                    ))
-                  : (displayRows as ManufacturingProcessFloorRow[]).map((row) => (
-                      <tr
-                        key={row.groupKey}
-                        className={[
-                          "text-[13px] text-foreground",
-                          row.isInstalled ? "bg-emerald-50/60" : "",
-                        ].join(" ")}
-                      >
-                        <td
-                          className={`${floorStickyClass} border-b border-border px-2.5 py-2.5 text-center text-secondary`}
-                        >
-                          {row.floor}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center text-secondary">
-                          {formatDueDate(row.completeByDate)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {row.totalBlinds}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.cutCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.assembledCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.qcCount, row.totalBlinds)}
-                        </td>
-                        <td className="border-b border-border px-2.5 py-2.5 text-center font-mono text-secondary">
-                          {formatPercent(row.installedCount, row.totalBlinds)}
-                        </td>
+                      <tr className="text-[9px] uppercase tracking-[0.06em] text-tertiary sm:text-[11px]">
+                        <th className={`${floorStickyClass} ${columnHeaderCellClass} z-20 font-semibold`}>
+                          FL
+                        </th>
+                        {showByUnit && (
+                          <th className={`${unitStickyClass} ${columnHeaderCellClass} z-20 font-semibold`}>
+                            U
+                          </th>
+                        )}
+                        <th className={`${columnHeaderCellClass} font-semibold`}>DUE</th>
+                        <th className={`${columnHeaderCellClass} font-semibold`}>Blinds</th>
+                        <th className={`${columnHeaderCellClass} font-semibold`}>CUT</th>
+                        <th className={`${columnHeaderCellClass} font-semibold`}>ASSE</th>
+                        <th className={`${columnHeaderCellClass} font-semibold`}>QC</th>
+                        <th className={`${columnHeaderCellClass} font-semibold`}>INST</th>
                       </tr>
-                    ))}
-              </tbody>
-            </table>
+                    </thead>
+                  </table>
+                </div>
+
+                <table className={tableWrapClass}>
+                  <ManufacturingProcessTableColGroup showByUnit={showByUnit} />
+                  <tbody>
+                    {showByUnit
+                      ? (displayRows as ManufacturingProcessRow[]).map((row) => (
+                          <tr
+                            key={row.unitId}
+                            tabIndex={0}
+                            role="link"
+                            onClick={() => router.push(`${unitHrefBase}/${row.unitId}`)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                router.push(`${unitHrefBase}/${row.unitId}`);
+                              }
+                            }}
+                            className={[
+                              "cursor-pointer text-[11px] text-foreground transition-colors sm:text-[13px]",
+                              row.isInstalled
+                                ? "bg-emerald-50/60 hover:bg-emerald-50"
+                                : "hover:bg-surface/70",
+                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                            ].join(" ")}
+                          >
+                            <td
+                              className={`${floorStickyClass} ${tableBodyCellClass} bg-inherit text-secondary`}
+                            >
+                              {row.floor}
+                            </td>
+                            <td
+                              className={`${unitStickyClass} ${tableBodyCellClass} bg-inherit font-semibold tracking-tight text-foreground`}
+                            >
+                              {row.unitNumber}
+                            </td>
+                            <td className={`${tableBodyCellClass} text-secondary`}>
+                              {formatDueDate(row.completeByDate)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {row.totalBlinds}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.cutCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.assembledCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.qcCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.installedCount, row.totalBlinds)}
+                            </td>
+                          </tr>
+                        ))
+                      : (displayRows as ManufacturingProcessFloorRow[]).map((row) => (
+                          <tr
+                            key={row.groupKey}
+                            className={[
+                              "text-[11px] text-foreground sm:text-[13px]",
+                              row.isInstalled ? "bg-emerald-50/60" : "",
+                            ].join(" ")}
+                          >
+                            <td
+                              className={`${floorStickyClass} ${tableBodyCellClass} bg-inherit text-secondary`}
+                            >
+                              {row.floor}
+                            </td>
+                            <td className={`${tableBodyCellClass} text-secondary`}>
+                              {formatDueDate(row.completeByDate)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {row.totalBlinds}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.cutCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.assembledCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.qcCount, row.totalBlinds)}
+                            </td>
+                            <td className={`${tableBodyCellClass} font-mono text-secondary`}>
+                              {formatPercent(row.installedCount, row.totalBlinds)}
+                            </td>
+                          </tr>
+                        ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}

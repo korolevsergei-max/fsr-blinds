@@ -58,6 +58,10 @@ function getBucketDayParts(date: string | null) {
   };
 }
 
+function getBucketKey(bucket: { date: string | null; label: string }) {
+  return bucket.date ?? `__${bucket.label}__`;
+}
+
 function formatInstallDate(date: string | null) {
   const label = formatStoredDateLongEnglish(date);
   return label ? `Install ${label}` : null;
@@ -303,6 +307,9 @@ export function ManufacturingRoleQueue({
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printLabelMode, setPrintLabelMode] = useState<PrintLabelMode>("manufacturing");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [printAction, setPrintAction] = useState<"list" | "labels">("list");
+  const [selectedBucketKeys, setSelectedBucketKeys] = useState<Set<string>>(new Set());
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
@@ -625,17 +632,71 @@ export function ManufacturingRoleQueue({
       .map((item) => item.windowId)
   );
 
+  const selectedPrintableIds = visibleBuckets
+    .filter((b) => selectedBucketKeys.has(getBucketKey(b)))
+    .flatMap((b) => b.windows.filter((w) => w.productionStatus === "pending").map((w) => w.windowId));
+
   const handlePrint = () => {
-    if (printableVisibleIds.length === 0) return;
+    if (selectedPrintableIds.length === 0) return;
 
     const params = new URLSearchParams({
-      ids: printableVisibleIds.join(","),
+      ids: selectedPrintableIds.join(","),
       labelMode: printLabelMode,
     });
     const url = `/cutter/queue/print?${params.toString()}`;
     window.open(url, "_blank");
     setPrintModalOpen(false);
   };
+
+  function buildFilterParts() {
+    const filterParts: string[] = [];
+    if (buildingFilter.length > 0) {
+      const names = buildingFilter.map((id) => buildingOptions.find((o) => o.value === id)?.label ?? id).join(", ");
+      filterParts.push(`Building: ${names}`);
+    }
+    if (floorFilter.length > 0) filterParts.push(`Floor: ${floorFilter.join(", ")}`);
+    if (installDates.length > 0) {
+      const formatted = installDates.map((d) => {
+        const [y, m, day] = d.split("-").map(Number);
+        return new Date(y, m - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      });
+      filterParts.push(`Install: ${formatted.join(", ")}`);
+    }
+    if (statusFilters.length > 0) {
+      const labels = statusFilters.map((s) => queueStatusOptions.find((o) => o.value === s)?.label ?? s).join(", ");
+      filterParts.push(`Status: ${labels}`);
+    }
+    if (fabricTypeFilter.length > 0) {
+      const labels = fabricTypeFilter.map((v) => fabricTypeOptions.find((o) => o.value === v)?.label ?? v).join(", ");
+      filterParts.push(`Fabric: ${labels}`);
+    }
+    if (componentFilter !== "all") {
+      const label = componentOptions.find((o) => o.value === componentFilter)?.label ?? componentFilter;
+      filterParts.push(`Component: ${label}`);
+    }
+    return filterParts;
+  }
+
+  function handleDatePickerConfirm() {
+    setDatePickerOpen(false);
+    if (printAction === "list") {
+      const ids = visibleBuckets
+        .filter((b) => selectedBucketKeys.has(getBucketKey(b)))
+        .flatMap((b) => b.windows.map((w) => w.windowId));
+      if (ids.length === 0) return;
+      const filterParts = buildFilterParts();
+      const sortSummary = sortLevels.length > 0
+        ? `Sorted by: ${sortLevels.map((l) => `${SORT_FIELD_LABELS[l.field]} ${l.direction === "asc" ? "↑" : "↓"}`).join(", ")}`
+        : "";
+      const urlParams = new URLSearchParams();
+      urlParams.set("ids", ids.join(","));
+      if (filterParts.length > 0) urlParams.set("f", filterParts.join(" • "));
+      if (sortSummary) urlParams.set("s", sortSummary);
+      window.open(`/cutter/queue/print-list?${urlParams}`, "_blank");
+    } else {
+      setPrintModalOpen(true);
+    }
+  }
 
   return (
     <div
@@ -666,46 +727,10 @@ export function ManufacturingRoleQueue({
               <button
                 type="button"
                 onClick={() => {
-                  const ids = visibleBuckets.flatMap((b) => b.windows.map((w) => w.windowId));
-                  if (ids.length === 0) return;
-
-                  const filterParts: string[] = [];
-                  if (buildingFilter.length > 0) {
-                    const names = buildingFilter.map((id) => buildingOptions.find((o) => o.value === id)?.label ?? id).join(", ");
-                    filterParts.push(`Building: ${names}`);
-                  }
-                  if (floorFilter.length > 0) {
-                    filterParts.push(`Floor: ${floorFilter.join(", ")}`);
-                  }
-                  if (installDates.length > 0) {
-                    const formatted = installDates.map((d) => {
-                      const [y, m, day] = d.split("-").map(Number);
-                      return new Date(y, m - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-                    });
-                    filterParts.push(`Install: ${formatted.join(", ")}`);
-                  }
-                  if (statusFilters.length > 0) {
-                    const labels = statusFilters.map((s) => queueStatusOptions.find((o) => o.value === s)?.label ?? s).join(", ");
-                    filterParts.push(`Status: ${labels}`);
-                  }
-                  if (fabricTypeFilter.length > 0) {
-                    const labels = fabricTypeFilter.map((v) => fabricTypeOptions.find((o) => o.value === v)?.label ?? v).join(", ");
-                    filterParts.push(`Fabric: ${labels}`);
-                  }
-                  if (componentFilter !== "all") {
-                    const label = componentOptions.find((o) => o.value === componentFilter)?.label ?? componentFilter;
-                    filterParts.push(`Component: ${label}`);
-                  }
-
-                  const sortSummary = sortLevels.length > 0
-                    ? `Sorted by: ${sortLevels.map((l) => `${SORT_FIELD_LABELS[l.field]} ${l.direction === "asc" ? "↑" : "↓"}`).join(", ")}`
-                    : "";
-
-                  const urlParams = new URLSearchParams();
-                  urlParams.set("ids", ids.join(","));
-                  if (filterParts.length > 0) urlParams.set("f", filterParts.join(" • "));
-                  if (sortSummary) urlParams.set("s", sortSummary);
-                  window.open(`/cutter/queue/print-list?${urlParams}`, "_blank");
+                  if (visibleBuckets.length === 0) return;
+                  setSelectedBucketKeys(new Set(visibleBuckets.map(getBucketKey)));
+                  setPrintAction("list");
+                  setDatePickerOpen(true);
                 }}
                 className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
               >
@@ -714,7 +739,13 @@ export function ManufacturingRoleQueue({
               </button>
               <button
                 type="button"
-                onClick={() => { setPrintModalOpen(true); setPrintLabelMode("manufacturing"); }}
+                onClick={() => {
+                  if (visibleBuckets.length === 0) return;
+                  setSelectedBucketKeys(new Set(visibleBuckets.map(getBucketKey)));
+                  setPrintAction("labels");
+                  setPrintLabelMode("manufacturing");
+                  setDatePickerOpen(true);
+                }}
                 className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
               >
                 <Printer size={15} />
@@ -1314,6 +1345,121 @@ export function ManufacturingRoleQueue({
         </div>
       )}
 
+      {datePickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
+          onClick={() => setDatePickerOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6 max-h-[85dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-foreground">Select days to print</h2>
+              <button
+                type="button"
+                onClick={() => setDatePickerOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-tertiary hover:bg-surface"
+              >
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <p className="mb-3 text-[12px] text-tertiary">
+              Choose which days to include in the {printAction === "list" ? "print list" : "labels"}.
+            </p>
+            <div className="mb-3 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedBucketKeys(new Set(visibleBuckets.map(getBucketKey)))}
+                className="text-[12px] font-medium text-accent hover:underline"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBucketKeys(new Set())}
+                className="text-[12px] font-medium text-secondary hover:underline"
+              >
+                Deselect all
+              </button>
+            </div>
+            <div className="space-y-2">
+              {visibleBuckets.length === 0 ? (
+                <p className="text-[12px] text-tertiary italic">No items in queue.</p>
+              ) : (
+                visibleBuckets.map((bucket) => {
+                  const key = getBucketKey(bucket);
+                  const checked = selectedBucketKeys.has(key);
+                  const dayParts = getBucketDayParts(bucket.date);
+                  const dayDisplay = dayParts
+                    ? `${dayParts.dayLabel.toUpperCase()} ${dayParts.dayNumber}`
+                    : null;
+                  const isSpecial = bucket.date === null;
+                  return (
+                    <label
+                      key={key}
+                      className={[
+                        "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
+                        checked ? "border-accent bg-accent/5" : "border-border hover:bg-surface",
+                      ].join(" ")}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedBucketKeys((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key);
+                            else next.add(key);
+                            return next;
+                          });
+                        }}
+                        className="h-4 w-4 rounded accent-accent flex-shrink-0"
+                      />
+                      <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          {isSpecial ? (
+                            <span className="text-[13px] font-medium text-foreground">{bucket.label}</span>
+                          ) : (
+                            <span className="text-[13px] font-medium text-foreground">
+                              <span className="font-bold">{dayDisplay}</span>
+                              {bucket.label !== bucket.date && (
+                                <span className="ml-1.5 text-tertiary font-normal">· {bucket.label}</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        <span className="flex-shrink-0 text-[12px] text-tertiary">
+                          {bucket.windows.length} blind{bucket.windows.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-5 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDatePickerOpen(false)}
+                className="flex-1 rounded-xl border border-border bg-card py-2.5 text-[13px] font-semibold text-secondary hover:bg-surface"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={selectedBucketKeys.size === 0}
+                onClick={handleDatePickerConfirm}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+              >
+                <Printer size={14} />
+                {printAction === "list" ? "Print" : "Next"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {printModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
@@ -1334,28 +1480,28 @@ export function ManufacturingRoleQueue({
               </button>
             </div>
             <p className="mb-4 text-[12px] text-tertiary">
-              Choose which label type to print. Only currently visible uncut blinds are included.
+              Choose which label type to print. Only selected-day uncut blinds are included.
             </p>
             <div className="space-y-2">
-              {printableVisibleIds.length === 0 ? (
-                <p className="text-[12px] text-tertiary italic">No visible uncut blinds found.</p>
+              {selectedPrintableIds.length === 0 ? (
+                <p className="text-[12px] text-tertiary italic">No uncut blinds found for selected days.</p>
               ) : (
                 <>
                   {[
                     {
                       value: "manufacturing",
                       label: "Manufacturing",
-                      description: "Print 1 manufacturing label per visible blind.",
+                      description: "Print 1 manufacturing label per blind.",
                     },
                     {
                       value: "packaging",
                       label: "Packaging",
-                      description: "Print 1 packaging label per visible blind.",
+                      description: "Print 1 packaging label per blind.",
                     },
                     {
                       value: "both",
                       label: "Both",
-                      description: "Print manufacturing then packaging labels for each visible blind.",
+                      description: "Print manufacturing then packaging labels for each blind.",
                     },
                   ].map((option) => {
                     const checked = printLabelMode === option.value;
@@ -1378,7 +1524,7 @@ export function ManufacturingRoleQueue({
                           <div className="flex items-center justify-between gap-3">
                             <span className="text-[13px] font-medium text-foreground">{option.label}</span>
                             <span className="text-[12px] text-tertiary">
-                              {option.value === "both" ? printableVisibleIds.length * 2 : printableVisibleIds.length} label{(option.value === "both" ? printableVisibleIds.length * 2 : printableVisibleIds.length) === 1 ? "" : "s"}
+                              {option.value === "both" ? selectedPrintableIds.length * 2 : selectedPrintableIds.length} label{(option.value === "both" ? selectedPrintableIds.length * 2 : selectedPrintableIds.length) === 1 ? "" : "s"}
                             </span>
                           </div>
                           <p className="mt-1 text-[12px] text-tertiary">{option.description}</p>
@@ -1399,7 +1545,7 @@ export function ManufacturingRoleQueue({
               </button>
               <button
                 type="button"
-                disabled={printableVisibleIds.length === 0}
+                disabled={selectedPrintableIds.length === 0}
                 onClick={handlePrint}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
               >

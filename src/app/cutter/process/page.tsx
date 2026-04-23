@@ -11,8 +11,6 @@ export default async function CutterProcessPage() {
       backHref="/cutter"
       unitHrefBase="/cutter/units"
       hideClient
-      floorGrouping="building_floor"
-      compactFilterRail
     />
   );
 }

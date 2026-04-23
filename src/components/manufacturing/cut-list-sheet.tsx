@@ -18,7 +18,7 @@ const HEADERS: ColDef[] = [
   { label: "Fl.",         w: 6 },
   { label: "Unit",        w: 10 },
   { label: "Returned",    w: 20, wrap: true },
-  { label: "Install",     w: 13 },
+  { label: "Ins.Date",    w: 13 },
   { label: "Room",        w: 16, wrap: true },
   { label: "Win.",        w: 8 },
   { label: "Type",        w: 14 },

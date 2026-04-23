@@ -8,6 +8,7 @@ export interface ManufacturingProcessFilters {
   buildingId: string;
   floor: string;
   installStatus: ManufacturingProcessInstallStatusFilter;
+  installReadyOnly: boolean;
   completeByDate: string;
 }
 
@@ -360,6 +361,7 @@ export function filterManufacturingProcessRows(
     if (filters.floor !== "all" && row.floor !== filters.floor) return false;
     if (filters.installStatus === "installed" && !row.isInstalled) return false;
     if (filters.installStatus === "not_installed" && row.isInstalled) return false;
+    if (filters.installReadyOnly && row.qcCount <= row.installedCount) return false;
     if (filters.completeByDate && row.completeByDate !== filters.completeByDate) return false;
     return true;
   });

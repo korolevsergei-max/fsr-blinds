@@ -11,8 +11,6 @@ export default async function AssemblerProcessPage() {
       backHref="/assembler"
       unitHrefBase="/assembler/units"
       hideClient
-      floorGrouping="building_floor"
-      compactFilterRail
     />
   );
 }

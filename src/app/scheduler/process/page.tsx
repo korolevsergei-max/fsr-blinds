@@ -10,6 +10,7 @@ export default async function SchedulerProcessPage() {
       title="Manufacturing Process"
       backHref="/scheduler"
       unitHrefBase="/scheduler/units"
+      hideClient
     />
   );
 }
