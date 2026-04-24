@@ -16,6 +16,7 @@ import { returnWindowToCutter } from "@/app/actions/manufacturing-actions";
 import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/assembler-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
+import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
@@ -32,6 +33,7 @@ function AssemblerWindowCard({
   onAssemble: (windowId: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [dialogOpen, setDialogOpen] = useState(false);
   const router = useRouter();
   const production = window.production;
   const status = production?.status ?? "pending";
@@ -54,11 +56,14 @@ function AssemblerWindowCard({
     });
   }
 
-  function handleReturnToCutter() {
+  function submitReturn(reason: string, notes: string) {
+    setDialogOpen(false);
     startTransition(async () => {
-      const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
-      if (!reason) return;
-      await returnWindowToCutter(window.id, reason, "");
+      const result = await returnWindowToCutter(window.id, reason, notes);
+      if (!result.ok) {
+        globalThis.window.alert(result.error ?? "Failed to return blind to cutter.");
+        return;
+      }
       router.refresh();
     });
   }
@@ -160,7 +165,7 @@ function AssemblerWindowCard({
 
       {(status === "cut" || status === "assembled") && (
         <button
-          onClick={handleReturnToCutter}
+          onClick={() => setDialogOpen(true)}
           disabled={pending}
           className="mt-1 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
         >
@@ -168,6 +173,14 @@ function AssemblerWindowCard({
           {pending ? "Saving\u2026" : "Return to Cutter"}
         </button>
       )}
+      <ReturnBlindDialog
+        open={dialogOpen}
+        direction="assembler_to_cutter"
+        windowLabel={`${roomName} \u00b7 ${window.label}`}
+        busy={pending}
+        onCancel={() => setDialogOpen(false)}
+        onSubmit={({ reason, notes }) => submitReturn(reason, notes)}
+      />
     </div>
   );
 }

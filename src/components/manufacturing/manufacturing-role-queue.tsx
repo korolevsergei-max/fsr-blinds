@@ -37,6 +37,8 @@ import {
   markWindowQCApproved,
 } from "@/app/actions/production-actions";
 import { ManufacturingSummaryCard, type ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
+import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import type { PushbackDirection } from "@/lib/pushback-reasons";
 
 type ComponentFilter = "all" | ManufacturingHighlightSection;
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
@@ -310,6 +312,10 @@ export function ManufacturingRoleQueue({
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [printAction, setPrintAction] = useState<"list" | "labels">("list");
   const [selectedBucketKeys, setSelectedBucketKeys] = useState<Set<string>>(new Set());
+  const [pushbackTarget, setPushbackTarget] = useState<{
+    item: ManufacturingWindowItem;
+    direction: PushbackDirection;
+  } | null>(null);
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
@@ -416,28 +422,25 @@ export function ManufacturingRoleQueue({
     }, { refreshOnSuccess: true });
   };
 
-  const collectPushbackReason = (message: string) => {
-    const reason = globalThis.window.prompt(message);
-    if (!reason) return null;
-    return reason;
-  };
-
   const handleReturnToCutter = (item: ManufacturingWindowItem) => {
-    const reason = collectPushbackReason("Why is this blind being returned to cutter?");
-    if (!reason) return;
-
-    runWindowAction(item.windowId, () => returnWindowToCutter(item.windowId, reason, ""), {
-      refreshOnSuccess: true,
-    });
+    const direction: PushbackDirection =
+      role === "qc" ? "qc_to_cutter" : "assembler_to_cutter";
+    setPushbackTarget({ item, direction });
   };
 
   const handleReturnToAssembler = (item: ManufacturingWindowItem) => {
-    const reason = collectPushbackReason("Why is this blind being returned to assembler?");
-    if (!reason) return;
+    setPushbackTarget({ item, direction: "qc_to_assembler" });
+  };
 
-    runWindowAction(item.windowId, () => returnWindowToAssembler(item.windowId, reason, ""), {
-      refreshOnSuccess: true,
-    });
+  const submitPushback = (reason: string, notes: string) => {
+    const target = pushbackTarget;
+    if (!target) return;
+    const action =
+      target.direction === "qc_to_assembler"
+        ? () => returnWindowToAssembler(target.item.windowId, reason, notes)
+        : () => returnWindowToCutter(target.item.windowId, reason, notes);
+    runWindowAction(target.item.windowId, action, { refreshOnSuccess: true });
+    setPushbackTarget(null);
   };
 
   const title =
@@ -952,6 +955,11 @@ export function ManufacturingRoleQueue({
                                   Returned
                                 </span>
                               )}
+                              {!returnedToRole && item.wasReworkInCycle && (
+                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-amber-800">
+                                  Rework — priority
+                                </span>
+                              )}
                             </div>
                             <p className="font-mono text-[18px] font-semibold leading-none tracking-tight text-foreground">
                               {item.width ?? "—"} × {item.height ?? "—"}{item.depth != null ? ` × ${item.depth}` : ""}
@@ -987,6 +995,35 @@ export function ManufacturingRoleQueue({
                                 {item.issueReason || (returnedToRole ? "Returned for rework" : "Issue open")}
                               </p>
                               <p className="mt-1">{item.issueNotes}</p>
+                            </div>
+                          )}
+
+                          {role === "qc" && item.escalationHistory.length > 0 && (
+                            <div className="max-w-[65ch] rounded-[var(--radius-md)] border border-border bg-surface/60 px-3 py-2.5 text-[12px] leading-5">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-tertiary">
+                                Pushback history
+                              </p>
+                              <ul className="mt-1.5 space-y-1.5">
+                                {item.escalationHistory.map((event) => {
+                                  const dateLabel =
+                                    formatStoredDateLongEnglish(event.openedAt.slice(0, 10)) ??
+                                    event.openedAt.slice(0, 10);
+                                  return (
+                                    <li key={event.id} className="flex flex-col gap-0.5 text-secondary">
+                                      <span className="font-medium text-foreground">
+                                        {event.sourceRole} → {event.targetRole} · {dateLabel}
+                                        {event.status === "resolved" ? (
+                                          <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">resolved</span>
+                                        ) : (
+                                          <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-700">open</span>
+                                        )}
+                                      </span>
+                                      {event.reason && <span>{event.reason}</span>}
+                                      {event.notes && <span className="text-tertiary">{event.notes}</span>}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
                             </div>
                           )}
 
@@ -1556,6 +1593,22 @@ export function ManufacturingRoleQueue({
           </div>
         </div>
       )}
+      <ReturnBlindDialog
+        open={pushbackTarget !== null}
+        direction={pushbackTarget?.direction ?? "assembler_to_cutter"}
+        windowLabel={
+          pushbackTarget
+            ? `${pushbackTarget.item.roomName} · ${pushbackTarget.item.label}`
+            : undefined
+        }
+        busy={
+          pushbackTarget !== null &&
+          busyWindowId === pushbackTarget.item.windowId &&
+          isPending
+        }
+        onCancel={() => setPushbackTarget(null)}
+        onSubmit={({ reason, notes }) => submitPushback(reason, notes)}
+      />
     </div>
   );
 }

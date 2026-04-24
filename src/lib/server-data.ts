@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
@@ -7,8 +8,10 @@ import type {
   Notification,
   UnitActivityLog,
   UnitPhotoStage,
+  UnitStatus,
   WindowManufacturingEscalation,
 } from "@/lib/types";
+import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
 import {
   mapClient,
   mapBuilding,
@@ -159,13 +162,94 @@ async function withManufacturingEscalations(dataset: AppDataset): Promise<AppDat
   };
 }
 
+/**
+ * Overrides each unit's `status` with a fresh derivation from current window
+ * data + QC approvals. Schedules a background write-back so the cached
+ * `units.status` self-heals over time.
+ *
+ * Lets the dashboard show accurate pipeline counts even if some past mutation
+ * skipped `recomputeUnitStatus`.
+ */
+async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
+  if (dataset.units.length === 0) return dataset;
+
+  const supabase = await createClient();
+  const unitIds = dataset.units.map((u) => u.id);
+
+  const { data: qcRows, error } = await supabase
+    .from("window_production_status")
+    .select("unit_id")
+    .in("unit_id", unitIds)
+    .eq("status", "qc_approved");
+  if (error) return dataset;
+
+  const qcCountByUnit = new Map<string, number>();
+  for (const row of (qcRows ?? []) as Array<{ unit_id: string }>) {
+    qcCountByUnit.set(row.unit_id, (qcCountByUnit.get(row.unit_id) ?? 0) + 1);
+  }
+
+  const unitIdByRoom = new Map(dataset.rooms.map((r) => [r.id, r.unitId]));
+  const windowsByUnit = new Map<string, typeof dataset.windows>();
+  for (const w of dataset.windows) {
+    const unitId = unitIdByRoom.get(w.roomId);
+    if (!unitId) continue;
+    const list = windowsByUnit.get(unitId);
+    if (list) list.push(w);
+    else windowsByUnit.set(unitId, [w]);
+  }
+
+  const drift: Array<{ id: string; status: UnitStatus }> = [];
+  const units = dataset.units.map((unit) => {
+    const ws = windowsByUnit.get(unit.id) ?? [];
+    const totalWindows = ws.length;
+    const installedCount = ws.filter((w) => w.installed).length;
+    const qcCount = qcCountByUnit.get(unit.id) ?? 0;
+    // Legacy units installed before per-blind QC tracking lack qc_approved rows;
+    // treat them as fully manufactured so we don't downgrade installed → bracketed.
+    const manufacturedCount =
+      totalWindows > 0 && installedCount >= totalWindows && qcCount < totalWindows
+        ? totalWindows
+        : qcCount;
+    const derived = deriveUnitStatusFromCounts({
+      totalWindows,
+      measuredCount: ws.filter((w) => w.measured).length,
+      bracketedCount: ws.filter((w) => w.bracketed).length,
+      manufacturedCount,
+      installedCount,
+    });
+    if (derived === unit.status) return unit;
+    drift.push({ id: unit.id, status: derived });
+    return { ...unit, status: derived };
+  });
+
+  if (drift.length > 0) {
+    after(async () => {
+      const followUp = await createClient();
+      for (const d of drift) {
+        await followUp.from("units").update({ status: d.status }).eq("id", d.id);
+        await followUp
+          .from("schedule_entries")
+          .update({ status: d.status })
+          .eq("unit_id", d.id);
+      }
+    });
+  }
+
+  return { ...dataset, units };
+}
+
+async function finalizeDataset(dataset: AppDataset): Promise<AppDataset> {
+  const withLiveStatuses = await withLiveUnitStatuses(dataset);
+  return withManufacturingEscalations(withLiveStatuses);
+}
+
 export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const supabase = await createClient();
 
   // Fast path: single RPC call (requires migration 20260408110000)
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_full_dataset");
   if (!rpcError && rpcData) {
-    return withManufacturingEscalations(buildDatasetFromRaw(rpcData as {
+    return finalizeDataset(buildDatasetFromRaw(rpcData as {
       clients: ClientRow[];
       buildings: BuildingRow[];
       units: UnitRow[];
@@ -218,7 +302,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     );
   }
 
-  return withManufacturingEscalations(buildDatasetFromRaw({
+  return finalizeDataset(buildDatasetFromRaw({
     clients: (clientsRes.data as ClientRow[]) ?? [],
     buildings: (buildingsRes.data as BuildingRow[]) ?? [],
     units: (unitsRes.data as UnitRow[]) ?? [],
@@ -391,7 +475,7 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
   );
 
-  return withManufacturingEscalations({
+  return finalizeDataset({
     clients,
     buildings,
     units,
@@ -455,7 +539,7 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
   );
 
-  return withManufacturingEscalations({
+  return finalizeDataset({
     clients: ((clientRows.data as ClientRow[]) ?? []).map(mapClient),
     buildings: ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding),
     units,
@@ -724,7 +808,7 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
   const unitRow = unitRes.data as UnitRow;
   const unit = mapUnit(unitRow);
 
-  return withManufacturingEscalations({
+  return finalizeDataset({
     ...emptyDataset(),
     units: [unit],
     rooms,

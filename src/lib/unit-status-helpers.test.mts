@@ -206,6 +206,8 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
     "manufactured"
   );
 
+  // All blinds QC-approved should be "manufactured" even if measured/bracketed
+  // flags lag behind on the windows table (QC is the user-facing definition).
   assert.equal(
     deriveUnitStatusFromCounts({
       totalWindows: 3,
@@ -214,7 +216,18 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       manufacturedCount: 3,
       installedCount: 0,
     }),
-    "bracketed"
+    "manufactured"
+  );
+
+  assert.equal(
+    deriveUnitStatusFromCounts({
+      totalWindows: 3,
+      measuredCount: 0,
+      bracketedCount: 0,
+      manufacturedCount: 3,
+      installedCount: 0,
+    }),
+    "manufactured"
   );
 
   assert.equal(
@@ -226,6 +239,18 @@ test("deriveUnitStatusFromCounts returns the expected milestone status", () => {
       installedCount: 3,
     }),
     "installed"
+  );
+
+  // Partial QC falls through to bracketed/measured tiers.
+  assert.equal(
+    deriveUnitStatusFromCounts({
+      totalWindows: 3,
+      measuredCount: 3,
+      bracketedCount: 3,
+      manufacturedCount: 2,
+      installedCount: 0,
+    }),
+    "bracketed"
   );
 });
 
@@ -311,6 +336,22 @@ test("reconcileUnitDerivedState rolls status back when bracketed media deletion 
   assert.equal(unit.photosUploaded, 1);
   assert.equal(room.windowCount, 1);
   assert.equal(room.completedWindows, 1);
+});
+
+test("reconcileUnitDerivedState preserves manufactured status when client lacks QC data", () => {
+  const dataset = createDataset();
+  const manufacturedDataset: AppDataset = {
+    ...dataset,
+    units: dataset.units.map((unit) =>
+      unit.id === "unit-1" ? { ...unit, status: "manufactured" } : unit
+    ),
+  };
+
+  const patched = reconcileUnitDerivedState(manufacturedDataset, "unit-1");
+
+  const unit = patched.units.find((item) => item.id === "unit-1");
+  assert.ok(unit);
+  assert.equal(unit.status, "manufactured");
 });
 
 test("reconcileUnitDerivedState recomputes room counts when windows are deleted", () => {

@@ -20,6 +20,8 @@ import {
 import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/assembler-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
+import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import type { PushbackDirection } from "@/lib/pushback-reasons";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
@@ -36,6 +38,7 @@ function QcWindowCard({
   onApproveQC: (windowId: string) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const [dialogDirection, setDialogDirection] = useState<PushbackDirection | null>(null);
   const router = useRouter();
   const production = window.production;
   const status = production?.status ?? "pending";
@@ -58,25 +61,23 @@ function QcWindowCard({
     });
   }
 
-  function handleReturnToAssembler() {
+  function submitReturn(reason: string, notes: string) {
+    const direction = dialogDirection;
+    setDialogDirection(null);
+    if (!direction) return;
     startTransition(async () => {
-      const reason = globalThis.window.prompt("Why is this blind being returned to assembler?");
-      if (!reason) return;
-      const result = await returnWindowToAssembler(window.id, reason, "");
+      const result =
+        direction === "qc_to_assembler"
+          ? await returnWindowToAssembler(window.id, reason, notes)
+          : await returnWindowToCutter(window.id, reason, notes);
       if (!result.ok) {
-        globalThis.window.alert(result.error ?? "Failed to return blind to assembler.");
-      }
-      router.refresh();
-    });
-  }
-
-  function handleReturnToCutter() {
-    startTransition(async () => {
-      const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
-      if (!reason) return;
-      const result = await returnWindowToCutter(window.id, reason, "");
-      if (!result.ok) {
-        globalThis.window.alert(result.error ?? "Failed to return blind to cutter.");
+        globalThis.window.alert(
+          result.error ??
+            (direction === "qc_to_assembler"
+              ? "Failed to return blind to assembler."
+              : "Failed to return blind to cutter.")
+        );
+        return;
       }
       router.refresh();
     });
@@ -157,7 +158,7 @@ function QcWindowCard({
             {pending ? "Approving…" : "Approve QC"}
           </button>
           <button
-            onClick={handleReturnToAssembler}
+            onClick={() => setDialogDirection("qc_to_assembler")}
             disabled={pending}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
           >
@@ -165,7 +166,7 @@ function QcWindowCard({
             {pending ? "Saving…" : "Return to Assembler"}
           </button>
           <button
-            onClick={handleReturnToCutter}
+            onClick={() => setDialogDirection("qc_to_cutter")}
             disabled={pending}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-amber-100 text-amber-800 text-sm font-medium active:opacity-80 disabled:opacity-50 transition-opacity"
           >
@@ -181,6 +182,14 @@ function QcWindowCard({
           Not yet cut
         </p>
       )}
+      <ReturnBlindDialog
+        open={dialogDirection !== null}
+        direction={dialogDirection ?? "qc_to_assembler"}
+        windowLabel={`${roomName} · ${window.label}`}
+        busy={pending}
+        onCancel={() => setDialogDirection(null)}
+        onSubmit={({ reason, notes }) => submitReturn(reason, notes)}
+      />
     </div>
   );
 }

@@ -22,6 +22,8 @@ import {
 } from "@/lib/created-date";
 import { MultiDateFilter } from "@/components/ui/multi-date-filter";
 import { StickyDayRail } from "@/components/schedule/sticky-day-rail";
+import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import type { PushbackDirection } from "@/lib/pushback-reasons";
 
 type ManufacturingRole = "cutter" | "assembler" | "qc";
 type HistoryFilter = "returned" | "issues";
@@ -206,6 +208,10 @@ export function ManufacturingRoleCompletedScreen({
   const [installDateFilter, setInstallDateFilter] = useState<string[]>([]);
   const [completedDateFilter, setCompletedDateFilter] = useState<string[]>([]);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter[]>([]);
+  const [pushbackTarget, setPushbackTarget] = useState<{
+    item: ManufacturingCompletedWindowItem;
+    direction: PushbackDirection;
+  } | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
   const todayKey = formatDateKey(new Date());
@@ -296,29 +302,36 @@ export function ManufacturingRoleCompletedScreen({
   ].filter(Boolean).length;
 
   const handleReturnToCutter = (item: ManufacturingCompletedWindowItem) => {
-    const reason = globalThis.window.prompt("Why is this blind being returned to cutter?");
-    if (!reason) return;
-    startActionTransition(async () => {
-      const result = await returnWindowToCutter(item.windowId, reason, "");
-      if (!result.ok) {
-        globalThis.window.alert(result.error ?? "Failed to return blind to cutter.");
-        return;
-      }
-      router.refresh();
-    });
+    const direction: PushbackDirection =
+      role === "qc" ? "qc_to_cutter" : "assembler_to_cutter";
+    setPushbackTarget({ item, direction });
   };
 
   const handleReturnToAssembler = (item: ManufacturingCompletedWindowItem) => {
-    const reason = globalThis.window.prompt("Why is this blind being returned to assembler?");
-    if (!reason) return;
+    setPushbackTarget({ item, direction: "qc_to_assembler" });
+  };
+
+  const submitPushback = (reason: string, notes: string) => {
+    const target = pushbackTarget;
+    if (!target) return;
+    const { item, direction } = target;
     startActionTransition(async () => {
-      const result = await returnWindowToAssembler(item.windowId, reason, "");
+      const result =
+        direction === "qc_to_assembler"
+          ? await returnWindowToAssembler(item.windowId, reason, notes)
+          : await returnWindowToCutter(item.windowId, reason, notes);
       if (!result.ok) {
-        globalThis.window.alert(result.error ?? "Failed to return blind to assembler.");
+        globalThis.window.alert(
+          result.error ??
+            (direction === "qc_to_assembler"
+              ? "Failed to return blind to assembler."
+              : "Failed to return blind to cutter.")
+        );
         return;
       }
       router.refresh();
     });
+    setPushbackTarget(null);
   };
 
   const handleUndoCut = (item: ManufacturingCompletedWindowItem) => {
@@ -625,6 +638,18 @@ export function ManufacturingRoleCompletedScreen({
           </section>
         ))}
       </div>
+      <ReturnBlindDialog
+        open={pushbackTarget !== null}
+        direction={pushbackTarget?.direction ?? "assembler_to_cutter"}
+        windowLabel={
+          pushbackTarget
+            ? `${pushbackTarget.item.roomName} · ${pushbackTarget.item.label}`
+            : undefined
+        }
+        busy={pushbackTarget !== null && actionPending}
+        onCancel={() => setPushbackTarget(null)}
+        onSubmit={({ reason, notes }) => submitPushback(reason, notes)}
+      />
     </div>
   );
 }

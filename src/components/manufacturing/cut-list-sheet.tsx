@@ -30,7 +30,7 @@ const HEADERS: ColDef[] = [
   { label: "Tube",        w: 13 },
   { label: "Bot. rail",   w: 13 },
   { label: "Wand",        w: 11 },
-  { label: "Install.",    w: 12 },
+  { label: "In/Out",      w: 12 },
   { label: "Chain",       w: 13 },
 ];
 

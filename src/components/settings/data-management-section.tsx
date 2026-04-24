@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { Warning } from "@phosphor-icons/react";
-import { purgeAllClientData, backfillInstalledWindowProductionStatus } from "@/app/actions/management-actions";
+import {
+  purgeAllClientData,
+  backfillInstalledWindowProductionStatus,
+} from "@/app/actions/management-actions";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { Input } from "@/components/ui/input";

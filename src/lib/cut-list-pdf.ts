@@ -8,7 +8,7 @@ const COLUMNS = [
   { label: "Fl.",         w: 6 },
   { label: "Unit",        w: 11 },
   { label: "Returned",    w: 21 },
-  { label: "Install",     w: 14 },
+  { label: "Ins.Date",    w: 14 },
   { label: "Room",        w: 17 },
   { label: "Win.",        w: 9 },
   { label: "Type",        w: 15 },
@@ -20,7 +20,7 @@ const COLUMNS = [
   { label: "Tube",        w: 14 },
   { label: "Bot. rail",   w: 14 },
   { label: "Wand",        w: 12 },
-  { label: "Install.",    w: 13 },
+  { label: "In/Out",      w: 13 },
   { label: "Chain",       w: 14 },
 ];
 

@@ -132,6 +132,9 @@ export interface ManufacturingWindowItem {
   issueReason: string;
   issueNotes: string;
   escalation: WindowManufacturingEscalation | null;
+  latestEscalation: WindowManufacturingEscalation | null;
+  escalationHistory: WindowManufacturingEscalation[];
+  wasReworkInCycle: boolean;
   cutAt: string | null;
   assembledAt: string | null;
   qcApprovedAt: string | null;
@@ -198,6 +201,7 @@ function getQueueWindowPriority(
 ) {
   if (item.issueStatus === "open" && item.escalation?.targetRole === role) return 0;
   if (item.issueStatus === "open") return 0;
+  if (item.wasReworkInCycle) return 0;
   if (role === "cutter") {
     return item.productionStatus === "pending" ? 1 : 2;
   }
@@ -215,6 +219,13 @@ function isReturnedToRole(
   return item.issueStatus === "open" && item.escalation?.targetRole === role;
 }
 
+function isReworkPriority(
+  role: "cutter" | "assembler" | "qc",
+  item: ManufacturingWindowItem
+) {
+  return isReturnedToRole(role, item) || item.wasReworkInCycle;
+}
+
 function countQueueReadyWindows(
   role: "cutter" | "assembler" | "qc",
   windows: ManufacturingWindowItem[]
@@ -229,6 +240,16 @@ function sortQueueWindows(
   return [...windows].sort((a, b) => {
     const priorityDiff = getQueueWindowPriority(role, a) - getQueueWindowPriority(role, b);
     if (priorityDiff !== 0) return priorityDiff;
+
+    if (isReworkPriority(role, a) || isReworkPriority(role, b)) {
+      const aReturned = isReturnedToRole(role, a) ? 0 : 1;
+      const bReturned = isReturnedToRole(role, b) ? 0 : 1;
+      if (aReturned !== bReturned) return aReturned - bReturned;
+
+      const aOpened = a.latestEscalation?.openedAt ?? "9999-12-31T00:00:00Z";
+      const bOpened = b.latestEscalation?.openedAt ?? "9999-12-31T00:00:00Z";
+      if (aOpened !== bOpened) return aOpened.localeCompare(bOpened);
+    }
 
     const readyDateA = a.targetReadyDate ?? "9999-12-31";
     const readyDateB = b.targetReadyDate ?? "9999-12-31";
@@ -676,7 +697,7 @@ export async function loadManufacturingRoleSchedule(
   const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
   const windowIds = [...new Set(schedules.map((row) => row.window_id))];
 
-  const [unitRows, windowRows, productionRows, escalationByWindow] = await Promise.all([
+  const [unitRows, windowRows, productionRows, escalationByWindow, escalationHistoryByWindow] = await Promise.all([
     unitIds.length > 0
       ? supabase
           .from("units")
@@ -707,6 +728,7 @@ export async function loadManufacturingRoleSchedule(
           }>,
         }),
     loadOpenManufacturingEscalationsByWindow(supabase, windowIds),
+    loadManufacturingEscalationHistoryByWindow(supabase, windowIds),
   ]);
 
   const windows = (windowRows.data as WindowRow[] | null) ?? [];
@@ -748,6 +770,9 @@ export async function loadManufacturingRoleSchedule(
     const productionStatus = production?.status ?? "pending";
     const issueStatus = production?.issue_status ?? "none";
     const escalation = escalationByWindow.get(row.window_id) ?? null;
+    const history = escalationHistoryByWindow.get(row.window_id) ?? [];
+    const latestEscalation = escalation ?? history[0] ?? null;
+    const wasReworkInCycle = history.length > 0;
 
     const item: ManufacturingWindowItem = {
       windowId: row.window_id,
@@ -771,6 +796,9 @@ export async function loadManufacturingRoleSchedule(
       issueReason: production?.issue_reason ?? "",
       issueNotes: production?.issue_notes ?? "",
       escalation,
+      latestEscalation,
+      escalationHistory: history,
+      wasReworkInCycle,
       cutAt: production?.cut_at ?? null,
       assembledAt: production?.assembled_at ?? null,
       qcApprovedAt: production?.qc_approved_at ?? null,
@@ -813,24 +841,21 @@ export async function loadManufacturingRoleSchedule(
   for (const item of items) {
     const rawDate = item[roleDateKey];
     const date = rawDate && rawDate < currentWorkDate ? currentWorkDate : rawDate;
-    if (item.issueStatus === "open" && !isReturnedToRole(role, item)) {
+    if (isReworkPriority(role, item) || item.issueStatus === "open") {
       const list = byBucket.get("__issues__") ?? [];
       list.push(item);
       byBucket.set("__issues__", list);
       continue;
     }
-    // Returned items go into their scheduled date bucket (or today if unscheduled)
-    // so they appear in dated buckets and are included in print label options.
-    if (!date && !isReturnedToRole(role, item)) {
+    if (!date) {
       const list = byBucket.get("__unscheduled__") ?? [];
       list.push(item);
       byBucket.set("__unscheduled__", list);
       continue;
     }
-    const bucketDate = date ?? currentWorkDate;
-    const bucketList = byBucket.get(bucketDate) ?? [];
+    const bucketList = byBucket.get(date) ?? [];
     bucketList.push(item);
-    byBucket.set(bucketDate, bucketList);
+    byBucket.set(date, bucketList);
   }
 
   // Clamp the earliest scheduled date to today so the queue always starts with
@@ -847,15 +872,14 @@ export async function loadManufacturingRoleSchedule(
     }
   }
 
+  const rankKey = (key: string): number => {
+    if (key === "__issues__") return 0;
+    if (key === "__unscheduled__") return 2;
+    return 1;
+  };
   const orderedKeys = [...byBucket.keys()].sort((a, b) => {
-    const specialOrder = ["__issues__", "__unscheduled__"];
-    const aIdx = specialOrder.indexOf(a);
-    const bIdx = specialOrder.indexOf(b);
-    if (aIdx >= 0 || bIdx >= 0) {
-      if (aIdx === -1) return -1;
-      if (bIdx === -1) return 1;
-      return aIdx - bIdx;
-    }
+    const rankDiff = rankKey(a) - rankKey(b);
+    if (rankDiff !== 0) return rankDiff;
     return a.localeCompare(b);
   });
 
@@ -923,7 +947,7 @@ export async function loadManufacturingRoleSchedule(
       date: key.startsWith("__") ? null : key,
       label:
         key === "__issues__"
-          ? "Issues"
+          ? "Rework — priority"
           : key === "__unscheduled__"
           ? "Unscheduled"
           : key === today

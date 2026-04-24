@@ -111,12 +111,19 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     return units
       .filter((u) => {
         if (search) {
-          const q = search.toLowerCase();
-          if (
-            !u.unitNumber.toLowerCase().includes(q) &&
-            !u.buildingName.toLowerCase().includes(q)
-          ) {
-            return false;
+          if (search.includes(", ")) {
+            const tokens = search.split(", ").map((t) => t.trim().toLowerCase()).filter(Boolean);
+            if (tokens.length > 0) {
+              if (!tokens.includes(u.unitNumber.trim().toLowerCase())) return false;
+            }
+          } else {
+            const q = search.toLowerCase();
+            if (
+              !u.unitNumber.toLowerCase().includes(q) &&
+              !u.buildingName.toLowerCase().includes(q)
+            ) {
+              return false;
+            }
           }
         }
         if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;

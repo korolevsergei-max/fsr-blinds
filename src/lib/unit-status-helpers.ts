@@ -1,5 +1,5 @@
 import type { AppDataset } from "./app-dataset";
-import type { UnitStatus } from "./types";
+import { UNIT_STATUS_ORDER, type UnitStatus } from "./types.ts";
 
 export type UnitCoverageCounts = {
   totalWindows: number;
@@ -25,13 +25,7 @@ export function deriveUnitStatusFromCounts({
 >): UnitStatus {
   if (totalWindows === 0) return "not_started";
   if (installedCount >= totalWindows) return "installed";
-  if (
-    manufacturedCount >= totalWindows &&
-    measuredCount >= totalWindows &&
-    bracketedCount >= totalWindows
-  ) {
-    return "manufactured";
-  }
+  if (manufacturedCount >= totalWindows) return "manufactured";
   if (bracketedCount >= totalWindows) return "bracketed";
   if (measuredCount >= totalWindows) return "measured";
   return "not_started";
@@ -87,7 +81,16 @@ export function reconcileUnitDerivedState(
 
   const roomCount = rooms.filter((room) => room.unitId === unitId).length;
   const coverage = getUnitCoverageFromDataset({ ...data, rooms }, unitId);
-  const status = unitStatus ?? deriveUnitStatusFromCounts(coverage);
+  const existingUnit = data.units.find((unit) => unit.id === unitId);
+  const derived = deriveUnitStatusFromCounts(coverage);
+  // Client coverage has no QC data (manufacturedCount is hardcoded 0); preserve
+  // cached manufactured/installed instead of letting derivation downgrade them.
+  const existingStatus = existingUnit?.status as UnitStatus | undefined;
+  const shouldPreserveCached =
+    !unitStatus &&
+    (existingStatus === "manufactured" || existingStatus === "installed") &&
+    UNIT_STATUS_ORDER[derived] < UNIT_STATUS_ORDER[existingStatus];
+  const status = unitStatus ?? (shouldPreserveCached ? existingStatus! : derived);
 
   const units = data.units.map((unit) => {
     if (unit.id !== unitId) return unit;
