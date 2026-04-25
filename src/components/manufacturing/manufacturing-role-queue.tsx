@@ -989,12 +989,12 @@ export function ManufacturingRoleQueue({
                             </p>
                           )}
 
-                          {item.issueStatus === "open" && item.issueNotes && (
+                          {item.issueStatus === "open" && (item.issueReason || item.issueNotes) && (
                             <div className={`max-w-[65ch] rounded-[var(--radius-md)] border px-3 py-3 text-[12px] leading-6 ${returnedToRole ? "border-red-200 bg-white/90 text-red-800" : "border-amber-200 bg-amber-50/80 text-amber-800"}`}>
                               <p className="font-semibold">
                                 {item.issueReason || (returnedToRole ? "Returned for rework" : "Issue open")}
                               </p>
-                              <p className="mt-1">{item.issueNotes}</p>
+                              {item.issueNotes && <p className="mt-1">{item.issueNotes}</p>}
                             </div>
                           )}
 
