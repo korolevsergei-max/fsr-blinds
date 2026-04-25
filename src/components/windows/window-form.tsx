@@ -434,7 +434,7 @@ export function WindowForm({
       <form
         ref={formRef}
         onSubmit={handleSubmit}
-        className="flex-1 px-5 py-5 flex flex-col gap-6"
+        className="flex-1 px-5 py-4 flex flex-col gap-5"
       >
         {existingWindow && (
           <WindowStageNav
@@ -470,7 +470,7 @@ export function WindowForm({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-5"
+          className="flex flex-col gap-4"
         >
           <Input
             label="Window Label"
@@ -481,54 +481,51 @@ export function WindowForm({
             autoFocus
           />
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              Blind Type
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["screen", "blackout"] as BlindType[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setBlindType(t)}
-                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
-                    blindType === t
-                      ? "border-accent bg-accent text-white"
-                      : "border-border bg-white text-zinc-600 hover:bg-surface"
-                  }`}
-                >
-                  {t === "screen" ? "Screen" : "Blackout"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              Chain Side <span className="text-red-500">*</span>
-            </label>
-            <p className="text-[11px] text-zinc-400 -mt-0.5">Which side is the chain slot on when facing the window?</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(["left", "right"] as ChainSide[]).map((side) => (
-                <button
-                  key={side}
-                  type="button"
-                  onClick={() => setChainSide(side)}
-                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
-                    chainSide === side
-                      ? "border-accent bg-accent text-white"
-                      : errors.chainSide
-                        ? "border-red-300 bg-red-50 text-red-600"
+          {/* Blind Type + Window Installation paired */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Blind Type
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["screen", "blackout"] as BlindType[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setBlindType(t)}
+                    className={`h-11 rounded-2xl border text-[13px] font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                      blindType === t
+                        ? "border-accent bg-accent text-white"
                         : "border-border bg-white text-zinc-600 hover:bg-surface"
-                  }`}
-                >
-                  {side === "left" ? "← Left" : "Right →"}
-                </button>
-              ))}
+                    }`}
+                  >
+                    {t === "screen" ? "Screen" : "Blackout"}
+                  </button>
+                ))}
+              </div>
             </div>
-            {errors.chainSide && (
-              <p className="text-xs text-red-500">{errors.chainSide}</p>
-            )}
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Installation
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["inside", "outside"] as WindowInstallation[]).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setWindowInstallation(opt)}
+                    className={`h-11 rounded-2xl border text-[13px] font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                      windowInstallation === opt
+                        ? "border-accent bg-accent text-white"
+                        : "border-border bg-white text-zinc-600 hover:bg-surface"
+                    }`}
+                  >
+                    {opt === "inside" ? "Inside" : "Outside"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
         </motion.div>
@@ -537,10 +534,10 @@ export function WindowForm({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-5"
+          className="flex flex-col gap-4"
         >
           <div>
-            <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
+            <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-2">
               Window Measurements (inches)
             </h2>
             <div className="grid grid-cols-3 gap-3">
@@ -574,60 +571,66 @@ export function WindowForm({
             </div>
           </div>
 
-          {/* Window Installation */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              Window Installation
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["inside", "outside"] as WindowInstallation[]).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setWindowInstallation(opt)}
-                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
-                    windowInstallation === opt
-                      ? "border-accent bg-accent text-white"
-                      : "border-border bg-white text-zinc-600 hover:bg-surface"
-                  }`}
-                >
-                  {opt === "inside" ? "Inside" : "Outside"}
-                </button>
-              ))}
+          {/* Chain Side + Wand & Chain paired */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Chain Side <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["left", "right"] as ChainSide[]).map((side) => (
+                  <button
+                    key={side}
+                    type="button"
+                    onClick={() => setChainSide(side)}
+                    className={`h-11 rounded-2xl border text-[13px] font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                      chainSide === side
+                        ? "border-accent bg-accent text-white"
+                        : errors.chainSide
+                          ? "border-red-300 bg-red-50 text-red-600"
+                          : "border-border bg-white text-zinc-600 hover:bg-surface"
+                    }`}
+                  >
+                    {side === "left" ? "← Left" : "Right →"}
+                  </button>
+                ))}
+              </div>
+              {errors.chainSide && (
+                <p className="text-xs text-red-500">{errors.chainSide}</p>
+              )}
             </div>
-          </div>
 
-          {/* Wand & Chain */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-              Wand &amp; Chain <span className="text-red-500">*</span>
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {([30, 40, 50] as WandChain[]).map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => setWandChain(size)}
-                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
-                    wandChain === size
-                      ? "border-accent bg-accent text-white"
-                      : errors.wandChain
-                        ? "border-red-300 bg-red-50 text-red-600"
-                        : "border-border bg-white text-zinc-600 hover:bg-surface"
-                  }`}
-                >
-                  {size}&quot;
-                </button>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Wand &amp; Chain <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([30, 40, 50] as WandChain[]).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => setWandChain(size)}
+                    className={`h-11 rounded-2xl border text-[13px] font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                      wandChain === size
+                        ? "border-accent bg-accent text-white"
+                        : errors.wandChain
+                          ? "border-red-300 bg-red-50 text-red-600"
+                          : "border-border bg-white text-zinc-600 hover:bg-surface"
+                    }`}
+                  >
+                    {size}&quot;
+                  </button>
+                ))}
+              </div>
+              {errors.wandChain && (
+                <p className="text-xs text-red-500">{errors.wandChain}</p>
+              )}
             </div>
-            {errors.wandChain && (
-              <p className="text-xs text-red-500">{errors.wandChain}</p>
-            )}
           </div>
 
           {/* Fabric Adjustment */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
               Fabric Adjustment
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -639,7 +642,7 @@ export function WindowForm({
                     setFabricAdjustmentSide(opt);
                     if (opt === "none") setFabricAdjustmentInches("");
                   }}
-                  className={`h-12 rounded-2xl border text-sm font-semibold tracking-tight transition-all active:scale-[0.97] ${
+                  className={`h-11 rounded-2xl border text-[13px] font-semibold tracking-tight transition-all active:scale-[0.97] ${
                     fabricAdjustmentSide === opt
                       ? "border-accent bg-accent text-white"
                       : "border-border bg-white text-zinc-600 hover:bg-surface"
@@ -668,13 +671,13 @@ export function WindowForm({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-1">
+          <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-0.5">
             Pre-bracketing Photo
             {riskFlag !== "green" && <span className="text-red-500 ml-1">*</span>}
           </h2>
-          <p className="text-[11px] text-zinc-400 mb-3">
-            {riskFlag === "green" 
-              ? "Optional for green status windows." 
+          <p className="text-[11px] text-zinc-400 mb-2">
+            {riskFlag === "green"
+              ? "Optional for green status windows."
               : "Required for yellow or red risk indicators."}
           </p>
           {photoPreview ? (
@@ -732,7 +735,7 @@ export function WindowForm({
             <button
               type="button"
               onClick={() => setPhotoPickerOpen(true)}
-              className={`w-full h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors active:scale-[0.99] ${
+              className={`w-full h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors active:scale-[0.99] ${
                 errors.photo
                   ? "border-red-300 bg-red-50"
                   : "border-zinc-300 bg-white hover:border-accent/40 hover:bg-accent/3"
@@ -775,7 +778,7 @@ export function WindowForm({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.20, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-1 flex items-center justify-between">
+              <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-1 flex items-center justify-between">
                 <span>All Measured Photos</span>
                 <span className="font-normal normal-case text-zinc-400">
                   {additionalPhotos.length}/{MAX_MEASURED_PHOTOS}
@@ -864,7 +867,7 @@ export function WindowForm({
           />
         </motion.div>
 
-        <div className="pt-2 pb-24 flex flex-col gap-3">
+        <div className="pt-2 pb-24 flex flex-col gap-2.5">
           <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>
             <UploadSimple size={18} weight="bold" />
             {optimizingPhoto
@@ -874,68 +877,71 @@ export function WindowForm({
               : "Save Window & Back to Room"}
           </Button>
 
-          <Button
-            type="button"
-            fullWidth
-            size="lg"
-            variant="secondary"
-            disabled={pending || optimizingPhoto}
-            onClick={() => {
-              addAnotherRef.current = true;
-              formRef.current?.requestSubmit();
-            }}
-          >
-            {pending && addAnotherRef.current ? "Saving…" : "Save & Add Another Window"}
-          </Button>
-
-          {existingWindow?.measured && (
+          {/* Secondary actions row — compact */}
+          <div className={existingWindow?.measured ? "grid grid-cols-2 gap-2" : ""}>
             <Button
               type="button"
               fullWidth
-              size="lg"
+              size="md"
               variant="secondary"
-              disabled={pending || optimizingPhoto || undoing}
-              onClick={async () => {
-                const willAlsoRemoveInstalled = existingWindow.installed;
-                const msg = willAlsoRemoveInstalled
-                  ? "Undo Measured? This will also remove the Installed stage."
-                  : "Undo Measured? This will mark the window as not yet measured.";
-                if (!window.confirm(msg)) return;
-                setUndoing(true);
-                try {
-                  const result = await undoWindowStage(existingWindow.id, "measured");
-                  if (result.ok) {
-                    datasetCtx?.patchData((prev) =>
-                      reconcileUnitDerivedState(
-                        {
-                          ...prev,
-                          windows: prev.windows.map((w) =>
-                            w.id === existingWindow.id
-                              ? { ...w, measured: false, installed: false }
-                              : w
-                          ),
-                        },
-                        unit.id,
-                        { unitStatus: result.unitStatus }
-                      )
-                    );
-                  } else {
-                    alert(`Failed to undo: ${result.error}`);
-                  }
-                } finally {
-                  setUndoing(false);
-                }
+              disabled={pending || optimizingPhoto}
+              onClick={() => {
+                addAnotherRef.current = true;
+                formRef.current?.requestSubmit();
               }}
             >
-              {undoing ? "Undoing…" : "Undo Measured"}
+              {pending && addAnotherRef.current ? "Saving…" : "Save & Add Another"}
             </Button>
-          )}
+
+            {existingWindow?.measured && (
+              <Button
+                type="button"
+                fullWidth
+                size="md"
+                variant="secondary"
+                disabled={pending || optimizingPhoto || undoing}
+                onClick={async () => {
+                  const willAlsoRemoveInstalled = existingWindow.installed;
+                  const msg = willAlsoRemoveInstalled
+                    ? "Undo Measured? This will also remove the Installed stage."
+                    : "Undo Measured? This will mark the window as not yet measured.";
+                  if (!window.confirm(msg)) return;
+                  setUndoing(true);
+                  try {
+                    const result = await undoWindowStage(existingWindow.id, "measured");
+                    if (result.ok) {
+                      datasetCtx?.patchData((prev) =>
+                        reconcileUnitDerivedState(
+                          {
+                            ...prev,
+                            windows: prev.windows.map((w) =>
+                              w.id === existingWindow.id
+                                ? { ...w, measured: false, installed: false }
+                                : w
+                            ),
+                          },
+                          unit.id,
+                          { unitStatus: result.unitStatus }
+                        )
+                      );
+                    } else {
+                      alert(`Failed to undo: ${result.error}`);
+                    }
+                  } finally {
+                    setUndoing(false);
+                  }
+                }}
+              >
+                {undoing ? "Undoing…" : "Undo Measured"}
+              </Button>
+            )}
+          </div>
 
           {existingWindow && (
             <Button
               type="button"
               fullWidth
-              size="lg"
+              size="md"
               variant="danger"
               disabled={pending || optimizingPhoto}
               onClick={async () => {
