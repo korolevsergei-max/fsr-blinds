@@ -151,7 +151,7 @@ export function DateInput({
   const today = new Date();
 
   const baseTriggerClass = compact
-    ? "inline-flex min-w-[12rem] items-center gap-2 rounded-md px-1 py-0.5 text-left text-[13px] font-medium focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+    ? "inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left text-[13px] font-medium focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
     : "flex h-[3.25rem] w-full items-center justify-between rounded-[var(--radius-lg)] border bg-card px-4 text-left text-[15px] transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] focus:outline-none focus:ring-[3px] disabled:opacity-50";
 
   const triggerTone = compact

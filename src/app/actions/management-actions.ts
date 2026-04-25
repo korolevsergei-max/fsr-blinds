@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOwner } from "@/lib/auth";
@@ -14,6 +15,7 @@ import {
 } from "@/app/actions/revalidation";
 import {
   NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
+  NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
   NOTIF_COMPLETE_BY_DATE_CHANGED,
 } from "@/lib/notification-types";
 import {
@@ -568,7 +570,15 @@ export async function updateUnitCompleteByDate(
 export async function bulkImportUnits(
   buildingId: string,
   clientId: string,
-  rows: { unitNumber: string; earliestBracketing: string; earliestInstallation: string; occupancyDate: string }[]
+  rows: {
+    unitNumber: string;
+    earliestBracketing: string;
+    earliestInstallation: string;
+    occupancyDate: string;
+    completeByDate: string | null;
+    schedulerId: string | null;
+    installerId: string | null;
+  }[]
 ): Promise<{ created: number; skipped: number; errors: string[] }> {
   const owner = await requireOwner();
   const supabase = await createClient();
@@ -589,20 +599,67 @@ export async function bulkImportUnits(
     .select("unit_number")
     .eq("building_id", buildingId);
   const existingNumbers = new Set((existing ?? []).map((u) => u.unit_number));
+  const schedulerIds = Array.from(new Set(rows.map((row) => row.schedulerId).filter(Boolean))) as string[];
+  const installerIds = Array.from(new Set(rows.map((row) => row.installerId).filter(Boolean))) as string[];
+  const schedulerMap = new Map<string, { id: string; name: string }>();
+  const installerMap = new Map<string, { id: string; name: string; scheduler_id: string | null }>();
+
+  if (schedulerIds.length > 0) {
+    const { data: schedulers, error: schedulersError } = await supabase
+      .from("schedulers")
+      .select("id, name")
+      .in("id", schedulerIds);
+    if (schedulersError) return { created: 0, skipped: 0, errors: [schedulersError.message] };
+    for (const scheduler of schedulers ?? []) {
+      schedulerMap.set(scheduler.id, scheduler);
+    }
+  }
+
+  if (installerIds.length > 0) {
+    const { data: installers, error: installersError } = await supabase
+      .from("installers")
+      .select("id, name, scheduler_id")
+      .in("id", installerIds);
+    if (installersError) return { created: 0, skipped: 0, errors: [installersError.message] };
+    for (const installer of installers ?? []) {
+      installerMap.set(installer.id, installer);
+    }
+  }
 
   let created = 0;
   let skipped = 0;
   const errors: string[] = [];
+  const schedulerNotifications: Array<{ unitId: string; schedulerId: string }> = [];
+  const installerNotifications: Array<{ unitId: string; installerId: string }> = [];
 
   for (const row of rows) {
-    if (!row.unitNumber.trim()) {
+    const unitNumber = row.unitNumber.trim();
+    if (!unitNumber) {
       skipped++;
       continue;
     }
-    if (existingNumbers.has(row.unitNumber.trim())) {
+    if (existingNumbers.has(unitNumber)) {
       skipped++;
       continue;
     }
+    if (!row.completeByDate) {
+      errors.push(`${unitNumber}: Complete-by date is required.`);
+      continue;
+    }
+
+    const scheduler = row.schedulerId ? schedulerMap.get(row.schedulerId) : null;
+    if (row.schedulerId && !scheduler) {
+      errors.push(`${unitNumber}: Selected scheduler no longer exists.`);
+      continue;
+    }
+
+    const installer = row.installerId ? installerMap.get(row.installerId) : null;
+    if (row.installerId && !installer) {
+      errors.push(`${unitNumber}: Selected installer no longer exists.`);
+      continue;
+    }
+
+    const schedulerIdToAssign = scheduler?.id ?? installer?.scheduler_id ?? null;
 
     const unitId = `unit-${crypto.randomUUID().slice(0, 8)}`;
     const { error } = await supabase.from("units").insert({
@@ -611,12 +668,15 @@ export async function bulkImportUnits(
       client_id: clientId,
       client_name: client?.name ?? "",
       building_name: building?.name ?? "",
-      unit_number: row.unitNumber.trim(),
+      unit_number: unitNumber,
       status: "not_started",
       risk_flag: "green",
+      assigned_installer_id: installer?.id ?? null,
+      assigned_installer_name: installer?.name ?? null,
       earliest_bracketing_date: row.earliestBracketing || null,
       earliest_installation_date: row.earliestInstallation || null,
       occupancy_date: row.occupancyDate || null,
+      complete_by_date: row.completeByDate,
       room_count: 0,
       window_count: 0,
       photos_uploaded: 0,
@@ -629,13 +689,40 @@ export async function bulkImportUnits(
     }
 
     await logUnitActivity(supabase, unitId, owner.role, owner.displayName, "unit_created", {
-      unitNumber: row.unitNumber.trim(),
+      unitNumber,
+      completeByDate: row.completeByDate,
+      ...(schedulerIdToAssign ? { scheduler: scheduler?.name ?? "Coordinator scheduler" } : {}),
+      ...(installer ? { installer: installer.name } : {}),
     });
+
+    if (schedulerIdToAssign) {
+      const { error: assignmentError } = await supabase
+        .from("scheduler_unit_assignments")
+        .upsert(
+          {
+            id: `sua-${unitId}`,
+            unit_id: unitId,
+            scheduler_id: schedulerIdToAssign,
+            assigned_at: new Date().toISOString(),
+          },
+          { onConflict: "unit_id" }
+        );
+
+      if (assignmentError) {
+        errors.push(`${unitNumber}: ${assignmentError.message}`);
+      } else {
+        schedulerNotifications.push({ unitId, schedulerId: schedulerIdToAssign });
+      }
+    }
+
+    if (installer) {
+      installerNotifications.push({ unitId, installerId: installer.id });
+    }
 
     await supabase.from("schedule_entries").insert({
       id: `sch-${crypto.randomUUID().slice(0, 8)}`,
       unit_id: unitId,
-      unit_number: row.unitNumber.trim(),
+      unit_number: unitNumber,
       building_name: building?.name ?? "",
       client_name: client?.name ?? "",
       owner_user_id: owner.id,
@@ -647,8 +734,38 @@ export async function bulkImportUnits(
     });
 
     created++;
-    existingNumbers.add(row.unitNumber.trim());
+    existingNumbers.add(unitNumber);
   }
+
+  after(async () => {
+    for (const notification of schedulerNotifications) {
+      const context = await loadUnitNotificationContext(notification.unitId);
+      await emitNotification({
+        recipientRole: "scheduler",
+        recipientId: notification.schedulerId,
+        type: NOTIF_UNIT_ASSIGNED_TO_SCHEDULER,
+        title: "Unit added to your queue",
+        body: context
+          ? buildUnitAssignedNotificationBody(context, owner.displayName)
+          : `Assigned by ${owner.displayName}`,
+        relatedUnitId: notification.unitId,
+      });
+    }
+
+    for (const notification of installerNotifications) {
+      const context = await loadUnitNotificationContext(notification.unitId);
+      await emitNotification({
+        recipientRole: "installer",
+        recipientId: notification.installerId,
+        type: NOTIF_UNIT_ASSIGNED_TO_INSTALLER,
+        title: "Unit added to your queue",
+        body: context
+          ? buildUnitAssignedNotificationBody(context, owner.displayName)
+          : `Assigned by ${owner.displayName}`,
+        relatedUnitId: notification.unitId,
+      });
+    }
+  });
 
   revalidateBuildingRoutes(buildingId, clientId);
   return { created, skipped, errors };

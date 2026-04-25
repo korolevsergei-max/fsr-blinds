@@ -136,6 +136,7 @@ function groupUnits(items: ManufacturingWindowItem[]) {
         buildingName: item.buildingName,
         clientName: item.clientName,
         installationDate: item.installationDate,
+        completeByDate: null,
         scheduledCount: 1,
         blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
       });

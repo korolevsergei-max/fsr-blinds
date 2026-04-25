@@ -63,6 +63,7 @@ type UnitRow = {
   building_name: string;
   client_name: string;
   installation_date: string | null;
+  complete_by_date: string | null;
   status: string;
 };
 
@@ -156,6 +157,7 @@ export interface ManufacturingUnitCard {
   buildingName: string;
   clientName: string;
   installationDate: string | null;
+  completeByDate: string | null;
   scheduledCount: number;
   blindTypeGroups: Array<{
     blindType: BlindType;
@@ -701,7 +703,7 @@ export async function loadManufacturingRoleSchedule(
     unitIds.length > 0
       ? supabase
           .from("units")
-          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, status")
+          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
           .in("id", unitIds)
       : Promise.resolve({ data: [] as UnitRow[] }),
     windowIds.length > 0
@@ -895,6 +897,7 @@ export async function loadManufacturingRoleSchedule(
           buildingName: item.buildingName,
           clientName: item.clientName,
           installationDate: item.installationDate,
+          completeByDate: unitsById.get(item.unitId)?.complete_by_date ?? null,
           scheduledCount: 1,
           blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
         });
@@ -939,6 +942,10 @@ export async function loadManufacturingRoleSchedule(
         const aReady = countQueueReadyWindows(role, aWindows);
         const bReady = countQueueReadyWindows(role, bWindows);
         if (aReady !== bReady) return bReady - aReady;
+
+        const aDate = a.installationDate ?? a.completeByDate ?? "9999-12-31";
+        const bDate = b.installationDate ?? b.completeByDate ?? "9999-12-31";
+        if (aDate !== bDate) return aDate.localeCompare(bDate);
 
         return a.unitNumber.localeCompare(b.unitNumber);
       });

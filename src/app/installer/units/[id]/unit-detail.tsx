@@ -133,6 +133,72 @@ function buildLogDescription(log: UnitActivityLog): string {
   return "";
 }
 
+function MilestoneDateCard({
+  label,
+  scheduledDate,
+  completedDate,
+  isCompleted,
+  isPastDue,
+}: {
+  label: string;
+  scheduledDate: string;
+  completedDate: string;
+  isCompleted: boolean;
+  isPastDue: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-[var(--radius-lg)] border px-3 py-2.5 ${
+        isPastDue ? "border-red-200 bg-red-50" : "border-border bg-white"
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p
+          className={`text-[9px] font-bold uppercase tracking-[0.12em] ${
+            isPastDue ? "text-red-600" : "text-muted"
+          }`}
+        >
+          {label}
+        </p>
+        {isPastDue && (
+          <WarningCircle
+            size={14}
+            weight="fill"
+            className="shrink-0 text-red-600"
+            aria-label="Overdue"
+          />
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div>
+          <p className="text-[9px] text-muted uppercase tracking-[0.1em] font-medium">
+            Scheduled
+          </p>
+          <p
+            className={`mt-0.5 text-[12px] font-semibold leading-tight ${
+              isPastDue ? "text-red-700" : "text-foreground"
+            }`}
+          >
+            {scheduledDate}
+          </p>
+        </div>
+        <div>
+          <p className="text-[9px] text-muted uppercase tracking-[0.1em] font-medium">
+            Completed
+          </p>
+          <p
+            className={`mt-0.5 text-[12px] font-semibold leading-tight ${
+              isCompleted ? "text-accent" : "text-foreground"
+            }`}
+          >
+            {completedDate}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function UnitDetail({
   data,
   mediaItems,
@@ -243,196 +309,29 @@ export function UnitDetail({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-2 gap-2"
         >
-          <CompleteByHighlightCard completeByDate={unit.completeByDate} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-1 gap-3"
-        >
-          {/* Measurement milestone */}
-          <div
-            className={`rounded-2xl border px-4 py-3 ${
-              measurementPastDue
-                ? "border-red-200 bg-red-50"
-                : "border-border bg-white"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p className={`text-[10px] font-bold uppercase tracking-[0.12em] ${measurementPastDue ? "text-red-600" : "text-muted"}`}>
-                Measurement
-              </p>
-              {measurementPastDue && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                  <WarningCircle size={12} weight="fill" />
-                  Overdue
-                </span>
-              )}
-            </div>
-            <div className="flex items-start gap-6">
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
-                <p className={`mt-0.5 text-sm font-semibold ${measurementPastDue ? "text-red-700" : "text-foreground"}`}>
-                  {formatDate(unit.measurementDate)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                <p
-                  className={`mt-0.5 text-sm font-semibold ${
-                    milestones.allMeasured && milestones.measuredCompletedAt
-                      ? "text-accent"
-                      : "text-foreground"
-                  }`}
-                >
-                  {milestones.allMeasured
-                    ? formatDate(milestones.measuredCompletedAt)
-                    : "Not set"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bracketing milestone */}
-          <div
-            className={`rounded-2xl border px-4 py-3 ${
-              bracketingPastDue
-                ? "border-red-200 bg-red-50"
-                : "border-border bg-white"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p
-                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-                  bracketingPastDue ? "text-red-600" : "text-muted"
-                }`}
-              >
-                Bracketing
-              </p>
-              {bracketingPastDue && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                  <WarningCircle size={12} weight="fill" />
-                  Overdue
-                </span>
-              )}
-            </div>
-            <div className="flex items-start gap-6">
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
-                <p className={`mt-0.5 text-sm font-semibold ${bracketingPastDue ? "text-red-700" : "text-foreground"}`}>
-                  {formatDate(unit.bracketingDate)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                <p
-                  className={`mt-0.5 text-sm font-semibold ${
-                    milestones.allBracketed && milestones.bracketedCompletedAt
-                      ? "text-accent"
-                      : "text-foreground"
-                  }`}
-                >
-                  {milestones.allBracketed
-                    ? formatDate(milestones.bracketedCompletedAt)
-                    : "Not set"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Installation milestone */}
-          <div
-            className={`rounded-2xl border px-4 py-3 ${
-              installationPastDue
-                ? "border-red-200 bg-red-50"
-                : "border-border bg-white"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p
-                className={`text-[10px] font-bold uppercase tracking-[0.12em] ${
-                  installationPastDue ? "text-red-600" : "text-muted"
-                }`}
-              >
-                Installation
-              </p>
-              {installationPastDue && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                  <WarningCircle size={12} weight="fill" />
-                  Overdue
-                </span>
-              )}
-            </div>
-            <div className="flex items-start gap-6">
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Scheduled</p>
-                <p className={`mt-0.5 text-sm font-semibold ${installationPastDue ? "text-red-700" : "text-foreground"}`}>
-                  {formatDate(unit.installationDate)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted uppercase tracking-[0.1em] font-medium">Completed</p>
-                <p
-                  className={`mt-0.5 text-sm font-semibold ${
-                    milestones.allInstalled && milestones.installedCompletedAt
-                      ? "text-accent"
-                      : "text-foreground"
-                  }`}
-                >
-                  {milestones.allInstalled
-                    ? formatDate(milestones.installedCompletedAt)
-                    : "Not set"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Stats Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 gap-3"
-        >
-          <MetricTile value={unit.roomCount} label="Rooms" />
-          <MetricTile value={unit.windowCount} label="Windows" />
-          <MetricTile value={displayPhotoCount} label="Photos" />
-          <MetricTile value={escalationCount} label="Escalations" />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.13, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <UnitEscalationsPanel escalations={escalations} />
-        </motion.div>
-
-        {/* Progress milestones */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-5"
-        >
-          <UnitProgressMilestonesPanel
-            unit={unit}
-            milestones={milestones}
-            layout="detail"
-            density="comfortable"
-            title="Installation progress"
-            mediaViewerSlot={
-              <UnitStageMediaViewer
-                items={mediaItems}
-                milestones={milestones}
-                rooms={rooms}
-                windows={unitWindows}
-              />
-            }
+          <CompleteByHighlightCard completeByDate={unit.completeByDate} compact />
+          <MilestoneDateCard
+            label="Measurement"
+            scheduledDate={formatDate(unit.measurementDate)}
+            completedDate={milestones.allMeasured ? formatDate(milestones.measuredCompletedAt) : "Not set"}
+            isCompleted={Boolean(milestones.allMeasured && milestones.measuredCompletedAt)}
+            isPastDue={measurementPastDue}
+          />
+          <MilestoneDateCard
+            label="Bracketing"
+            scheduledDate={formatDate(unit.bracketingDate)}
+            completedDate={milestones.allBracketed ? formatDate(milestones.bracketedCompletedAt) : "Not set"}
+            isCompleted={Boolean(milestones.allBracketed && milestones.bracketedCompletedAt)}
+            isPastDue={bracketingPastDue}
+          />
+          <MilestoneDateCard
+            label="Installation"
+            scheduledDate={formatDate(unit.installationDate)}
+            completedDate={milestones.allInstalled ? formatDate(milestones.installedCompletedAt) : "Not set"}
+            isCompleted={Boolean(milestones.allInstalled && milestones.installedCompletedAt)}
+            isPastDue={installationPastDue}
           />
         </motion.div>
 
@@ -441,7 +340,7 @@ export function UnitDetail({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
             <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
               Rooms
@@ -477,6 +376,51 @@ export function UnitDetail({
             </div>
           </motion.div>
         )}
+
+        {/* Stats Grid */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="grid grid-cols-2 gap-2"
+        >
+          <MetricTile value={unit.roomCount} label="Rooms" compact />
+          <MetricTile value={unit.windowCount} label="Windows" compact />
+          <MetricTile value={displayPhotoCount} label="Photos" compact />
+          <MetricTile value={escalationCount} label="Escalations" compact />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <UnitEscalationsPanel escalations={escalations} />
+        </motion.div>
+
+        {/* Progress milestones */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="surface-card p-5"
+        >
+          <UnitProgressMilestonesPanel
+            unit={unit}
+            milestones={milestones}
+            layout="detail"
+            density="comfortable"
+            title="Installation progress"
+            mediaViewerSlot={
+              <UnitStageMediaViewer
+                items={mediaItems}
+                milestones={milestones}
+                rooms={rooms}
+                windows={unitWindows}
+              />
+            }
+          />
+        </motion.div>
 
         {/* Architectural note */}
         {unit.notesCount > 0 && (

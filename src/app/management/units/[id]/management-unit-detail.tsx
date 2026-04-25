@@ -70,6 +70,38 @@ const ACTOR_COLORS: Record<string, string> = {
   system: "bg-zinc-50 border-zinc-100",
 };
 
+const APP_TIME_ZONE = "America/Toronto";
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function getDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: true,
+  }).formatToParts(date);
+
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    year: value("year"),
+    monthIndex: Number(value("month")) - 1,
+    day: value("day"),
+    hour: value("hour").padStart(2, "0"),
+    minute: value("minute").padStart(2, "0"),
+    dayPeriod: value("dayPeriod").toUpperCase(),
+  };
+}
+
+function formatDateOnly(date: Date): string {
+  const parts = getDateParts(date);
+  return `${SHORT_MONTHS[parts.monthIndex] ?? ""} ${parts.day}, ${parts.year}`;
+}
+
 function formatRelative(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -81,18 +113,13 @@ function formatRelative(dateStr: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffH < 24) return `${diffH}h ago`;
   if (diffD < 7) return `${diffD}d ago`;
-  return date.toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  return formatDateOnly(date);
 }
 
 function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString("en-CA", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const parts = getDateParts(date);
+  return `${SHORT_MONTHS[parts.monthIndex] ?? ""} ${parts.day}, ${parts.year} at ${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
 }
 
 const LEGACY_STATUS_LABELS: Record<string, string> = {
