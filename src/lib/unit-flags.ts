@@ -1,4 +1,4 @@
-import { parseStoredDate } from "./created-date";
+import { parseStoredDate } from "./created-date.ts";
 import type { Unit, UnitStatus } from "./types";
 
 export type UnitFlag =

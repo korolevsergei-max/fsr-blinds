@@ -18,6 +18,7 @@ function createItem(windowId: string): ManufacturingWindowItem {
     buildingName: "Building One",
     clientName: "Client One",
     installationDate: "2026-05-01",
+    completeByDate: "2026-05-01",
     targetReadyDate: "2026-04-28",
     roomName: "Living",
     label: windowId.toUpperCase(),

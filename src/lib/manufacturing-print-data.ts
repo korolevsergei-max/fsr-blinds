@@ -20,6 +20,7 @@ type UnitRow = {
   building_name: string;
   client_name: string;
   installation_date: string | null;
+  complete_by_date: string | null;
 };
 
 type WindowRow = {
@@ -93,7 +94,7 @@ export async function loadWindowsForPrint(
     unitIds.length > 0
       ? supabase
           .from("units")
-          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date")
+          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date")
           .in("id", unitIds)
       : Promise.resolve({ data: [] as UnitRow[] }),
     roomIds.length > 0
@@ -130,6 +131,7 @@ export async function loadWindowsForPrint(
       buildingName: unit.building_name,
       clientName: unit.client_name,
       installationDate: unit.installation_date,
+      completeByDate: unit.complete_by_date,
       targetReadyDate: schedule.target_ready_date,
       roomName,
       label: win.label,

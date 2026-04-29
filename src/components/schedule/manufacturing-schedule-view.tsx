@@ -35,6 +35,16 @@ function formatMeasurement(item: ManufacturingWindowItem) {
   return `${item.width ?? "—"} × ${item.height ?? "—"}${item.depth != null ? ` × ${item.depth}` : ""}`;
 }
 
+function formatUnitDueDate(unit: ManufacturingRoleSchedule["buckets"][number]["units"][number]) {
+  if (unit.installationDate) {
+    return `Install ${formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}`;
+  }
+  if (unit.completeByDate) {
+    return `Complete by ${formatStoredDateLongEnglish(unit.completeByDate) ?? unit.completeByDate}`;
+  }
+  return null;
+}
+
 function renderUnitCard(
   unit: ManufacturingRoleSchedule["buckets"][number]["units"][number],
   role: ManufacturingRole,
@@ -42,6 +52,8 @@ function renderUnitCard(
   router: ReturnType<typeof useRouter>,
   metaLabel?: string
 ) {
+  const dueDateLabel = formatUnitDueDate(unit);
+
   return (
     <div
       key={`${role}-${unit.unitId}-${metaLabel ?? "dated"}`}
@@ -62,11 +74,7 @@ function renderUnitCard(
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">
             <span>{unit.scheduledCount} blinds</span>
-            {unit.installationDate && (
-              <span>
-                Install {formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}
-              </span>
-            )}
+            {dueDateLabel && <span>{dueDateLabel}</span>}
           </div>
         </div>
       </button>
@@ -136,7 +144,7 @@ function groupUnits(items: ManufacturingWindowItem[]) {
         buildingName: item.buildingName,
         clientName: item.clientName,
         installationDate: item.installationDate,
-        completeByDate: null,
+        completeByDate: item.completeByDate,
         scheduledCount: 1,
         blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
       });
@@ -291,7 +299,7 @@ export function ManufacturingScheduleView({
           onChange={setBuildingFilter}
         />
         <FilterDropdown
-          label="Installation Date"
+          label="Due Date"
           value={installDateFilter}
           options={installDateOptions}
           onChange={(value) => setInstallDateFilter(value as ScheduleInstallDateFilter)}

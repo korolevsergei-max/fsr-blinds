@@ -64,9 +64,15 @@ function getBucketKey(bucket: { date: string | null; label: string }) {
   return bucket.date ?? `__${bucket.label}__`;
 }
 
-function formatInstallDate(date: string | null) {
+function getManufacturingDueDate(item: Pick<ManufacturingWindowItem, "installationDate" | "completeByDate">) {
+  return item.installationDate ?? item.completeByDate ?? null;
+}
+
+function formatDueDate(item: Pick<ManufacturingWindowItem, "installationDate" | "completeByDate">) {
+  const date = getManufacturingDueDate(item);
   const label = formatStoredDateLongEnglish(date);
-  return label ? `Install ${label}` : null;
+  if (!label) return null;
+  return item.installationDate ? `Install ${label}` : `Complete by ${label}`;
 }
 
 function formatReadyDate(date: string | null) {
@@ -115,7 +121,7 @@ const SORT_FIELD_LABELS: Record<SortField, string> = {
   unitNumber: "Unit Number",
   buildingName: "Building",
   floor: "Floor",
-  installationDate: "Installation Date",
+  installationDate: "Due Date",
   completionDate: "Completion Date",
   blindType: "Fabric Type",
   fabricWidth: "Fabric Width",
@@ -149,7 +155,7 @@ function getSortValue(item: ManufacturingWindowItem, field: SortField, role: "cu
       const n = Number(f);
       return Number.isFinite(n) ? n : f;
     }
-    case "installationDate": return item.installationDate ?? null;
+    case "installationDate": return getManufacturingDueDate(item);
     case "completionDate": return getCompletionTimestamp(item, role);
     case "blindType": return item.blindType;
     case "fabricWidth": return computeFabricWidth(item);
@@ -222,7 +228,10 @@ function matchesQueueStatusFilter(args: {
   return statusFilters.some((filter) => {
     if (filter === "returned") return isReturnedToRole(item, role);
     if (filter === "issues") return item.issueStatus === "open";
-    if (filter === "overdue") return Boolean(item.installationDate && item.installationDate < todayKey);
+    if (filter === "overdue") {
+      const dueDate = getManufacturingDueDate(item);
+      return Boolean(dueDate && dueDate < todayKey);
+    }
     if (filter === "today") return bucketDate === todayKey;
     if (filter === "next_day") return bucketLabel === "Next Working Day";
     return bucketLabel === "Unscheduled";
@@ -462,7 +471,7 @@ export function ManufacturingRoleQueue({
   ];
 
   const availableInstallDates = new Set(
-    localSchedule.allItems.map((item) => item.installationDate).filter((d): d is string => d != null)
+    localSchedule.allItems.map((item) => getManufacturingDueDate(item)).filter((d): d is string => d != null)
   );
 
   const availableCompletionDates = new Set(
@@ -588,10 +597,11 @@ export function ManufacturingRoleQueue({
             if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
             if (floorFilter.length > 0 && !floorFilter.includes(getFloor(item.unitNumber))) continue;
             if (installDates.length > 0) {
+              const dueDate = getManufacturingDueDate(item);
               const wantsNotSet = installDates.includes(NOT_SET_SENTINEL);
               const specificDates = installDates.filter((d) => d !== NOT_SET_SENTINEL);
-              const matchesNotSet = wantsNotSet && item.installationDate == null;
-              const matchesDate = item.installationDate != null && specificDates.includes(item.installationDate);
+              const matchesNotSet = wantsNotSet && dueDate == null;
+              const matchesDate = dueDate != null && specificDates.includes(dueDate);
               if (!matchesNotSet && !matchesDate) continue;
             }
             if (completionDates.length > 0) {
@@ -850,6 +860,7 @@ export function ManufacturingRoleQueue({
             onChange={setFloorFilter}
           />
           <InstallDateCalendarFilter
+            label="Due Date"
             selectedDates={installDates}
             onChange={setInstallDates}
             availableDates={availableInstallDates}
@@ -953,6 +964,7 @@ export function ManufacturingRoleQueue({
                   {bucket.windows.map((item) => {
                     const busy = isPending && busyWindowId === item.windowId;
                     const returnedToRole = isReturnedToRole(item, role);
+                    const dueDateLabel = formatDueDate(item);
                     return (
                       <article
                         key={item.windowId}
@@ -988,9 +1000,7 @@ export function ManufacturingRoleQueue({
                               )}
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
-                              {item.installationDate && (
-                                <span>{formatInstallDate(item.installationDate)}</span>
-                              )}
+                              {dueDateLabel && <span>{dueDateLabel}</span>}
                             </div>
                           </div>
                         </button>

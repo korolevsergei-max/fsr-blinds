@@ -1,7 +1,7 @@
-import type { AppDataset } from "@/lib/app-dataset";
-import type { ManufacturingRoleSchedule, ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
-import type { ScheduleEntry, Unit } from "@/lib/types";
-import { computeUnitFlags } from "@/lib/unit-flags";
+import type { AppDataset } from "./app-dataset";
+import type { ManufacturingRoleSchedule, ManufacturingWindowItem } from "./manufacturing-scheduler";
+import type { ScheduleEntry, Unit } from "./types";
+import { computeUnitFlags } from "./unit-flags.ts";
 import {
   formatDateKey,
   getScopeInterval,
@@ -9,7 +9,7 @@ import {
   matchesInstallDateFilter,
   type ScheduleInstallDateFilter,
   type ScheduleScope,
-} from "@/lib/schedule-ui";
+} from "./schedule-ui.ts";
 
 export interface InstallationSummary {
   scheduled: number;
@@ -134,7 +134,8 @@ export type ManufacturingDashboardCategory =
   | "today"
   | "returned"
   | "at_risk"
-  | "behind";
+  | "behind"
+  | "unscheduled";
 
 export interface ManufacturingDashboardUnitCard {
   unitId: string;
@@ -142,6 +143,7 @@ export interface ManufacturingDashboardUnitCard {
   buildingName: string;
   clientName: string;
   installationDate: string | null;
+  completeByDate: string | null;
   scheduledCount: number;
   blindTypeGroups: Array<{
     blindType: ManufacturingWindowItem["blindType"];
@@ -200,9 +202,13 @@ function compareNullableDate(a: string | null, b: string | null) {
   return a.localeCompare(b);
 }
 
+function getManufacturingDueDate(item: Pick<ManufacturingWindowItem, "installationDate" | "completeByDate">) {
+  return item.installationDate ?? item.completeByDate ?? null;
+}
+
 function compareDashboardItems(a: ManufacturingWindowItem, b: ManufacturingWindowItem) {
-  const installCompare = compareNullableDate(a.installationDate, b.installationDate);
-  if (installCompare !== 0) return installCompare;
+  const dueCompare = compareNullableDate(getManufacturingDueDate(a), getManufacturingDueDate(b));
+  if (dueCompare !== 0) return dueCompare;
 
   const readyCompare = compareNullableDate(a.targetReadyDate, b.targetReadyDate);
   if (readyCompare !== 0) return readyCompare;
@@ -228,6 +234,7 @@ function groupDashboardUnits(items: ManufacturingWindowItem[]): ManufacturingDas
         buildingName: item.buildingName,
         clientName: item.clientName,
         installationDate: item.installationDate,
+        completeByDate: item.completeByDate,
         scheduledCount: 1,
         blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
       });
@@ -254,23 +261,27 @@ function groupDashboardUnits(items: ManufacturingWindowItem[]): ManufacturingDas
         .sort((a, b) => a.blindType.localeCompare(b.blindType)),
     }))
     .sort((a, b) => {
-      const installCompare = compareNullableDate(a.installationDate, b.installationDate);
-      if (installCompare !== 0) return installCompare;
+      const dueCompare = compareNullableDate(
+        a.installationDate ?? a.completeByDate,
+        b.installationDate ?? b.completeByDate
+      );
+      if (dueCompare !== 0) return dueCompare;
       return a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
     });
 }
 
-function getDaysUntilInstall(installationDate: string | null, todayKey: string) {
-  if (!installationDate) return null;
-  const install = new Date(`${installationDate}T00:00:00`).getTime();
+function getDaysUntilDue(dueDate: string | null, todayKey: string) {
+  if (!dueDate) return null;
+  const due = new Date(`${dueDate}T00:00:00`).getTime();
   const today = new Date(`${todayKey}T00:00:00`).getTime();
-  return Math.floor((install - today) / (1000 * 60 * 60 * 24));
+  return Math.floor((due - today) / (1000 * 60 * 60 * 24));
 }
 
 function getManufacturingDashboardCategory(
   item: ManufacturingWindowItem,
   role: "cutter" | "assembler" | "qc",
-  currentWorkDate: string
+  currentWorkDate: string,
+  earliestScheduledDate?: string
 ): ManufacturingDashboardCategory | null {
   if (!isVisibleForManufacturingRole(item, role)) return null;
 
@@ -278,17 +289,22 @@ function getManufacturingDashboardCategory(
     return "returned";
   }
 
-  const daysUntilInstall = getDaysUntilInstall(item.installationDate, currentWorkDate);
-  if (daysUntilInstall !== null && daysUntilInstall <= 0) {
+  const dueDate = getManufacturingDueDate(item);
+  const daysUntilDue = getDaysUntilDue(dueDate, currentWorkDate);
+  if (daysUntilDue !== null && daysUntilDue <= 0) {
     return "behind";
   }
-  if (daysUntilInstall !== null && daysUntilInstall >= 1 && daysUntilInstall <= 3) {
+  if (daysUntilDue !== null && daysUntilDue >= 1 && daysUntilDue <= 3) {
     return "at_risk";
   }
 
-  const roleDate = getManufacturingRoleDate(item, role, currentWorkDate);
+  const roleDate = getManufacturingRoleDate(item, role, currentWorkDate, earliestScheduledDate);
   if (roleDate === currentWorkDate) {
     return "today";
+  }
+
+  if (!dueDate && !roleDate) {
+    return "unscheduled";
   }
 
   return null;
@@ -337,7 +353,7 @@ export function buildManufacturingScheduleState(args: {
   const filteredItems = schedule.allItems.filter((item) => {
     if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) return false;
     if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) return false;
-    if (!matchesInstallDateFilter(item.installationDate, installDateFilter, today)) return false;
+    if (!matchesInstallDateFilter(getManufacturingDueDate(item), installDateFilter, today)) return false;
     return true;
   });
 
@@ -424,12 +440,13 @@ export function buildManufacturingDashboardState(args: {
   } = args;
 
   const currentWorkDate = schedule.currentWorkDate ?? formatDateKey(today);
-  const categories: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today"];
+  const categories: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today", "unscheduled"];
   const categoryLabels: Record<ManufacturingDashboardCategory, string> = {
     today: "Today",
     returned: "Returned",
     at_risk: "At Risk",
     behind: "Behind",
+    unscheduled: "Unscheduled",
   };
 
   const itemsByCategory = {
@@ -437,14 +454,31 @@ export function buildManufacturingDashboardState(args: {
     returned: [] as ManufacturingWindowItem[],
     at_risk: [] as ManufacturingWindowItem[],
     behind: [] as ManufacturingWindowItem[],
+    unscheduled: [] as ManufacturingWindowItem[],
   };
 
-  for (const item of schedule.allItems) {
-    if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) continue;
-    if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
-    if (!matchesInstallDateFilter(item.installationDate, installDateFilter, today)) continue;
+  const filteredItems = schedule.allItems.filter((item) => {
+    if (clientFilter.length > 0 && !clientFilter.includes(item.clientId)) return false;
+    if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) return false;
+    if (!matchesInstallDateFilter(getManufacturingDueDate(item), installDateFilter, today)) return false;
+    return true;
+  });
 
-    const category = getManufacturingDashboardCategory(item, role, currentWorkDate);
+  const roleItems = filteredItems.filter((item) => isVisibleForManufacturingRole(item, role));
+  const scheduledDates = roleItems
+    .filter((item) => item.issueStatus !== "open")
+    .map((item) =>
+      role === "cutter"
+        ? item.scheduledCutDate
+        : role === "assembler"
+          ? item.scheduledAssemblyDate
+          : item.scheduledQcDate
+    )
+    .filter((d): d is string => d !== null && d >= currentWorkDate);
+  const earliestScheduledDate = scheduledDates.length > 0 ? scheduledDates.sort()[0] : undefined;
+
+  for (const item of roleItems) {
+    const category = getManufacturingDashboardCategory(item, role, currentWorkDate, earliestScheduledDate);
     if (!category) continue;
     itemsByCategory[category].push(item);
   }
@@ -454,6 +488,7 @@ export function buildManufacturingDashboardState(args: {
     returned: itemsByCategory.returned.length,
     at_risk: itemsByCategory.at_risk.length,
     behind: itemsByCategory.behind.length,
+    unscheduled: itemsByCategory.unscheduled.length,
   };
 
   return {
@@ -469,6 +504,7 @@ export function buildManufacturingDashboardState(args: {
       returned: groupDashboardUnits(itemsByCategory.returned),
       at_risk: groupDashboardUnits(itemsByCategory.at_risk),
       behind: groupDashboardUnits(itemsByCategory.behind),
+      unscheduled: groupDashboardUnits(itemsByCategory.unscheduled),
     },
   };
 }

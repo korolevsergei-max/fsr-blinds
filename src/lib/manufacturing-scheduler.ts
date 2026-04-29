@@ -120,6 +120,7 @@ export interface ManufacturingWindowItem {
   buildingName: string;
   clientName: string;
   installationDate: string | null;
+  completeByDate: string | null;
   targetReadyDate: string | null;
   roomName: string;
   label: string;
@@ -337,6 +338,16 @@ function todayKey(): string {
   return formatDateKey(new Date());
 }
 
+function getUnitManufacturingDueDate(unit: Pick<UnitRow, "installation_date" | "complete_by_date">): string | null {
+  return unit.installation_date ?? unit.complete_by_date ?? null;
+}
+
+function getWindowManufacturingDueDate(
+  item: Pick<ManufacturingWindowItem, "installationDate" | "completeByDate">
+): string | null {
+  return item.installationDate ?? item.completeByDate ?? null;
+}
+
 function getCurrentWorkDate(
   settings: ManufacturingSettings,
   overrides: Map<string, ManufacturingCalendarOverride>
@@ -363,7 +374,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
 
   const { data: unitRows } = await supabase
     .from("units")
-    .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, status")
+    .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
     .in("status", ["measured", "bracketed", "manufactured", "measured_and_bracketed"])
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
@@ -441,7 +452,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     const existing = scheduleByWindow.get(window.id) ?? null;
     const targetReadyDate = unit.installation_date
       ? addWorkingDays(unit.installation_date, -3, settings, overrides)
-      : null;
+      : unit.complete_by_date ?? null;
 
     let scheduledQcDate = existing?.scheduledQcDate ?? targetReadyDate;
     let scheduledAssemblyDate = existing?.scheduledAssemblyDate ?? null;
@@ -511,9 +522,9 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         )
       )
       .sort((a, b) => {
-        const aInstall = a.unit.installation_date ?? "9999-12-31";
-        const bInstall = b.unit.installation_date ?? "9999-12-31";
-        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        const aDue = getUnitManufacturingDueDate(a.unit) ?? "9999-12-31";
+        const bDue = getUnitManufacturingDueDate(b.unit) ?? "9999-12-31";
+        if (aDue !== bDue) return aDue.localeCompare(bDue);
         if (a.unit.unit_number !== b.unit.unit_number)
           return a.unit.unit_number.localeCompare(b.unit.unit_number);
         return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
@@ -554,9 +565,9 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         const aCut = a.scheduledCutDate ?? "9999-12-31";
         const bCut = b.scheduledCutDate ?? "9999-12-31";
         if (aCut !== bCut) return aCut.localeCompare(bCut);
-        const aInstall = a.unit.installation_date ?? "9999-12-31";
-        const bInstall = b.unit.installation_date ?? "9999-12-31";
-        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        const aDue = getUnitManufacturingDueDate(a.unit) ?? "9999-12-31";
+        const bDue = getUnitManufacturingDueDate(b.unit) ?? "9999-12-31";
+        if (aDue !== bDue) return aDue.localeCompare(bDue);
         if (a.unit.unit_number !== b.unit.unit_number)
           return a.unit.unit_number.localeCompare(b.unit.unit_number);
         return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
@@ -598,9 +609,9 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
         const aAssembly = a.scheduledAssemblyDate ?? "9999-12-31";
         const bAssembly = b.scheduledAssemblyDate ?? "9999-12-31";
         if (aAssembly !== bAssembly) return aAssembly.localeCompare(bAssembly);
-        const aInstall = a.unit.installation_date ?? "9999-12-31";
-        const bInstall = b.unit.installation_date ?? "9999-12-31";
-        if (aInstall !== bInstall) return aInstall.localeCompare(bInstall);
+        const aDue = getUnitManufacturingDueDate(a.unit) ?? "9999-12-31";
+        const bDue = getUnitManufacturingDueDate(b.unit) ?? "9999-12-31";
+        if (aDue !== bDue) return aDue.localeCompare(bDue);
         if (a.unit.unit_number !== b.unit.unit_number)
           return a.unit.unit_number.localeCompare(b.unit.unit_number);
         return buildBlindSortKey(a.window).localeCompare(buildBlindSortKey(b.window));
@@ -788,6 +799,7 @@ export async function loadManufacturingRoleSchedule(
       buildingName: unit.building_name,
       clientName: unit.client_name,
       installationDate: unit.installation_date,
+      completeByDate: unit.complete_by_date,
       targetReadyDate: row.target_ready_date,
       roomName,
       label: window.label,
@@ -1026,10 +1038,12 @@ function compareCompletedItems(a: ManufacturingCompletedWindowItem, b: Manufactu
   const bCompleted = b.roleCompletedAt ?? "";
   if (aCompleted !== bCompleted) return bCompleted.localeCompare(aCompleted);
 
-  if (a.installationDate !== b.installationDate) {
-    if (!a.installationDate) return 1;
-    if (!b.installationDate) return -1;
-    return a.installationDate.localeCompare(b.installationDate);
+  const aDue = getWindowManufacturingDueDate(a);
+  const bDue = getWindowManufacturingDueDate(b);
+  if (aDue !== bDue) {
+    if (!aDue) return 1;
+    if (!bDue) return -1;
+    return aDue.localeCompare(bDue);
   }
 
   const unitCompare = a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });

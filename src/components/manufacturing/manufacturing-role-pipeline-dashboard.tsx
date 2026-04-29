@@ -24,8 +24,6 @@ import {
 
 type ManufacturingRole = "cutter" | "assembler" | "qc";
 
-const CATEGORY_ORDER: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today"];
-
 const CATEGORY_COPY: Record<
   ManufacturingDashboardCategory,
   {
@@ -70,7 +68,7 @@ const CATEGORY_COPY: Record<
   },
   at_risk: {
     label: "At Risk",
-    description: "Install is in 1-3 days and this role is still open.",
+    description: "Due in 1-3 days and this role is still open.",
     cardClass: "border-amber-200 bg-amber-50 text-amber-800",
     iconClass: "text-amber-600",
     sectionClass: "border-amber-200 bg-amber-50/60",
@@ -83,7 +81,7 @@ const CATEGORY_COPY: Record<
   },
   behind: {
     label: "Behind",
-    description: "Install is today or overdue and this role is still open.",
+    description: "Due today or overdue and this role is still open.",
     cardClass: "border-rose-200 bg-rose-50 text-rose-800",
     iconClass: "text-rose-600",
     sectionClass: "border-rose-200 bg-rose-50/60",
@@ -94,7 +92,32 @@ const CATEGORY_COPY: Record<
       color: "#ffffff",
     },
   },
+  unscheduled: {
+    label: "Unscheduled",
+    description: "No install or complete-by date assigned.",
+    cardClass: "border-zinc-200 bg-zinc-50 text-zinc-800",
+    iconClass: "text-zinc-500",
+    sectionClass: "border-zinc-200 bg-zinc-50/70",
+    badgeClass: "bg-zinc-100 text-zinc-700",
+    activeStyle: {
+      backgroundColor: "#52525b",
+      borderColor: "#3f3f46",
+      color: "#ffffff",
+    },
+  },
 };
+
+const CATEGORY_ORDER: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today", "unscheduled"];
+
+function formatUnitDueDate(unit: ManufacturingDashboardUnitCard) {
+  if (unit.installationDate) {
+    return `Install ${formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}`;
+  }
+  if (unit.completeByDate) {
+    return `Complete by ${formatStoredDateLongEnglish(unit.completeByDate) ?? unit.completeByDate}`;
+  }
+  return null;
+}
 
 function DashboardUnitCard({
   unit,
@@ -113,6 +136,7 @@ function DashboardUnitCard({
   ).length;
   const categoryCopy = CATEGORY_COPY[category];
   const borderClass = returnedCount > 0 ? "border-red-200 shadow-[0_1px_3px_rgba(185,28,28,0.08)]" : "border-border";
+  const dueDateLabel = formatUnitDueDate(unit);
 
   return (
     <button
@@ -140,11 +164,7 @@ function DashboardUnitCard({
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-tertiary sm:justify-end">
           <span>{unit.scheduledCount} blinds</span>
-          {unit.installationDate && (
-            <span>
-              Install {formatStoredDateLongEnglish(unit.installationDate) ?? unit.installationDate}
-            </span>
-          )}
+          {dueDateLabel && <span>{dueDateLabel}</span>}
         </div>
       </div>
     </button>
@@ -170,7 +190,9 @@ function PipelineCard({
         ? WarningCircle
         : category === "at_risk"
           ? CalendarBlank
-          : WarningCircle;
+          : category === "unscheduled"
+            ? CalendarBlank
+            : WarningCircle;
 
   return (
     <button
@@ -272,7 +294,7 @@ export function ManufacturingRolePipelineDashboard({
           onChange={setBuildingFilter}
         />
         <FilterDropdown
-          label="Installation Date"
+          label="Due Date"
           value={installDateFilter}
           options={installDateOptions}
           onChange={(value) => setInstallDateFilter(value as ScheduleInstallDateFilter)}
@@ -292,7 +314,7 @@ export function ManufacturingRolePipelineDashboard({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
         {CATEGORY_ORDER.map((category) => (
           <PipelineCard
             key={category}
@@ -312,7 +334,7 @@ export function ManufacturingRolePipelineDashboard({
           <p className="mt-1 text-[12px] text-tertiary">
             {activeCategory
               ? `${dashboardState.counts[activeCategory]} blind${dashboardState.counts[activeCategory] === 1 ? "" : "s"} in this lane.`
-              : "Returned work is shown first, followed by behind, at-risk, and today."}
+              : "Returned work is shown first, followed by behind, at-risk, today, and unscheduled."}
           </p>
         </div>
         {activeCategory && (

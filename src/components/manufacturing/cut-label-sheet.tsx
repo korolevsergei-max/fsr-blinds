@@ -44,7 +44,8 @@ function LabelContent({
     chainSide: item.chainSide,
   });
 
-  const installDate = fmtDate(item.installationDate);
+  const dueDate = fmtDate(item.installationDate ?? item.completeByDate);
+  const dueDatePrefix = item.installationDate ? "Install" : "Complete by";
   const kindBadge = getLabelKindStyles(kind);
 
   const wandText =
@@ -136,7 +137,7 @@ function LabelContent({
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {item.buildingName} · {item.label} · {item.roomName}
         </span>
-        {installDate && <span style={{ flexShrink: 0 }}>Install {installDate}</span>}
+        {dueDate && <span style={{ flexShrink: 0 }}>{dueDatePrefix} {dueDate}</span>}
       </div>
 
       {/* Manufacturing summary block — small, 2-column grid */}
