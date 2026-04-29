@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Envelope, Phone, Buildings, CheckCircle, Plus } from "@phosphor-icons/react";
 import type { Installer, Unit } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 
 export function InstallersList({
@@ -19,10 +20,13 @@ export function InstallersList({
       <PageHeader
         title="Installers"
         actions={
-          <Button size="sm">
-            <Plus size={14} weight="bold" />
-            Add
-          </Button>
+          <>
+            <RefreshButton />
+            <Button size="sm">
+              <Plus size={14} weight="bold" />
+              Add
+            </Button>
+          </>
         }
       />
 

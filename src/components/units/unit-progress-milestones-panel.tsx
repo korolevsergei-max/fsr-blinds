@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Circle, GitBranch } from "@phosphor-icons/react";
+import { CheckCircle, Circle, GitBranch, WarningCircle } from "@phosphor-icons/react";
 import type { Unit } from "@/lib/types";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -25,6 +25,7 @@ function Row({
   scheduled,
   completed,
   density,
+  variant = "default",
 }: {
   title: string;
   subtitle?: string;
@@ -32,12 +33,19 @@ function Row({
   scheduled?: string | null;
   completed?: string | null;
   density: Density;
+  variant?: "default" | "warning";
 }) {
   const iconSize = density === "comfortable" ? 22 : 18;
   return (
     <div className="flex items-start gap-3">
       <div className="flex-shrink-0 pt-0.5">
-        {met ? (
+        {variant === "warning" ? (
+          <WarningCircle
+            size={iconSize}
+            weight="fill"
+            className="text-red-500"
+          />
+        ) : met ? (
           <CheckCircle
             size={iconSize}
             weight="fill"
@@ -50,9 +58,11 @@ function Row({
       <div className="min-w-0 flex-1 pb-1">
         <p
           className={
-            density === "comfortable"
-              ? `text-sm ${met ? "font-medium text-foreground" : "text-zinc-300"}`
-              : `text-[12px] ${met ? "font-semibold text-foreground" : "text-tertiary"}`
+            variant === "warning"
+              ? `text-sm font-semibold text-red-600`
+              : density === "comfortable"
+                ? `text-sm ${met ? "font-medium text-foreground" : "text-zinc-300"}`
+                : `text-[12px] ${met ? "font-semibold text-foreground" : "text-tertiary"}`
           }
         >
           {title}
@@ -92,17 +102,38 @@ export function UnitProgressMilestonesPanel({
   mediaViewerSlot?: React.ReactNode;
   className?: string;
 }) {
-  const { allMeasured, allBracketed, allManufactured, allInstalled } = milestones;
+  const {
+    allMeasured,
+    allBracketed,
+    allCut,
+    allAssembled,
+    allQcApproved,
+    allInstalled,
+    hasOpenPostInstallIssue,
+    totalWindows,
+    measuredCount,
+    bracketedCount,
+    cutCount,
+    assembledCount,
+    qcApprovedCount,
+    installedCount,
+    postInstallIssueOpenCount,
+  } = milestones;
 
   const schedM = formatWhen(unit.measurementDate);
   const schedB = formatWhen(unit.bracketingDate);
   const schedI = formatWhen(unit.installationDate);
   const doneM = formatWhen(milestones.measuredCompletedAt);
   const doneB = formatWhen(milestones.bracketedCompletedAt);
-  const doneMf = formatWhen(milestones.manufacturedCompletedAt);
+  const doneCut = formatWhen(milestones.cutCompletedAt);
+  const doneAsm = formatWhen(milestones.assembledCompletedAt);
+  const doneQc = formatWhen(milestones.qcApprovedCompletedAt);
   const doneI = formatWhen(milestones.installedCompletedAt);
 
   const showDates = layout === "detail";
+  const hasWindows = totalWindows > 0;
+  const fmtCount = (n: number) =>
+    hasWindows ? `${n}/${totalWindows} windows` : "No windows yet";
 
   return (
     <div className={className}>
@@ -129,7 +160,7 @@ export function UnitProgressMilestonesPanel({
         <div className="flex items-center gap-2 rounded-xl border border-border bg-surface/80 px-3 py-2 mb-3">
           <GitBranch size={16} className="text-tertiary flex-shrink-0" />
           <p className="text-[11px] text-secondary leading-snug">
-            Measurements and bracketing are independent—complete both before installation photos.
+            Measurement and bracketing run in parallel — either can complete first.
           </p>
         </div>
       )}
@@ -143,29 +174,21 @@ export function UnitProgressMilestonesPanel({
       >
         <div>
           <p className="text-[9px] font-bold uppercase tracking-wider text-muted mb-2">
-            Prerequisites (any order)
+            Prerequisites (parallel — either order)
           </p>
           <div className={density === "comfortable" ? "space-y-4" : "space-y-3"}>
             <Row
               density={density}
-              title="Measurements complete"
-              subtitle={
-                milestones.totalWindows > 0
-                  ? `${milestones.measuredCount}/${milestones.totalWindows} windows measured`
-                  : "No windows yet"
-              }
+              title="Measured"
+              subtitle={hasWindows ? `${measuredCount}/${totalWindows} windows measured` : "No windows yet"}
               met={allMeasured}
               scheduled={showDates ? schedM : undefined}
               completed={showDates ? doneM : undefined}
             />
             <Row
               density={density}
-              title="Bracketing photos complete"
-              subtitle={
-                milestones.totalWindows > 0
-                  ? `${milestones.bracketedCount}/${milestones.totalWindows} windows with bracketing photos`
-                  : "No windows yet"
-              }
+              title="Bracketed"
+              subtitle={hasWindows ? `${bracketedCount}/${totalWindows} windows bracketed` : "No windows yet"}
               met={allBracketed}
               scheduled={showDates ? schedB : undefined}
               completed={showDates ? doneB : undefined}
@@ -175,32 +198,65 @@ export function UnitProgressMilestonesPanel({
 
         <div className="h-px bg-border-subtle" />
 
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider text-muted mb-2">
+            Production (sequential per window)
+          </p>
+          <div className={density === "comfortable" ? "space-y-4" : "space-y-3"}>
+            <Row
+              density={density}
+              title="Cut"
+              subtitle={fmtCount(cutCount)}
+              met={allCut}
+              completed={showDates ? doneCut : undefined}
+            />
+            <Row
+              density={density}
+              title="Assembled"
+              subtitle={fmtCount(assembledCount)}
+              met={allAssembled}
+              completed={showDates ? doneAsm : undefined}
+            />
+            <Row
+              density={density}
+              title="Quality Checked"
+              subtitle={
+                hasWindows
+                  ? milestones.manufacturedByLegacyInstalledFallback
+                    ? "Marked complete based on existing installation records"
+                    : `${qcApprovedCount}/${totalWindows} windows QC approved`
+                  : "No windows yet"
+              }
+              met={allQcApproved || milestones.allManufactured}
+              completed={showDates ? doneQc : undefined}
+            />
+          </div>
+        </div>
+
+        <div className="h-px bg-border-subtle" />
+
         <div className={density === "comfortable" ? "space-y-4" : "space-y-3"}>
           <Row
             density={density}
-            title="Manufacturing complete"
-            subtitle={
-              milestones.totalWindows > 0
-                ? milestones.manufacturedByLegacyInstalledFallback
-                  ? "Marked complete based on existing installation records"
-                  : `${milestones.manufacturedCount}/${milestones.totalWindows} windows built fully`
-                : "No windows yet"
-            }
-            met={allManufactured}
-            completed={showDates ? doneMf : undefined}
-          />
-          <Row
-            density={density}
             title="Installed"
-            subtitle={
-              milestones.totalWindows > 0
-                ? `${milestones.installedCount}/${milestones.totalWindows} windows with installation photos`
-                : undefined
-            }
+            subtitle={hasWindows ? `${installedCount}/${totalWindows} windows installed` : undefined}
             met={allInstalled}
             scheduled={showDates ? schedI : undefined}
             completed={showDates ? doneI : undefined}
           />
+          {hasOpenPostInstallIssue && (
+            <Row
+              density={density}
+              title="Post-Install Issue"
+              subtitle={
+                postInstallIssueOpenCount > 0
+                  ? `${postInstallIssueOpenCount} open issue${postInstallIssueOpenCount === 1 ? "" : "s"}`
+                  : "Open issue flagged"
+              }
+              met={false}
+              variant="warning"
+            />
+          )}
         </div>
       </div>
     </div>

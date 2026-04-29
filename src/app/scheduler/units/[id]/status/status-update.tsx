@@ -9,6 +9,7 @@ import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
@@ -46,6 +47,7 @@ export function StatusUpdate({
         title="Progress"
         subtitle={`${unit.unitNumber} • ${unit.buildingName}`}
         backHref={`/scheduler/units/${unit.id}`}
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-5 py-5 flex flex-col gap-6">

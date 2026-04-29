@@ -121,7 +121,8 @@ export function AppDatasetProvider({
         initialData.installers.length === 0 &&
         initialData.schedule.length === 0 &&
         initialData.cutters.length === 0 &&
-        initialData.schedulers.length === 0,
+        initialData.schedulers.length === 0 &&
+        initialData.postInstallIssues.length === 0,
       lastUpdated: 0,
     })
   );

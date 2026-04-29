@@ -22,6 +22,7 @@ import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { CreatedDateFilter } from "@/components/ui/created-date-filter";
@@ -405,25 +406,28 @@ export function UnitsList({
         title="All Units"
         subtitle={`${filtered.length} of ${units.length} units`}
         actions={
-          selectMode ? (
-            <button
-              type="button"
-              onClick={exitSelectMode}
-              className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium text-zinc-600 border border-border bg-white hover:bg-zinc-50 transition-all"
-            >
-              <X size={14} />
-              Cancel
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectMode(true)}
-              className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium text-zinc-600 border border-border bg-white hover:bg-zinc-50 transition-all"
-            >
-              <CheckSquare size={16} />
-              Select
-            </button>
-          )
+          <>
+            <RefreshButton />
+            {selectMode ? (
+              <button
+                type="button"
+                onClick={exitSelectMode}
+                className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium text-zinc-600 border border-border bg-white hover:bg-zinc-50 transition-all"
+              >
+                <X size={14} />
+                Cancel
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSelectMode(true)}
+                className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg text-sm font-medium text-zinc-600 border border-border bg-white hover:bg-zinc-50 transition-all"
+              >
+                <CheckSquare size={16} />
+                Select
+              </button>
+            )}
+          </>
         }
         belowTitle={
           <div className="flex flex-col">

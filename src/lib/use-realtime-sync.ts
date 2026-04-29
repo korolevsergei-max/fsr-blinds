@@ -124,6 +124,7 @@ export function useRealtimeSync(
     const shouldTrackStaffLists = loaderKind === "full" || loaderKind === "scheduler";
     const shouldTrackManufacturingLists = loaderKind === "full";
     let schedulerRefreshTimer: number | null = null;
+    let datasetRefreshTimer: number | null = null;
 
     function scheduleScopedRefresh() {
       if (loaderKind !== "scheduler") return;
@@ -133,6 +134,20 @@ export function useRealtimeSync(
       schedulerRefreshTimer = window.setTimeout(() => {
         schedulerRefreshTimer = null;
         refreshDataset("scheduler").then((freshData) => {
+          if (freshData) {
+            setDataRef.current(freshData);
+          }
+        });
+      }, 120);
+    }
+
+    function scheduleDatasetRefresh() {
+      if (datasetRefreshTimer !== null) {
+        window.clearTimeout(datasetRefreshTimer);
+      }
+      datasetRefreshTimer = window.setTimeout(() => {
+        datasetRefreshTimer = null;
+        refreshDataset(loaderKind).then((freshData) => {
           if (freshData) {
             setDataRef.current(freshData);
           }
@@ -230,6 +245,14 @@ export function useRealtimeSync(
       });
     });
 
+    sub("window_post_install_issues", () => {
+      scheduleDatasetRefresh();
+    });
+
+    sub("window_post_install_issue_notes", () => {
+      scheduleDatasetRefresh();
+    });
+
     if (shouldTrackManufacturingLists) {
       sub<CutterRow>("cutters", (p) => {
         patchRef.current((prev) => {
@@ -284,6 +307,9 @@ export function useRealtimeSync(
       document.removeEventListener("visibilitychange", onVisibility);
       if (schedulerRefreshTimer !== null) {
         window.clearTimeout(schedulerRefreshTimer);
+      }
+      if (datasetRefreshTimer !== null) {
+        window.clearTimeout(datasetRefreshTimer);
       }
       channels.forEach((ch) => supabase.removeChannel(ch));
     };

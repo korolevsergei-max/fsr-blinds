@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
 import { buildPrintableLabelItems, packPrintableLabelItems, type LabelMode } from "@/lib/cut-labels";
 import { CutLabelSheet } from "@/components/manufacturing/cut-label-sheet";
+import { markLabelsPrinted } from "@/app/actions/label-print-actions";
 
 interface Props {
   items: ManufacturingWindowItem[];
@@ -49,10 +50,23 @@ export function LabelPdfClient({ items, labelMode }: Props) {
 
           if (i > 0) doc.addPage([4, 6]);
           doc.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 4, 6);
+
+          const pageNum = `${i + 1} / ${sheets.length}`;
+          doc.setFontSize(7);
+          doc.setTextColor(60, 60, 60);
+          doc.text(pageNum, 4 - 0.08, 6 - 0.08, { align: "right" });
         }
 
         const today = new Date().toISOString().slice(0, 10);
         doc.save(`cut-labels-${today}.pdf`);
+
+        const printedWindows = items.map((i) => ({ windowId: i.windowId, unitId: i.unitId }));
+        if (labelMode === "both") {
+          await markLabelsPrinted({ windows: printedWindows, kind: "manufacturing" });
+          await markLabelsPrinted({ windows: printedWindows, kind: "packaging" });
+        } else {
+          await markLabelsPrinted({ windows: printedWindows, kind: labelMode });
+        }
         setStatus("done");
       } catch (err) {
         console.error("Label PDF generation failed", err);
@@ -62,6 +76,7 @@ export function LabelPdfClient({ items, labelMode }: Props) {
     }
 
     generate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

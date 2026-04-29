@@ -50,9 +50,21 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
           <p className="font-semibold text-sm text-primary">{win.label}</p>
           <p className="text-xs text-tertiary">{roomName}</p>
         </div>
-        <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status] ?? statusColors.pending}`}>
-          {PRODUCTION_STATUS_LABELS[status]}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {production?.manufacturingLabelPrintedAt && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-zinc-100 text-zinc-700 border-zinc-300">
+              MFG ✓
+            </span>
+          )}
+          {production?.packagingLabelPrintedAt && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+              PKG ✓
+            </span>
+          )}
+          <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusColors[status] ?? statusColors.pending}`}>
+            {PRODUCTION_STATUS_LABELS[status]}
+          </span>
+        </div>
       </div>
 
       {/* Specs */}
@@ -159,6 +171,8 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
                   issueReportedByRole: null,
                   issueReportedAt: null,
                   issueResolvedAt: null,
+                  manufacturingLabelPrintedAt: null,
+                  packagingLabelPrintedAt: null,
                   createdAt: new Date().toISOString(),
                 }),
                 status: "cut" as const,
@@ -174,6 +188,9 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
     (w) => w.production?.status === "cut" || w.production?.status === "assembled" || w.production?.status === "qc_approved"
   ).length;
   const total = windows.length;
+
+  const allMfgPrinted = total > 0 && windows.every((w) => w.production?.manufacturingLabelPrintedAt);
+  const allPkgPrinted = total > 0 && windows.every((w) => w.production?.packagingLabelPrintedAt);
 
   const daysUntil = unit.installationDate
     ? Math.floor(
@@ -223,6 +240,20 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
               </span>
             )}
           </p>
+        )}
+        {(allMfgPrinted || allPkgPrinted) && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {allMfgPrinted && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-zinc-100 text-zinc-700 border-zinc-300">
+                MFG labels printed
+              </span>
+            )}
+            {allPkgPrinted && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                PKG labels printed
+              </span>
+            )}
+          </div>
         )}
       </div>
 

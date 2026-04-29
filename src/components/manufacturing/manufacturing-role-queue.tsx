@@ -100,7 +100,8 @@ type SortField =
   | "fabricWidth"
   | "windowWidth"
   | "valanceWidth"
-  | "tubeWidth";
+  | "tubeWidth"
+  | "label";
 
 type SortDirection = "asc" | "desc";
 
@@ -121,6 +122,7 @@ const SORT_FIELD_LABELS: Record<SortField, string> = {
   windowWidth: "Window Width",
   valanceWidth: "Valance Width",
   tubeWidth: "Tube Width",
+  label: "Window Label",
 };
 
 function computeFabricWidth(item: ManufacturingWindowItem): number | null {
@@ -154,6 +156,7 @@ function getSortValue(item: ManufacturingWindowItem, field: SortField, role: "cu
     case "windowWidth": return item.width;
     case "valanceWidth": return item.width != null ? item.width - 0.0625 : null;
     case "tubeWidth": return item.width != null ? item.width - 1.375 : null;
+    case "label": return item.label;
   }
 }
 
@@ -307,8 +310,11 @@ export function ManufacturingRoleQueue({
   const [sortLevels, setSortLevels] = useState<SortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [draftSortLevels, setDraftSortLevels] = useState<SortLevel[]>([]);
+  const [ezSort, setEzSort] = useState<"list_packaging" | "manufacturing" | null>(null);
+  const [ezSortModalOpen, setEzSortModalOpen] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printLabelMode, setPrintLabelMode] = useState<PrintLabelMode>("manufacturing");
+  const [skipAlreadyPrinted, setSkipAlreadyPrinted] = useState(true);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [printAction, setPrintAction] = useState<"list" | "labels">("list");
   const [selectedBucketKeys, setSelectedBucketKeys] = useState<Set<string>>(new Set());
@@ -466,6 +472,21 @@ export function ManufacturingRoleQueue({
       .map((t) => t.slice(0, 10))
   );
 
+  const unitLabelPrintedFlags = new Map<string, { mfg: boolean; pkg: boolean }>();
+  {
+    const byUnit = new Map<string, ManufacturingWindowItem[]>();
+    for (const item of localSchedule.allItems) {
+      if (!byUnit.has(item.unitId)) byUnit.set(item.unitId, []);
+      byUnit.get(item.unitId)!.push(item);
+    }
+    for (const [unitId, items] of byUnit) {
+      unitLabelPrintedFlags.set(unitId, {
+        mfg: items.length > 0 && items.every((w) => w.manufacturingLabelPrintedAt != null),
+        pkg: items.length > 0 && items.every((w) => w.packagingLabelPrintedAt != null),
+      });
+    }
+  }
+
   const queueStatusOptions = [
     { value: "all", label: "All queue states" },
     { value: "returned", label: "Returned" },
@@ -534,6 +555,7 @@ export function ManufacturingRoleQueue({
 
   function applySort() {
     setSortLevels(draftSortLevels);
+    setEzSort(null);
     setSortModalOpen(false);
   }
 
@@ -601,20 +623,30 @@ export function ManufacturingRoleQueue({
         windows.length = 0;
         windows.push(...issues, ...multiLevelSort(rest, sortLevels, role));
       } else {
-        // Default: issues/returned first, then by width descending
         windows.sort((a, b) => {
           const pa = getWindowPriority(role, a);
           const pb = getWindowPriority(role, b);
           if (pa !== pb) return pa - pb;
-          const wa = a.width ?? -1;
-          const wb = b.width ?? -1;
-          return wb - wa;
+          const buildingCmp = (a.buildingName ?? "").localeCompare(b.buildingName ?? "");
+          if (buildingCmp !== 0) return buildingCmp;
+          const fa = getFloor(a.unitNumber);
+          const fb = getFloor(b.unitNumber);
+          const fan = Number(fa);
+          const fbn = Number(fb);
+          if (Number.isFinite(fan) && Number.isFinite(fbn) && fan !== fbn) return fan - fbn;
+          if (fa !== fb) return fa.localeCompare(fb, undefined, { numeric: true });
+          return String(a.unitNumber ?? "").localeCompare(String(b.unitNumber ?? ""), undefined, { numeric: true });
         });
       }
 
       return { ...bucket, windows, scheduledCount: windows.length };
     })
-    .filter((bucket) => bucket.windows.length > 0);
+    .filter((bucket) => bucket.windows.length > 0)
+    .sort((a, b) => {
+      const da = a.date ?? "9999-99-99";
+      const db = b.date ?? "9999-99-99";
+      return da.localeCompare(db);
+    });
 
   const maxVisibleItems = displayLimit === "all" ? Infinity : Number(displayLimit);
   const visibleBuckets = filteredBuckets.reduce<(typeof filteredBuckets)[number][]>((acc, bucket) => {
@@ -629,12 +661,6 @@ export function ManufacturingRoleQueue({
     return acc;
   }, []);
 
-  const printableVisibleIds = visibleBuckets.flatMap((bucket) =>
-    bucket.windows
-      .filter((item) => item.productionStatus === "pending")
-      .map((item) => item.windowId)
-  );
-
   const selectedPrintableIds = visibleBuckets
     .filter((b) => selectedBucketKeys.has(getBucketKey(b)))
     .flatMap((b) => b.windows.filter((w) => w.productionStatus === "pending").map((w) => w.windowId));
@@ -646,6 +672,7 @@ export function ManufacturingRoleQueue({
       ids: selectedPrintableIds.join(","),
       labelMode: printLabelMode,
     });
+    if (skipAlreadyPrinted) params.set("skipPrinted", "1");
     const url = `/cutter/queue/print?${params.toString()}`;
     window.open(url, "_blank");
     setPrintModalOpen(false);
@@ -774,13 +801,31 @@ export function ManufacturingRoleQueue({
             onClick={openSortModal}
             className={[
               "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
-              activeSortCount > 0
+              activeSortCount > 0 && ezSort == null
                 ? "border-accent bg-accent text-white"
                 : "border-border bg-card text-secondary hover:border-zinc-300",
             ].join(" ")}
           >
             <SortAscending size={13} weight="bold" />
-            {activeSortCount > 0 ? `Sort (${activeSortCount})` : "Sort"}
+            {activeSortCount > 0 && ezSort == null ? `Sort (${activeSortCount})` : "Sort"}
+          </button>
+          {/* EZ Sort button */}
+          <button
+            type="button"
+            id="queue-ez-sort-button"
+            onClick={() => setEzSortModalOpen(true)}
+            className={[
+              "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+              ezSort != null
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-card text-secondary hover:border-zinc-300",
+            ].join(" ")}
+          >
+            {ezSort === "list_packaging"
+              ? "EZ: List + Pkg"
+              : ezSort === "manufacturing"
+              ? "EZ: Mfg Labels"
+              : "EZ Sort"}
           </button>
           {role === "cutter" && (
             <FilterDropdown
@@ -836,7 +881,7 @@ export function ManufacturingRoleQueue({
             options={fabricTypeOptions}
             onChange={setFabricTypeFilter}
           />
-          {(activeFilterCount > 0 || activeSortCount > 0) && (
+          {(activeFilterCount > 0 || activeSortCount > 0 || ezSort != null) && (
             <button
               type="button"
               onClick={() => {
@@ -849,6 +894,7 @@ export function ManufacturingRoleQueue({
                 setComponentFilter("all");
                 setDisplayLimit("all");
                 setSortLevels([]);
+                setEzSort(null);
               }}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
             >
@@ -926,9 +972,21 @@ export function ManufacturingRoleQueue({
                           ].join(" ")}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                            <p className="text-[11px] font-medium text-secondary">
-                              Unit {item.unitNumber} · {item.buildingName}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <p className="text-[11px] font-medium text-secondary">
+                                Unit {item.unitNumber} · {item.buildingName}
+                              </p>
+                              {unitLabelPrintedFlags.get(item.unitId)?.mfg && (
+                                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold text-zinc-700 border border-zinc-300">
+                                  MFG labels printed
+                                </span>
+                              )}
+                              {unitLabelPrintedFlags.get(item.unitId)?.pkg && (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700 border border-amber-200">
+                                  PKG labels printed
+                                </span>
+                              )}
+                            </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
                               {item.installationDate && (
                                 <span>{formatInstallDate(item.installationDate)}</span>
@@ -958,6 +1016,16 @@ export function ManufacturingRoleQueue({
                               {!returnedToRole && item.wasReworkInCycle && (
                                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.07em] text-amber-800">
                                   Rework — priority
+                                </span>
+                              )}
+                              {item.manufacturingLabelPrintedAt && (
+                                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 border border-zinc-300">
+                                  MFG ✓
+                                </span>
+                              )}
+                              {item.packagingLabelPrintedAt && (
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                                  PKG ✓
                                 </span>
                               )}
                             </div>
@@ -1382,6 +1450,107 @@ export function ManufacturingRoleQueue({
         </div>
       )}
 
+      {ezSortModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
+          onClick={() => setEzSortModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-[var(--radius-xl)] border border-border bg-card p-6 pb-10 shadow-xl sm:rounded-[var(--radius-xl)] sm:pb-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-foreground">EZ Sort</h2>
+              <button
+                type="button"
+                onClick={() => setEzSortModalOpen(false)}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-tertiary hover:bg-surface"
+              >
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <p className="mb-4 text-[12px] text-tertiary">
+              Apply a preset sort within each day bucket.
+            </p>
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    value: "list_packaging" as const,
+                    label: "List + Packaging Labels",
+                    description: "Building → Unit → Window label (W1, W2…)",
+                  },
+                  {
+                    value: "manufacturing" as const,
+                    label: "Manufacturing Labels",
+                    description: "Fabric type → Window width (widest first)",
+                  },
+                ] as const
+              ).map((option) => {
+                const checked = ezSort === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={[
+                      "flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors",
+                      checked ? "border-accent bg-accent/5" : "border-border hover:bg-surface",
+                    ].join(" ")}
+                  >
+                    <input
+                      type="radio"
+                      name="ez-sort-option"
+                      checked={checked}
+                      onChange={() => {
+                        setEzSort(option.value);
+                        if (option.value === "list_packaging") {
+                          setSortLevels([
+                            { field: "buildingName", direction: "asc" },
+                            { field: "unitNumber", direction: "asc" },
+                            { field: "label", direction: "asc" },
+                          ]);
+                        } else {
+                          setSortLevels([
+                            { field: "blindType", direction: "asc" },
+                            { field: "windowWidth", direction: "desc" },
+                          ]);
+                        }
+                        setEzSortModalOpen(false);
+                      }}
+                      className="mt-0.5 h-4 w-4 accent-accent"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[13px] font-medium text-foreground">{option.label}</span>
+                      <p className="mt-1 text-[12px] text-tertiary">{option.description}</p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {ezSort != null && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEzSort(null);
+                  setSortLevels([]);
+                  setEzSortModalOpen(false);
+                }}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50 py-2.5 text-[13px] font-semibold text-red-600 hover:bg-red-100"
+              >
+                <Trash size={13} />
+                Clear EZ Sort
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setEzSortModalOpen(false)}
+              className="mt-2 w-full rounded-xl border border-border bg-card py-2.5 text-[13px] font-semibold text-secondary hover:bg-surface"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {datePickerOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-16 sm:pb-0 sm:items-center"
@@ -1572,6 +1741,17 @@ export function ManufacturingRoleQueue({
                 </>
               )}
             </div>
+            {selectedPrintableIds.length > 0 && (
+              <label className="mt-4 flex items-center gap-2 text-[12px] text-secondary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={skipAlreadyPrinted}
+                  onChange={(e) => setSkipAlreadyPrinted(e.target.checked)}
+                  className="h-4 w-4 accent-accent"
+                />
+                Skip blinds whose {printLabelMode === "both" ? "manufacturing or packaging" : printLabelMode} label was already printed
+              </label>
+            )}
             <div className="mt-5 flex gap-2.5">
               <button
                 type="button"

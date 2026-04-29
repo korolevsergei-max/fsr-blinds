@@ -22,6 +22,7 @@ import type { UnitActivityLog } from "@/lib/types";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,9 @@ const ACTION_LABELS: Record<string, string> = {
   bracketing_completed: "Bracketing completed",
   installed_photo_added: "Installation photo uploaded",
   installation_completed: "Installation completed",
+  post_install_issue_opened: "Post-install issue opened",
+  post_install_issue_note_added: "Post-install issue note added",
+  post_install_issue_resolved: "Post-install issue resolved",
   installer_assigned: "Installer assigned",
   bulk_assigned: "Bulk assigned",
   status_changed: "Status updated",
@@ -146,6 +150,16 @@ function buildLogDescription(log: UnitActivityLog): string {
     if (d.windowLabel) parts.push(String(d.windowLabel));
     if (d.riskFlag && d.riskFlag !== "green") parts.push(riskLabel(d.riskFlag));
     if (!d.hasPhoto) parts.push("no photo (green risk)");
+    return parts.join(" · ");
+  }
+  if (
+    log.action === "post_install_issue_opened" ||
+    log.action === "post_install_issue_note_added" ||
+    log.action === "post_install_issue_resolved"
+  ) {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.note) parts.push(`"${d.note}"`);
     return parts.join(" · ");
   }
   return "";
@@ -232,9 +246,10 @@ export function SchedulerUnitDetail({
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <PageHeader
-        title={unit.unitNumber}
+        title={`Unit ${unit.unitNumber}`}
         subtitle={unit.buildingName}
         backHref="/scheduler/units"
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">
@@ -281,9 +296,9 @@ export function SchedulerUnitDetail({
             </Link>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            {milestoneField("Measurement", unit.measurementDate, milestones.allMeasured, milestones.measuredCompletedAt)}
-            {milestoneField("Bracketing", unit.bracketingDate, milestones.allBracketed, milestones.bracketedCompletedAt)}
-            {milestoneField("Installation", unit.installationDate, milestones.allInstalled, milestones.installedCompletedAt)}
+            {milestoneField("Measured", unit.measurementDate, milestones.allMeasured, milestones.measuredCompletedAt)}
+            {milestoneField("Bracketed", unit.bracketingDate, milestones.allBracketed, milestones.bracketedCompletedAt)}
+            {milestoneField("Installed", unit.installationDate, milestones.allInstalled, milestones.installedCompletedAt)}
           </div>
         </motion.div>
 

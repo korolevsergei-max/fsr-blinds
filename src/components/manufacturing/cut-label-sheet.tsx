@@ -25,7 +25,6 @@ function getLabelKindStyles(kind: LabelKind) {
 }
 
 // Each physical Avery 2315 label: 3" wide × 2" tall
-// Safety margin: 0.125" from each edge → usable: 2.75" × 1.75"
 function LabelContent({
   item,
   kind,
@@ -46,53 +45,36 @@ function LabelContent({
   });
 
   const installDate = fmtDate(item.installationDate);
-  const readyDate = fmtDate(item.targetReadyDate);
-
-  // Summary rows grouped for 2-column layout: [left, right]
-  const summaryPairs: [string, string][] = s.hasMeasurements ? [
-    [s.rows[0].value,                               s.rows[6].value],   // W×H | wand&chain
-    [`${s.rows[1].label}: ${s.rows[1].value}`,     `${s.rows[7].label}: ${s.rows[7].value}`],  // fabric adj | installation
-    [`Machine: ${s.rows[2].value}`,                `${s.rows[8].label}: ${s.rows[8].value}`],  // machine | blind type
-    [`Post-cut: ${s.rows[3].value}`,               `${s.rows[9].label}: ${s.rows[9].value}`],  // post-cut | chain side
-    [`Valance: ${s.rows[4].value}`,                `Tube: ${s.rows[5].value}`],                // valance | tube
-  ] : [];
-
-  const base: React.CSSProperties = {
-    fontFamily: "'Arial', 'Helvetica', sans-serif",
-    color: "#000",
-  };
   const kindBadge = getLabelKindStyles(kind);
 
+  const wandText =
+    item.chainSide === "left" ? "WAND L" : item.chainSide === "right" ? "WAND R" : "WAND ?";
+
   return (
-    <div style={{
-      ...base,
-      width: "3in",
-      height: "2in",
-      padding: "0.125in",
-      boxSizing: "border-box",
-      display: "flex",
-      flexDirection: "column",
-      gap: "0.045in",
-      overflow: "hidden",
-    }}>
-      {/* Header: unit + building + install date */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.08in" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.04in", minWidth: 0 }}>
-          <span style={{ fontSize: "7.5pt", fontWeight: "700", lineHeight: 1 }}>
-            Unit {item.unitNumber} · {item.buildingName}
-          </span>
-          {installDate && (
-            <span style={{ fontSize: "6.5pt", color: "#333", lineHeight: 1 }}>
-              Install {installDate}
-            </span>
-          )}
-        </div>
+    <div
+      style={{
+        fontFamily: "'Arial','Helvetica',sans-serif",
+        color: "#000",
+        width: "3in",
+        height: "2in",
+        padding: "0.1in",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.04in",
+        overflow: "hidden",
+      }}
+    >
+      {/* Row 1: HUGE unit number + kind badge */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.08in" }}>
+        <span style={{ fontSize: "20pt", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.01em" }}>
+          UNIT {item.unitNumber}
+        </span>
         <span
           style={{
             flexShrink: 0,
             fontSize: "6.5pt",
-            fontWeight: "800",
-            lineHeight: 1,
+            fontWeight: 800,
             letterSpacing: "0.06em",
             padding: "0.045in 0.06in",
             borderRadius: "999px",
@@ -104,90 +86,81 @@ function LabelContent({
         </span>
       </div>
 
-      {/* Divider */}
-      <div style={{ borderTop: "0.75pt solid #000" }} />
+      {/* Row 2: blind type — large bold */}
+      <span
+        style={{
+          fontSize: "11pt",
+          fontWeight: 800,
+          lineHeight: 1,
+          textTransform: "uppercase",
+          letterSpacing: "0.02em",
+        }}
+      >
+        {item.blindType}
+      </span>
 
-      {/* Window identity */}
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.08in" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.06in", minWidth: 0 }}>
-          <span style={{ fontSize: "15pt", fontWeight: "900", lineHeight: 1, flexShrink: 0 }}>{item.label}</span>
-          <span style={{ fontSize: "7pt", fontWeight: "600", lineHeight: 1, whiteSpace: "nowrap" }}>{item.roomName}</span>
-          <span style={{ fontSize: "7pt", fontWeight: "700", textTransform: "uppercase", lineHeight: 1, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{item.blindType}</span>
-        </div>
-        <span style={{ fontSize: "13pt", fontWeight: "900", lineHeight: 1, whiteSpace: "nowrap", flexShrink: 0 }}>
-          {item.width ?? "—"} × {item.height ?? "—"}{item.depth != null ? ` × ${item.depth}` : ""}
+      {/* Row 3: W × H + boxed wand side */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.08in" }}>
+        <span style={{ fontSize: "16pt", fontWeight: 900, lineHeight: 1 }}>
+          {item.width ?? "—"} × {item.height ?? "—"}
+          {item.depth != null ? ` × ${item.depth}` : ""}
+        </span>
+        <span
+          style={{
+            fontSize: "11pt",
+            fontWeight: 900,
+            lineHeight: 1,
+            padding: "0.04in 0.08in",
+            border: "1.5pt solid #000",
+            borderRadius: "0.06in",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {wandText}
         </span>
       </div>
 
-      {/* Ready date */}
-      {readyDate && (
-        <div style={{ fontSize: "6.5pt", color: "#444", lineHeight: 1 }}>
-          Ready by {readyDate}
-        </div>
-      )}
-
-      {/* Divider */}
       <div style={{ borderTop: "0.75pt solid #000" }} />
 
-      {/* Manufacturing summary — 2 columns */}
+      {/* Row 4: secondary identity — building · window code · room + install date */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "0.08in",
+          fontSize: "7pt",
+          lineHeight: 1,
+          color: "#333",
+        }}
+      >
+        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.buildingName} · {item.label} · {item.roomName}
+        </span>
+        {installDate && <span style={{ flexShrink: 0 }}>Install {installDate}</span>}
+      </div>
+
+      {/* Manufacturing summary block — small, 2-column grid */}
       {s.hasMeasurements && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.03in" }}>
-          {/* W×H full width row */}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.1in" }}>
-            <span style={{ fontSize: "6.5pt", color: "#555", lineHeight: 1 }}>Window W × H</span>
-            <span style={{ fontSize: "6.5pt", fontWeight: "700", lineHeight: 1 }}>{summaryPairs[0][0]}</span>
-            <span
-              style={{
-                fontSize: "6.5pt",
-                color: "#555",
-                lineHeight: 1,
-                marginLeft: "0.05in",
-                padding: "0.01in 0.03in",
-              }}
-            >
-              {s.rows[6].label}
-            </span>
-            <span
-              style={{
-                fontSize: "6.5pt",
-                fontWeight: "700",
-                lineHeight: 1,
-                padding: "0.01in 0.03in",
-              }}
-            >
-              {summaryPairs[0][1]}
-            </span>
-          </div>
-
-          <div style={{ borderTop: "0.5pt solid #ccc" }} />
-
-          {/* 2-column rows for remaining specs */}
-          {summaryPairs.slice(1).map(([left, right], i) => {
-            return (
-              <div key={i} style={{ display: "flex", gap: "0.06in" }}>
-                <span
-                  style={{
-                    fontSize: "6pt",
-                    lineHeight: 1.25,
-                    flex: 1,
-                    borderRight: "0.5pt solid #ddd",
-                    paddingRight: "0.05in",
-                  }}
-                >
-                  {left}
-                </span>
-                <span
-                  style={{
-                    fontSize: "6pt",
-                    lineHeight: 1.25,
-                    flex: 1,
-                  }}
-                >
-                  {right}
-                </span>
-              </div>
-            );
-          })}
+        <div
+          style={{
+            flex: 1,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            columnGap: "0.08in",
+            rowGap: "0.025in",
+            fontSize: "5.5pt",
+            lineHeight: 1.2,
+            color: "#222",
+          }}
+        >
+          <span>Machine: {s.rows[2].value}</span>
+          <span>Post-cut: {s.rows[3].value}</span>
+          <span>Valance: {s.rows[4].value}</span>
+          <span>Tube: {s.rows[5].value}</span>
+          <span>{s.rows[1].label}: {s.rows[1].value}</span>
+          <span>{s.rows[7].label}: {s.rows[7].value}</span>
+          <span>{s.rows[6].label}: {s.rows[6].value}</span>
+          <span>{s.rows[9].label}: {s.rows[9].value}</span>
         </div>
       )}
     </div>

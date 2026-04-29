@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, UserCircle, X } from "@phosphor-icons/react";
-import { UNIT_STATUS_LABELS, type UnitStatus, type Unit } from "@/lib/types";
-import { StatusChip } from "@/components/ui/status-chip";
+import { CURRENT_STAGE_LABELS, type CurrentStage, type Unit } from "@/lib/types";
+import { CurrentStageChip } from "@/components/ui/status-chip";
+import { getUnitCurrentStage } from "@/lib/current-stage";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES } from "@/lib/unit-flags";
 import {
   type DashboardIssue,
@@ -16,9 +17,9 @@ interface ScopedResultsPanelProps {
   units: Unit[];
   today: string;
   unitHref: (id: string) => string;
-  selectedStatus: UnitStatus | null;
+  selectedStage: CurrentStage | null;
   selectedIssue: DashboardIssue | null;
-  onClearStatus: () => void;
+  onClearStage: () => void;
   onClearIssue: () => void;
   issueDetailsByUnitId?: Map<string, string[]>;
   hideClient?: boolean;
@@ -28,9 +29,9 @@ export function ScopedResultsPanel({
   units,
   today,
   unitHref,
-  selectedStatus,
+  selectedStage,
   selectedIssue,
-  onClearStatus,
+  onClearStage,
   onClearIssue,
   issueDetailsByUnitId,
   hideClient = false,
@@ -51,13 +52,13 @@ export function ScopedResultsPanel({
       {/* Active selection chips + unit count */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
-          {selectedStatus && (
+          {selectedStage && (
             <button
               type="button"
-              onClick={onClearStatus}
+              onClick={onClearStage}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-accent/10 border border-accent/20 text-[11px] font-semibold text-accent"
             >
-              {UNIT_STATUS_LABELS[selectedStatus]}
+              {CURRENT_STAGE_LABELS[selectedStage]}
               <X size={9} weight="bold" />
             </button>
           )}
@@ -100,7 +101,7 @@ export function ScopedResultsPanel({
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <StatusChip status={unit.status} />
+                  <CurrentStageChip stage={getUnitCurrentStage(unit)} />
                   <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
                     <ArrowRight size={14} weight="bold" className="text-white" />
                   </div>

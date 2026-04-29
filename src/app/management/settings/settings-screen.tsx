@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CaretLeft, CaretRight, CheckCircle, Factory, HardDrives, UsersFour } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataManagementSection } from "@/components/settings/data-management-section";
@@ -152,6 +153,7 @@ export function SettingsScreen({
             ? "Accounts, manufacturing, and data controls"
             : "Accounts and manufacturing controls"
         }
+        actions={<RefreshButton />}
         belowTitle={
           <div className="flex gap-2">
             <TabButton

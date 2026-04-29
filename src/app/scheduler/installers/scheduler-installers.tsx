@@ -7,6 +7,7 @@ import { InviteInstallerForm } from "@/components/installers/invite-installer-fo
 import { InstallersList } from "@/components/installers/installers-list";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 
 export function SchedulerInstallers({ data }: { data: AppDataset }) {
   const [showForm, setShowForm] = useState(false);
@@ -17,10 +18,13 @@ export function SchedulerInstallers({ data }: { data: AppDataset }) {
         title="Installers"
         subtitle={`${data.installers.length} installer${data.installers.length === 1 ? "" : "s"}`}
         actions={
-          <Button size="sm" onClick={() => setShowForm((value) => !value)}>
-            <Plus size={14} weight="bold" />
-            {showForm ? "Close" : "Invite"}
-          </Button>
+          <>
+            <RefreshButton />
+            <Button size="sm" onClick={() => setShowForm((value) => !value)}>
+              <Plus size={14} weight="bold" />
+              {showForm ? "Close" : "Invite"}
+            </Button>
+          </>
         }
       />
 

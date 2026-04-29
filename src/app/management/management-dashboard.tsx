@@ -6,10 +6,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, SortAscending, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { getFloor, getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
-import { StatusChip } from "@/components/ui/status-chip";
+import { CurrentStageChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import { UNIT_STATUSES, type UnitStatus } from "@/lib/types";
+import { CURRENT_STAGES, type CurrentStage } from "@/lib/types";
+import { getUnitCurrentStage } from "@/lib/current-stage";
 import {
   buildMonthFilterOptions,
   buildYearOptions,
@@ -60,8 +61,8 @@ export function ManagementDashboard({
   const [yearFilter, setYearFilter] = useSessionStorage<string>("management-dashboard-yearFilter", "all");
   const [monthFilter, setMonthFilter] = useSessionStorage<string>("management-dashboard-monthFilter", "all");
 
-  // Selection state — status + issue can combine
-  const [selectedStatus, setSelectedStatus] = useSessionStorage<UnitStatus | null>("management-dashboard-selectedStatus", null);
+  // Selection state — stage + issue can combine
+  const [selectedStage, setSelectedStage] = useSessionStorage<CurrentStage | null>("management-dashboard-selectedStage", null);
   const [selectedIssue, setSelectedIssue] = useSessionStorage<DashboardIssue | null>("management-dashboard-selectedIssue", null);
 
   // Sort state
@@ -122,35 +123,38 @@ export function ManagementDashboard({
   }, [data, scopedUnits]);
 
   // Pipeline counts — cross-filtered by selected issue so clicks in either strip narrow the other
-  const statusCounts = useMemo(() => {
+  const stageCounts = useMemo(() => {
     const source = selectedIssue
       ? scopedUnits.filter((u) =>
           getUnitIssues(u, today, escalationIds).includes(selectedIssue)
         )
       : scopedUnits;
-    const map = new Map<string, number>();
-    source.forEach((u) => map.set(u.status, (map.get(u.status) ?? 0) + 1));
+    const map = new Map<CurrentStage, number>();
+    source.forEach((u) => {
+      const stage = getUnitCurrentStage(u);
+      map.set(stage, (map.get(stage) ?? 0) + 1);
+    });
     return map;
   }, [scopedUnits, selectedIssue, today, escalationIds]);
 
-  // Issue counts — cross-filtered by selected status
+  // Issue counts — cross-filtered by selected stage
   const issueCounts = useMemo(() => {
-    const source = selectedStatus
-      ? scopedUnits.filter((u) => u.status === selectedStatus)
+    const source = selectedStage
+      ? scopedUnits.filter((u) => getUnitCurrentStage(u) === selectedStage)
       : scopedUnits;
     return computeIssueCounts(source, today, escalationIds);
-  }, [scopedUnits, selectedStatus, today, escalationIds]);
+  }, [scopedUnits, selectedStage, today, escalationIds]);
 
-  // Results = scopedUnits narrowed by selected status + selected issue (intersection)
+  // Results = scopedUnits narrowed by selected stage + selected issue (intersection)
   const resultsUnits = useMemo(() => {
     let result = scopedUnits;
-    if (selectedStatus) result = result.filter((u) => u.status === selectedStatus);
+    if (selectedStage) result = result.filter((u) => getUnitCurrentStage(u) === selectedStage);
     if (selectedIssue)
       result = result.filter((u) =>
         getUnitIssues(u, today, escalationIds).includes(selectedIssue)
       );
     return sortUnits(result, sortLevels);
-  }, [scopedUnits, selectedStatus, selectedIssue, today, escalationIds, sortLevels]);
+  }, [scopedUnits, selectedStage, selectedIssue, today, escalationIds, sortLevels]);
 
   const activeSortCount = sortLevels.length;
 
@@ -164,7 +168,7 @@ export function ManagementDashboard({
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
 
-  const showResults = selectedStatus !== null || selectedIssue !== null || activeFilterCount > 0;
+  const showResults = selectedStage !== null || selectedIssue !== null || activeFilterCount > 0;
 
   const clientOptions = [
     { value: "all", label: "All clients" },
@@ -324,9 +328,9 @@ export function ManagementDashboard({
           </div>
         </motion.div>
 
-        {/* Pipeline by status — clickable, all statuses including zero counts */}
+        {/* Pipeline by stage — clickable, all stages including zero counts */}
         <motion.div {...fadeUp(0.06)}>
-          <SectionLabel as="h2">Pipeline by status</SectionLabel>
+          <SectionLabel as="h2">Pipeline by stage</SectionLabel>
           <div
             className="surface-card divide-y divide-border-subtle overflow-hidden"
             style={{ padding: 0 }}
@@ -334,17 +338,15 @@ export function ManagementDashboard({
             {scopedUnits.length === 0 ? (
               <div className="px-4 py-6 text-center text-xs text-muted">No units in this scope</div>
             ) : (
-              UNIT_STATUSES.map((status) => {
-                const count = statusCounts.get(status) ?? 0;
-                const isActive = selectedStatus === status;
+              CURRENT_STAGES.map((stage) => {
+                const count = stageCounts.get(stage) ?? 0;
+                const isActive = selectedStage === stage;
                 return (
                   <button
-                    key={status}
+                    key={stage}
                     type="button"
                     onClick={() =>
-                      setSelectedStatus((prev) =>
-                        prev === status ? null : (status as UnitStatus)
-                      )
+                      setSelectedStage((prev) => (prev === stage ? null : stage))
                     }
                     className={`w-full flex items-center justify-between px-4 py-3 transition-all active:scale-[0.99] ${
                       isActive
@@ -352,7 +354,7 @@ export function ManagementDashboard({
                         : "hover:bg-surface"
                     }`}
                   >
-                    <StatusChip status={status as UnitStatus} />
+                    <CurrentStageChip stage={stage} />
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-semibold text-foreground font-mono">
                         {count}
@@ -443,7 +445,7 @@ export function ManagementDashboard({
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedStatus(null);
+                    setSelectedStage(null);
                     setSelectedIssue(null);
                   }}
                   className="text-[11px] font-medium text-muted hover:text-secondary transition-colors"
@@ -455,9 +457,9 @@ export function ManagementDashboard({
                 units={resultsUnits}
                 today={today}
                 unitHref={(id) => `/management/units/${id}`}
-                selectedStatus={selectedStatus}
+                selectedStage={selectedStage}
                 selectedIssue={selectedIssue}
-                onClearStatus={() => setSelectedStatus(null)}
+                onClearStage={() => setSelectedStage(null)}
                 onClearIssue={() => setSelectedIssue(null)}
                 issueDetailsByUnitId={
                   selectedIssue === "escalations" ? escalationDetailsByUnitId : undefined

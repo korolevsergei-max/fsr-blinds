@@ -226,6 +226,8 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
                   issueReportedByRole: null,
                   issueReportedAt: null,
                   issueResolvedAt: null,
+                  manufacturingLabelPrintedAt: null,
+                  packagingLabelPrintedAt: null,
                   createdAt: new Date().toISOString(),
                 }),
                 status: "qc_approved" as const,

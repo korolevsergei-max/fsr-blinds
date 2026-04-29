@@ -9,7 +9,6 @@ import {
   ArrowRight,
   UserCircle,
   CalendarBlank,
-  UploadSimple,
   Trash,
   PencilSimple,
 } from "@phosphor-icons/react";
@@ -18,10 +17,10 @@ import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DateInput } from "@/components/ui/date-input";
-import { createUnit, deleteBuilding, updateBuilding } from "@/app/actions/management-actions";
+import { deleteBuilding, updateBuilding } from "@/app/actions/management-actions";
 import { UserRole } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
@@ -46,10 +45,6 @@ export function BuildingDetail({
   const [showEditForm, setShowEditForm] = useState(false);
   const [editName, setEditName] = useState(building?.name ?? "");
   const [editAddress, setEditAddress] = useState(building?.address ?? "");
-  const [showForm, setShowForm] = useState(false);
-  const [unitNumber, setUnitNumber] = useState("");
-
-  const [completeByDate, setCompleteByDate] = useState(""); // kept for createUnit API compat
   const [formError, setFormError] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -62,38 +57,6 @@ export function BuildingDetail({
   }
 
   const buildingUnits = getUnitsByBuilding(data, building.id);
-
-  const handleCreateUnit = () => {
-    if (!unitNumber.trim()) {
-      setFormError("Unit number is required");
-      return;
-    }
-    setFormError("");
-    startTransition(async () => {
-      const result = await createUnit(
-        building.id,
-        client.id,
-        unitNumber,
-        "",
-        "",
-        completeByDate || null
-      );
-      if (!result.ok) {
-        setFormError(result.error);
-        return;
-      }
-      setUnitNumber("");
-      setCompleteByDate("");
-      setShowForm(false);
-      afterMutate((prev) => {
-        const nextUnits = result.unit ? [result.unit, ...prev.units] : prev.units;
-        return {
-          ...prev,
-          units: nextUnits,
-        };
-      });
-    });
-  };
 
   const handleEditBuilding = () => {
     if (!editName.trim()) return;
@@ -145,10 +108,11 @@ export function BuildingDetail({
         backHref={`/management/clients/${client.id}`}
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton />
             <Link href={`/management/buildings/${building.id}/import`}>
-              <Button size="sm" variant="secondary">
-                <UploadSimple size={14} weight="bold" />
-                Import
+              <Button size="sm">
+                <Plus size={14} weight="bold" />
+                Units
               </Button>
             </Link>
             {userRole === "owner" && (
@@ -176,10 +140,6 @@ export function BuildingDetail({
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setShowForm(!showForm)}>
-              <Plus size={14} weight="bold" />
-              Unit
-            </Button>
           </div>
         }
       />
@@ -210,40 +170,6 @@ export function BuildingDetail({
               </Button>
               <Button size="sm" disabled={pending || !editName.trim()} onClick={handleEditBuilding}>
                 {pending ? "Saving…" : "Save"}
-              </Button>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {showForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="px-4 pt-4"
-        >
-          <div className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3">
-            <SectionLabel as="h3" noMargin>Add unit</SectionLabel>
-            {formError && <p className="text-xs text-red-600">{formError}</p>}
-            <Input
-              label="Unit Number"
-              value={unitNumber}
-              onChange={(e) => setUnitNumber(e.target.value)}
-              placeholder="Unit 1207"
-              autoFocus
-            />
-            <DateInput
-              label="Complete By Date"
-              value={completeByDate}
-              onChange={setCompleteByDate}
-              helper="When must this unit be completed by?"
-            />
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setShowForm(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" disabled={pending || !unitNumber.trim()} onClick={handleCreateUnit}>
-                {pending ? "Creating…" : "Add Unit"}
               </Button>
             </div>
           </div>

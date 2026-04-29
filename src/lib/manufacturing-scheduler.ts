@@ -139,6 +139,8 @@ export interface ManufacturingWindowItem {
   cutAt: string | null;
   assembledAt: string | null;
   qcApprovedAt: string | null;
+  manufacturingLabelPrintedAt: string | null;
+  packagingLabelPrintedAt: string | null;
   scheduledCutDate: string | null;
   scheduledAssemblyDate: string | null;
   scheduledQcDate: string | null;
@@ -390,7 +392,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
       : Promise.resolve({ data: [] as WindowRow[] }),
     supabase
       .from("window_production_status")
-      .select("id, window_id, unit_id, status, cut_at, assembled_at, qc_approved_at, issue_status, issue_reason, issue_notes")
+      .select("id, window_id, unit_id, status, cut_at, assembled_at, qc_approved_at, issue_status, issue_reason, issue_notes, manufacturing_label_printed_at, packaging_label_printed_at")
       .in("unit_id", unitIds),
     supabase
       .from("window_manufacturing_schedule")
@@ -624,7 +626,6 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
 
   for (const unitCandidates of candidatesByUnit.values()) {
     for (const item of unitCandidates) {
-      const production = item.production;
       const existing = item.existing;
       upserts.set(item.window.id, {
         id: existing?.id ?? `mfg-${crypto.randomUUID().slice(0, 8)}`,
@@ -759,6 +760,8 @@ export async function loadManufacturingRoleSchedule(
       cut_at: string | null;
       assembled_at: string | null;
       qc_approved_at: string | null;
+      manufacturing_label_printed_at: string | null;
+      packaging_label_printed_at: string | null;
     }> | null) ?? []))).map((production) => [production.window_id, production])
   );
 
@@ -804,6 +807,8 @@ export async function loadManufacturingRoleSchedule(
       cutAt: production?.cut_at ?? null,
       assembledAt: production?.assembled_at ?? null,
       qcApprovedAt: production?.qc_approved_at ?? null,
+      manufacturingLabelPrintedAt: production?.manufacturing_label_printed_at ?? null,
+      packagingLabelPrintedAt: production?.packaging_label_printed_at ?? null,
       scheduledCutDate: row.scheduled_cut_date,
       scheduledAssemblyDate: row.scheduled_assembly_date,
       scheduledQcDate: row.scheduled_qc_date,

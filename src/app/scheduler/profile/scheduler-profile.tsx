@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { CalendarBlank, Envelope, Phone, SignOut } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth-actions";
@@ -48,7 +49,7 @@ export function SchedulerProfile({
 
   return (
     <div className="flex flex-col">
-      <PageHeader title="Profile" backHref="/scheduler" />
+      <PageHeader title="Profile" backHref="/scheduler" actions={<RefreshButton />} />
 
       <div className="px-5 py-6 flex flex-col gap-6">
         <motion.div

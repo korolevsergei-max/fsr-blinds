@@ -9,6 +9,7 @@ import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -92,6 +93,7 @@ export function AssignUnit({ data }: { data: AppDataset }) {
         title={role === "scheduler" ? "Assign scheduler" : "Assign installer"}
         subtitle={`${unit.unitNumber} \u2022 ${unit.buildingName}`}
         backHref={`/management/units/${unit.id}`}
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">

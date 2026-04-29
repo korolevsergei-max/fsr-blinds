@@ -6,5 +6,6 @@ import Script from "next/script";
  * Uses a static /public file so no <script> tag appears in the React component tree.
  */
 export function SupabaseCookiePurgeScript() {
+  // eslint-disable-next-line @next/next/no-before-interactive-script-outside-document
   return <Script src="/cookie-purge.js" strategy="beforeInteractive" />;
 }

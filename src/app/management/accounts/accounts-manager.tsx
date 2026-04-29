@@ -23,6 +23,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { Building, Client, Assembler, Qc } from "@/lib/types";
 import type { InstallerCutterAuthDrift } from "@/lib/account-sync";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -199,7 +200,7 @@ export function AccountsManager({
   const handleRemoveDrift = (entry: InstallerCutterAuthDrift) => {
     if (
       !confirm(
-        `Remove Supabase login for ${entry.email}? They will not be able to sign in until invited again.`
+        `Remove Supabase login for ${entry.email}? They will not be able to sign in until added again.`
       )
     ) {
       return;
@@ -217,13 +218,13 @@ export function AccountsManager({
 
   return (
     <div className="flex flex-col">
-      <PageHeader title="Accounts" />
+      <PageHeader title="Accounts" actions={<RefreshButton />} />
 
       {authDrift.length > 0 && (
         <div className="px-4 pt-4 flex flex-col gap-3">
           <InlineAlert variant="warning">
             These logins exist in Supabase Authentication (installer or cutter) but are not
-            linked from this Accounts list. Remove them to clear stale users, then invite again if
+            linked from this Accounts list. Remove them to clear stale users, then add again if
             needed.
           </InlineAlert>
           {authDrift.map((entry, i) => (
@@ -301,7 +302,7 @@ export function AccountsManager({
         <div className="pt-1">
           <Button size="sm" onClick={() => setShowForm(!showForm)}>
             <Plus size={14} weight="bold" />
-            {showForm ? `Close ${tabLabel} invite` : `Invite ${tabLabel}`}
+            {showForm ? `Close ${tabLabel}` : `Add ${tabLabel}`}
           </Button>
         </div>
 
@@ -344,7 +345,7 @@ export function AccountsManager({
               showChangePassword
               deletePending={deletePending}
               onDelete={handleDeleteInstaller}
-              emptyMessage="No installers yet. Tap Invite to add one."
+              emptyMessage="No installers yet. Tap Add to add one."
             />
           </>
         )}
@@ -476,7 +477,7 @@ export function AccountsManager({
 
             {cutters.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No cutters yet. Tap Invite to add one.
+                No cutters yet. Tap Add to add one.
               </div>
             )}
           </>
@@ -594,7 +595,7 @@ export function AccountsManager({
 
             {schedulers.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No schedulers yet. Tap Invite to add one.
+                No schedulers yet. Tap Add to add one.
               </div>
             )}
           </>
@@ -684,7 +685,7 @@ export function AccountsManager({
 
             {assemblers.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No assemblers yet. Tap Invite to add one.
+                No assemblers yet. Tap Add to add one.
               </div>
             )}
           </>
@@ -774,7 +775,7 @@ export function AccountsManager({
 
             {qcs.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
-                No QC users yet. Tap Invite to add one.
+                No QC users yet. Tap Add to add one.
               </div>
             )}
           </>

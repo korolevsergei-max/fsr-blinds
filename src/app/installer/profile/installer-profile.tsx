@@ -8,6 +8,7 @@ import { Envelope, Phone, SignOut } from "@phosphor-icons/react";
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth-actions";
@@ -35,7 +36,7 @@ export function InstallerProfile({
 
   return (
     <div className="flex flex-col">
-      <PageHeader title="Profile" />
+      <PageHeader title="Profile" actions={<RefreshButton />} />
 
       <div className="px-5 py-6 flex flex-col gap-6">
         <motion.div

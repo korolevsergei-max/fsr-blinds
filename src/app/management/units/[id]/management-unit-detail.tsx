@@ -29,6 +29,7 @@ import { UserRole } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { DateInput } from "@/components/ui/date-input";
@@ -50,6 +51,9 @@ const ACTION_LABELS: Record<string, string> = {
   stage_photos_added: "Stage photos added",
   bracketing_date_set: "Bracketing date set",
   installation_date_set: "Installation date set",
+  post_install_issue_opened: "Post-install issue opened",
+  post_install_issue_note_added: "Post-install issue note added",
+  post_install_issue_resolved: "Post-install issue resolved",
 };
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
@@ -162,6 +166,16 @@ function buildLogDescription(log: UnitActivityLog): string {
     const to = resolveStatusLabel(d.to);
     const note = d.note ? ` \u2014 "${d.note}"` : "";
     return from && to ? `${from} \u2192 ${to}${note}` : to || from;
+  }
+  if (
+    log.action === "post_install_issue_opened" ||
+    log.action === "post_install_issue_note_added" ||
+    log.action === "post_install_issue_resolved"
+  ) {
+    const parts: string[] = [];
+    if (d.windowLabel) parts.push(String(d.windowLabel));
+    if (d.note) parts.push(`"${d.note}"`);
+    return parts.join(" \u2022 ");
   }
   return "";
 }
@@ -336,11 +350,12 @@ export function ManagementUnitDetail({
   return (
     <div className="flex flex-col">
       <PageHeader
-        title={unit.unitNumber}
+        title={`Unit ${unit.unitNumber}`}
         subtitle={`${unit.buildingName} \u2022 ${unit.clientName}`}
         backHref="/management/units"
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton />
             <Link href={`/management/units/${unit.id}/dates`}>
               <Button size="sm" variant="secondary">
                 <CalendarBlank size={14} />

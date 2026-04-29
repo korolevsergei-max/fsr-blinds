@@ -3,6 +3,7 @@ import {
   deriveManufacturingMilestoneState,
   type UnitMilestoneCoverage,
 } from "@/lib/unit-milestone-types";
+import { deriveWindowStages } from "@/lib/progress-stage";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -106,16 +107,27 @@ export async function getUnitMilestoneCoverageWithClient(
     totalWindows: 0,
     measuredCount: 0,
     bracketedCount: 0,
+    cutCount: 0,
+    assembledCount: 0,
+    qcApprovedCount: 0,
     manufacturedCount: 0,
     installedCount: 0,
+    postInstallIssueOpenCount: 0,
     allMeasured: false,
     allBracketed: false,
+    allCut: false,
+    allAssembled: false,
+    allQcApproved: false,
     allManufactured: false,
     allInstalled: false,
+    hasOpenPostInstallIssue: false,
     manufacturedByLegacyInstalledFallback: false,
     manufacturedWindowIds: [],
     measuredCompletedAt: null,
     bracketedCompletedAt: null,
+    cutCompletedAt: null,
+    assembledCompletedAt: null,
+    qcApprovedCompletedAt: null,
     manufacturedCompletedAt: null,
     installedCompletedAt: null,
   };
@@ -177,8 +189,14 @@ export async function getUnitMilestoneCoverageWithClient(
   // Manufacturing rows
   const { data: productionRows } = await supabase
     .from("window_production_status")
-    .select("window_id, status, qc_approved_at")
+    .select("window_id, status, cut_at, assembled_at, qc_approved_at")
     .eq("unit_id", unitId);
+
+  const { data: openIssueRows } = await supabase
+    .from("window_post_install_issues")
+    .select("window_id")
+    .eq("unit_id", unitId)
+    .eq("status", "open");
 
   // Installed coverage
   const installedWindows = windowRows.filter((w) => w.installed);
@@ -208,11 +226,58 @@ export async function getUnitMilestoneCoverageWithClient(
     }
   }
 
-  const qcApprovedRows = (productionRows ?? []).filter(
+  const allProductionRows = productionRows ?? [];
+  const productionStatusByWindow = new Map(
+    allProductionRows.map((row) => [
+      row.window_id as string,
+      row.status as "pending" | "cut" | "assembled" | "qc_approved",
+    ])
+  );
+  const openIssueWindowIds = new Set(
+    ((openIssueRows ?? []) as Array<{ window_id: string }>).map((row) => row.window_id)
+  );
+  const postInstallIssueOpenCount = windowRows.filter((row) =>
+    deriveWindowStages({
+      measured: row.measured,
+      bracketed: row.bracketed,
+      productionStatus: productionStatusByWindow.get(row.id) ?? "pending",
+      installed: row.installed,
+      hasOpenPostInstallIssue: openIssueWindowIds.has(row.id),
+    }).post_install_issue
+  ).length;
+  const cutReachedRows = allProductionRows.filter(
+    (row) =>
+      row.status === "cut" ||
+      row.status === "assembled" ||
+      row.status === "qc_approved"
+  );
+  const assembledReachedRows = allProductionRows.filter(
+    (row) => row.status === "assembled" || row.status === "qc_approved"
+  );
+  const qcApprovedRows = allProductionRows.filter(
     (row) => row.status === "qc_approved"
   );
+  const cutCount = cutReachedRows.length;
+  const assembledCount = assembledReachedRows.length;
   const qcApprovedCount = qcApprovedRows.length;
   const manufacturedWindowIds = qcApprovedRows.map((row) => row.window_id);
+
+  const latest = (vals: Array<string | null | undefined>): string | null => {
+    let best: string | null = null;
+    for (const v of vals) {
+      if (!v) continue;
+      if (!best || v > best) best = v;
+    }
+    return best;
+  };
+  const cutCompletedAt =
+    cutCount >= totalWindows
+      ? latest(cutReachedRows.map((r) => r.cut_at as string | null))
+      : null;
+  const assembledCompletedAt =
+    assembledCount >= totalWindows
+      ? latest(assembledReachedRows.map((r) => r.assembled_at as string | null))
+      : null;
   const qcManufacturedCompletedAt =
     qcApprovedCount >= totalWindows
       ? await resolveManufacturedCompletedAt(supabase, unitId)
@@ -234,16 +299,27 @@ export async function getUnitMilestoneCoverageWithClient(
     totalWindows,
     measuredCount,
     bracketedCount,
+    cutCount,
+    assembledCount,
+    qcApprovedCount,
     manufacturedCount,
     installedCount,
+    postInstallIssueOpenCount,
     allMeasured,
     allBracketed,
+    allCut: totalWindows > 0 && cutCount >= totalWindows,
+    allAssembled: totalWindows > 0 && assembledCount >= totalWindows,
+    allQcApproved: totalWindows > 0 && qcApprovedCount >= totalWindows,
     allManufactured,
     allInstalled,
+    hasOpenPostInstallIssue: postInstallIssueOpenCount > 0,
     manufacturedByLegacyInstalledFallback,
     manufacturedWindowIds,
     measuredCompletedAt,
     bracketedCompletedAt,
+    cutCompletedAt,
+    assembledCompletedAt,
+    qcApprovedCompletedAt: qcManufacturedCompletedAt,
     manufacturedCompletedAt,
     installedCompletedAt,
   };

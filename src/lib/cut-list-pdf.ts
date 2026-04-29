@@ -121,5 +121,16 @@ export async function buildCutListPdf({ items, filterSummary, sortSummary }: Cut
     },
   });
 
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(60, 60, 60);
+    doc.text(`${p} / ${pageCount}`, pageWidth - 2, pageHeight - 2, { align: "right" });
+  }
+
   return doc.output("blob");
 }

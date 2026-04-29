@@ -46,17 +46,26 @@ function deriveClientMilestones(
   const manufacturedComplete =
     coverage.totalWindows > 0 &&
     (unit.status === "manufactured" || unit.status === "installed");
+  const postInstallIssueOpenCount =
+    data.postInstallIssues?.filter(
+      (issue) => issue.unitId === unitId && issue.status === "open"
+    ).length ?? 0;
 
   return {
-    ...coverage,
+    ...EMPTY_MILESTONES,
+    totalWindows: coverage.totalWindows,
+    measuredCount: coverage.measuredCount,
+    bracketedCount: coverage.bracketedCount,
+    installedCount: coverage.installedCount,
+    postInstallIssueOpenCount,
+    allMeasured: coverage.allMeasured,
+    allBracketed: coverage.allBracketed,
+    allInstalled: coverage.allInstalled,
+    hasOpenPostInstallIssue: postInstallIssueOpenCount > 0,
     manufacturedCount: manufacturedComplete ? coverage.totalWindows : 0,
+    qcApprovedCount: manufacturedComplete ? coverage.totalWindows : 0,
     allManufactured: manufacturedComplete,
-    manufacturedByLegacyInstalledFallback: false,
-    manufacturedWindowIds: [],
-    measuredCompletedAt: null,
-    bracketedCompletedAt: null,
-    manufacturedCompletedAt: null,
-    installedCompletedAt: null,
+    allQcApproved: manufacturedComplete,
   };
 }
 
@@ -75,7 +84,9 @@ export function useUnitMilestones(unitId: string) {
     let active = true;
     const cached = milestonesCache.get(unitId);
     if (cached) {
-      setServerMilestones(cached);
+      queueMicrotask(() => {
+        if (active) setServerMilestones(cached);
+      });
     }
 
     void fetchUnitMilestones(unitId)
@@ -112,7 +123,9 @@ export function useUnitMediaAndMilestones(unitId: string) {
     let active = true;
     const cached = mediaAndMilestonesCache.get(unitId);
     if (cached) {
-      setServerData(cached);
+      queueMicrotask(() => {
+        if (active) setServerData(cached);
+      });
     }
 
     void fetchUnitMediaAndMilestones(unitId)
@@ -152,7 +165,9 @@ export function useUnitSupplementalData(unitId: string) {
     let active = true;
     const cached = supplementalCache.get(unitId);
     if (cached) {
-      setServerData(cached);
+      queueMicrotask(() => {
+        if (active) setServerData(cached);
+      });
     }
 
     void fetchUnitSupplementalData(unitId)

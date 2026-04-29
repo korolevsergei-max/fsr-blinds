@@ -89,7 +89,11 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
-      <PageHeader title="Key dates" backHref={detailHref} />
+      <PageHeader
+        title="Key dates"
+        subtitle={`Unit ${unit.unitNumber} • ${unit.buildingName}`}
+        backHref={detailHref}
+      />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">
         {saveError && (

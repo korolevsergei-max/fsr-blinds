@@ -25,6 +25,35 @@ export const UNIT_STATUS_ORDER: Record<UnitStatus, number> = {
   installed: 3,
 };
 
+/**
+ * Current-stage taxonomy for the new pipeline display.
+ * Computed per-unit from window-level production data.
+ * Measurement and bracketing are parallel — both must complete before cutting starts.
+ */
+export const CURRENT_STAGES = [
+  "not_started",
+  "measurement",
+  "bracketing",
+  "cutting",
+  "assembling",
+  "qc",
+  "installation",
+  "post_install_issue",
+] as const;
+
+export type CurrentStage = (typeof CURRENT_STAGES)[number];
+
+export const CURRENT_STAGE_LABELS: Record<CurrentStage, string> = {
+  not_started: "Not Yet Started",
+  measurement: "Measured",
+  bracketing: "Bracketed",
+  cutting: "Cut",
+  assembling: "Assembled",
+  qc: "Quality Checked",
+  installation: "Installed",
+  post_install_issue: "Post-Install Issue",
+};
+
 export const UNIT_PHOTO_STAGES = [
   "scheduled_bracketing",
   "bracketed_measured",
@@ -79,6 +108,8 @@ export interface WindowProductionStatus {
   issueReportedByRole: string | null;
   issueReportedAt: string | null;
   issueResolvedAt: string | null;
+  manufacturingLabelPrintedAt: string | null;
+  packagingLabelPrintedAt: string | null;
   createdAt: string;
 }
 
@@ -156,6 +187,8 @@ export interface Unit {
   buildingName: string;
   unitNumber: string;
   status: UnitStatus;
+  /** New 7-stage taxonomy derived from window-level production data. Populated by server-data finalizer. */
+  currentStage?: CurrentStage;
   assignedInstallerId: string | null;
   assignedInstallerName: string | null;
   assignedSchedulerId?: string | null;
@@ -174,6 +207,7 @@ export interface Unit {
   createdAt: string | null;
   assignedAt?: string | null;
   manufacturingRiskFlag?: RiskFlag;
+  hasOpenPostInstallIssue?: boolean;
 }
 
 export interface UnitActivityLog {
@@ -280,6 +314,34 @@ export interface WindowManufacturingEscalation {
   createdAt: string;
 }
 
+export type PostInstallIssueStatus = "open" | "resolved";
+
+export interface WindowPostInstallIssueNote {
+  id: string;
+  issueId: string;
+  authorUserId: string;
+  authorRole: string;
+  authorName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface WindowPostInstallIssue {
+  id: string;
+  windowId: string;
+  unitId: string;
+  openedByUserId: string;
+  openedByRole: "owner" | "scheduler";
+  openedByName: string | null;
+  openedAt: string;
+  resolvedByUserId: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  status: PostInstallIssueStatus;
+  createdAt: string;
+  notes: WindowPostInstallIssueNote[];
+}
+
 export interface ScheduleEntry {
   id: string;
   unitId: string;
@@ -307,3 +369,34 @@ export interface Notification {
   createdAt: string;
   read: boolean;
 }
+
+export const PROGRESS_STAGES = [
+  "measurement",
+  "bracketing",
+  "cutting",
+  "assembling",
+  "qc",
+  "installation",
+  "post_install_issue",
+] as const;
+export type ProgressStage = (typeof PROGRESS_STAGES)[number];
+
+export const PROGRESS_STAGE_LETTERS: Record<ProgressStage, string> = {
+  measurement: "M",
+  bracketing: "B",
+  cutting: "C",
+  assembling: "A",
+  qc: "Q",
+  installation: "I",
+  post_install_issue: "PI",
+};
+
+export const PROGRESS_STAGE_LABELS: Record<ProgressStage, string> = {
+  measurement: "Measured",
+  bracketing: "Bracketed",
+  cutting: "Cut",
+  assembling: "Assembled",
+  qc: "Quality Checked",
+  installation: "Installed",
+  post_install_issue: "Post-Install Issue",
+};

@@ -51,7 +51,8 @@ export function InstallationScheduleView({
   showScopeToggle?: boolean;
   hideClient?: boolean;
 }) {
-  const today = new Date();
+  const [todayTime] = useState(() => Date.now());
+  const today = useMemo(() => new Date(todayTime), [todayTime]);
   const todayKey = formatDateKey(today);
   const [localScope, setLocalScope] = useState<ScheduleScope>("week");
   const [weekOffset, setWeekOffset] = useState(0);
@@ -68,7 +69,7 @@ export function InstallationScheduleView({
       buildInstallationScheduleState({
         data,
         baseEntries,
-        today,
+        today: new Date(todayTime),
         scope,
         weekOffset,
         monthOffset,
@@ -76,7 +77,7 @@ export function InstallationScheduleView({
         buildingFilter,
         installDateFilter,
       }),
-    [baseEntries, buildingFilter, clientFilter, data, installDateFilter, monthOffset, scope, weekOffset]
+    [baseEntries, buildingFilter, clientFilter, data, installDateFilter, monthOffset, scope, todayTime, weekOffset]
   );
 
   const interval = getScopeInterval(scope, today, weekOffset, monthOffset);

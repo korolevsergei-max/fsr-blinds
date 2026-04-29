@@ -65,6 +65,8 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
     issueReportedByRole: (p.issue_reported_by_role as string) ?? null,
     issueReportedAt: (p.issue_reported_at as string) ?? null,
     issueResolvedAt: (p.issue_resolved_at as string) ?? null,
+    manufacturingLabelPrintedAt: (p.manufacturing_label_printed_at as string) ?? null,
+    packagingLabelPrintedAt: (p.packaging_label_printed_at as string) ?? null,
     createdAt: p.created_at as string,
   };
 }

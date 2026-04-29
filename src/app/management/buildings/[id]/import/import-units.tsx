@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { DateInput } from "@/components/ui/date-input";
@@ -327,6 +328,7 @@ export function ImportUnits({ data }: { data: AppDataset }) {
         title="Import Units"
         subtitle={building.name}
         backHref={`/management/buildings/${building.id}`}
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-5">

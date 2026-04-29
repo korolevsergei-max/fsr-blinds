@@ -21,8 +21,8 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border" suppressHydrationWarning>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 py-3 sm:py-4">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+      <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:gap-4 md:py-4">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
           {backHref && (
             <Link
               href={backHref}
@@ -33,18 +33,18 @@ export function PageHeader({
             </Link>
           )}
           <div className="flex-1 min-w-0">
-            <h1 className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-foreground truncate leading-snug">
+            <h1 className="text-[17px] sm:text-[18px] font-semibold tracking-tight text-foreground leading-snug break-words">
               {title}
             </h1>
             {subtitle && (
-              <p className="text-[12px] sm:text-[13px] text-tertiary truncate mt-0.5 leading-none">
+              <p className="text-[12px] sm:text-[13px] text-tertiary mt-0.5 leading-snug break-words">
                 {subtitle}
               </p>
             )}
           </div>
         </div>
         {actions && (
-          <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto overflow-x-auto no-scrollbar pb-0.5 sm:pb-0">
+          <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 md:ml-auto md:w-auto md:max-w-[48%] md:flex-shrink-0 md:pb-0 [&>*]:shrink-0">
             {actions}
           </div>
         )}

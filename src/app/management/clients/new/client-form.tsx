@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle } from "@phosphor-icons/react";
 import { createClient_ } from "@/app/actions/management-actions";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -44,7 +45,7 @@ export function ClientForm() {
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
-      <PageHeader title="New client" backHref="/management/clients" />
+      <PageHeader title="New client" backHref="/management/clients" actions={<RefreshButton />} />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-4">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}

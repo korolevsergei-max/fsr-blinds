@@ -2,23 +2,32 @@ export type UnitMilestoneCoverage = {
   totalWindows: number;
   measuredCount: number;
   bracketedCount: number;
+  /** Windows whose production_status has reached `cut` (or beyond). */
+  cutCount: number;
+  /** Windows whose production_status has reached `assembled` (or beyond). */
+  assembledCount: number;
+  /** Windows individually QC-approved (production_status = "qc_approved"). */
+  qcApprovedCount: number;
   manufacturedCount: number;
   installedCount: number;
+  /** Windows that currently have an open post-install issue. Stubbed until Phase 6. */
+  postInstallIssueOpenCount: number;
   allMeasured: boolean;
   allBracketed: boolean;
+  allCut: boolean;
+  allAssembled: boolean;
+  allQcApproved: boolean;
   allManufactured: boolean;
   allInstalled: boolean;
-  /** True when a fully installed legacy unit is treated as manufactured-complete without QC rows. */
+  hasOpenPostInstallIssue: boolean;
   manufacturedByLegacyInstalledFallback: boolean;
-  /** Window IDs that have been individually QC-approved (status = "qc_approved"). */
   manufacturedWindowIds: string[];
-  /** ISO timestamp of when the last required window was measured (or null). */
   measuredCompletedAt: string | null;
-  /** ISO timestamp of when the last qualifying bracketed photo was uploaded (or null). */
   bracketedCompletedAt: string | null;
-  /** ISO timestamp of when the last required window was QC-approved (or null). */
+  cutCompletedAt: string | null;
+  assembledCompletedAt: string | null;
+  qcApprovedCompletedAt: string | null;
   manufacturedCompletedAt: string | null;
-  /** ISO timestamp of when the last qualifying installed photo was uploaded (or null). */
   installedCompletedAt: string | null;
 };
 
@@ -60,16 +69,27 @@ export const EMPTY_MILESTONES: UnitMilestoneCoverage = {
   totalWindows: 0,
   measuredCount: 0,
   bracketedCount: 0,
+  cutCount: 0,
+  assembledCount: 0,
+  qcApprovedCount: 0,
   manufacturedCount: 0,
   installedCount: 0,
+  postInstallIssueOpenCount: 0,
   allMeasured: false,
   allBracketed: false,
+  allCut: false,
+  allAssembled: false,
+  allQcApproved: false,
   allManufactured: false,
   allInstalled: false,
+  hasOpenPostInstallIssue: false,
   manufacturedByLegacyInstalledFallback: false,
   manufacturedWindowIds: [],
   measuredCompletedAt: null,
   bracketedCompletedAt: null,
+  cutCompletedAt: null,
+  assembledCompletedAt: null,
+  qcApprovedCompletedAt: null,
   manufacturedCompletedAt: null,
   installedCompletedAt: null,
 };

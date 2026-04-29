@@ -62,27 +62,27 @@ function ManufacturingProcessTableColGroup({ showByUnit }: { showByUnit: boolean
   if (!showByUnit) {
     return (
       <colgroup>
-        <col className="w-[12%] lg:w-[3.25rem]" />
-        <col className="w-[18%] lg:w-[5.5rem]" />
-        <col className="w-[10%] lg:w-[5rem]" />
-        <col className="w-[15%] lg:w-[5rem]" />
-        <col className="w-[15%] lg:w-[5rem]" />
-        <col className="w-[14%] lg:w-[4.75rem]" />
-        <col className="w-[16%] lg:w-[5rem]" />
+        <col style={{ width: "10%" }} />
+        <col style={{ width: "18%" }} />
+        <col style={{ width: "12%" }} />
+        <col style={{ width: "15%" }} />
+        <col style={{ width: "15%" }} />
+        <col style={{ width: "15%" }} />
+        <col style={{ width: "15%" }} />
       </colgroup>
     );
   }
 
   return (
     <colgroup>
-      <col className="w-[9%] lg:w-[3.25rem]" />
-      <col className="w-[14%] lg:w-[4.25rem]" />
-      <col className="w-[15%] lg:w-[5.5rem]" />
-      <col className="w-[8%] lg:w-[5rem]" />
-      <col className="w-[14%] lg:w-[5rem]" />
-      <col className="w-[14%] lg:w-[5rem]" />
-      <col className="w-[12%] lg:w-[4.75rem]" />
-      <col className="w-[14%] lg:w-[5rem]" />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "14%" }} />
+      <col style={{ width: "14%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "14%" }} />
     </colgroup>
   );
 }
@@ -376,10 +376,8 @@ export function ManufacturingProcessScreen({
         : `${filteredRows.length} of ${rows.length} units`;
 
   const countLabel = showByUnit ? `${displayRows.length} units` : `${displayRows.length} floors`;
-  const floorStickyClass =
-    "sticky left-0 z-0 w-[9%] min-w-[9%] bg-inherit shadow-[1px_0_0_0_theme(colors.border)] lg:w-[3.25rem] lg:min-w-[3.25rem]";
-  const unitStickyClass =
-    "sticky left-[9%] z-0 w-[14%] min-w-[14%] bg-inherit shadow-[1px_0_0_0_theme(colors.border)] lg:left-[3.25rem] lg:w-[4.25rem] lg:min-w-[4.25rem]";
+  const floorStickyClass = "bg-inherit";
+  const unitStickyClass = "bg-inherit";
   const filterRailClass = compactFilterRail
     ? "flex items-center gap-1.5 overflow-x-auto no-scrollbar"
     : "flex items-center gap-2 overflow-x-auto no-scrollbar";
@@ -394,11 +392,11 @@ export function ManufacturingProcessScreen({
   const compactDateClass = compactFilterRail ? "w-[9.5rem] min-w-[9.5rem] flex-shrink-0" : "min-w-[12rem] flex-shrink-0";
   const tableWrapClass = "w-full min-w-0 border-separate border-spacing-0 table-fixed text-center";
   const totalsCellClass =
-    "border-b border-border bg-card px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+    "border-b border-border bg-card px-0.5 py-1.5 text-center truncate tabular-nums sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
   const columnHeaderCellClass =
-    "border-b border-border bg-surface px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+    "border-b border-border bg-surface px-0.5 py-1.5 text-center truncate sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
   const tableBodyCellClass =
-    "border-b border-border px-0.5 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+    "border-b border-border px-0.5 py-1.5 text-center truncate tabular-nums sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden">
@@ -599,13 +597,13 @@ export function ManufacturingProcessScreen({
       ) : (
         <div className="flex-1 min-h-0 px-2 py-3 sm:px-3 sm:py-4">
           <div className="flex h-full min-h-0 flex-col rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
-            <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+            <div className="flex-1 min-h-0 overflow-hidden">
               <div className="w-full pb-24">
                 <div className="sticky top-0 z-40 isolate bg-card">
                   <table className={tableWrapClass}>
                     <ManufacturingProcessTableColGroup showByUnit={showByUnit} />
                     <thead>
-                      <tr className="text-[9px] text-secondary sm:text-[11px]">
+                      <tr className="text-[10px] text-secondary sm:text-[11px]">
                         <th className={`${floorStickyClass} ${totalsCellClass} z-30 font-semibold`}>
                           Totals
                         </th>
@@ -639,7 +637,7 @@ export function ManufacturingProcessScreen({
                           {formatPercent(totals.installedCount, totals.totalBlinds)}
                         </th>
                       </tr>
-                      <tr className="text-[9px] uppercase tracking-[0.06em] text-tertiary sm:text-[11px]">
+                      <tr className="text-[10px] uppercase tracking-[0.06em] text-tertiary sm:text-[11px]">
                         <th className={`${floorStickyClass} ${columnHeaderCellClass} z-20 font-semibold`}>
                           FL
                         </th>

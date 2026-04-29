@@ -116,7 +116,7 @@ export function MultiDateFilter({
     if (values.length === 0) return;
     const nextDate = parseStoredDate(values[0]);
     if (nextDate) {
-      setVisibleMonth(startOfMonth(nextDate));
+      queueMicrotask(() => setVisibleMonth(startOfMonth(nextDate)));
     }
   }, [values]);
 

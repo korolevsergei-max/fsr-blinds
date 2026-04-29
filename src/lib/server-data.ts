@@ -10,8 +10,11 @@ import type {
   UnitPhotoStage,
   UnitStatus,
   WindowManufacturingEscalation,
+  WindowPostInstallIssue,
+  WindowPostInstallIssueNote,
 } from "@/lib/types";
 import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
+import { deriveCurrentStageFromCounts } from "@/lib/current-stage";
 import {
   mapClient,
   mapBuilding,
@@ -67,6 +70,28 @@ type ManufacturingEscalationRow = {
   opened_at: string;
   resolved_by_user_id: string | null;
   resolved_at: string | null;
+  created_at: string;
+};
+
+type PostInstallIssueRow = {
+  id: string;
+  window_id: string;
+  unit_id: string;
+  opened_by_user_id: string;
+  opened_by_role: "owner" | "scheduler";
+  opened_at: string;
+  resolved_by_user_id: string | null;
+  resolved_at: string | null;
+  status: "open" | "resolved";
+  created_at: string;
+};
+
+type PostInstallIssueNoteRow = {
+  id: string;
+  issue_id: string;
+  author_user_id: string;
+  author_role: string;
+  body: string;
   created_at: string;
 };
 
@@ -132,6 +157,7 @@ function buildDatasetFromRaw(raw: {
     cutters: (raw.cutters ?? []).map(mapCutter),
     schedulers,
     manufacturingEscalations: [],
+    postInstallIssues: [],
   };
 }
 
@@ -162,6 +188,115 @@ async function withManufacturingEscalations(dataset: AppDataset): Promise<AppDat
   };
 }
 
+async function loadPostInstallIssues(
+  unitIds: string[]
+): Promise<WindowPostInstallIssue[]> {
+  if (unitIds.length === 0) return [];
+
+  const supabase = await createClient();
+  const { data: issueRows, error } = await supabase
+    .from("window_post_install_issues")
+    .select("*")
+    .in("unit_id", unitIds)
+    .order("opened_at", { ascending: false });
+
+  if (error) return [];
+
+  const issues = (issueRows ?? []) as PostInstallIssueRow[];
+  const issueIds = issues.map((issue) => issue.id);
+  if (issueIds.length === 0) return [];
+
+  const [notesRes, profilesRes] = await Promise.all([
+    supabase
+      .from("window_post_install_issue_notes")
+      .select("*")
+      .in("issue_id", issueIds)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("user_profiles")
+      .select("id, display_name")
+      .in(
+        "id",
+        [
+          ...new Set(
+            issues
+              .flatMap((issue) => [issue.opened_by_user_id, issue.resolved_by_user_id])
+              .filter((id): id is string => Boolean(id))
+          ),
+        ]
+      ),
+  ]);
+
+  const noteRows = ((notesRes.data ?? []) as PostInstallIssueNoteRow[]).sort((a, b) =>
+    a.created_at.localeCompare(b.created_at)
+  );
+  const noteAuthorIds = [...new Set(noteRows.map((note) => note.author_user_id))];
+  let noteProfileRows = profilesRes.data ?? [];
+  if (noteAuthorIds.some((id) => !noteProfileRows.some((profile) => profile.id === id))) {
+    const { data: authorProfiles } = await supabase
+      .from("user_profiles")
+      .select("id, display_name")
+      .in("id", noteAuthorIds);
+    noteProfileRows = [...noteProfileRows, ...(authorProfiles ?? [])];
+  }
+
+  const profileNameById = new Map(
+    noteProfileRows.map((profile) => [profile.id as string, profile.display_name as string])
+  );
+  const notesByIssue = new Map<string, WindowPostInstallIssueNote[]>();
+  for (const note of noteRows) {
+    const mapped: WindowPostInstallIssueNote = {
+      id: note.id,
+      issueId: note.issue_id,
+      authorUserId: note.author_user_id,
+      authorRole: note.author_role,
+      authorName: profileNameById.get(note.author_user_id) ?? null,
+      body: note.body,
+      createdAt: note.created_at,
+    };
+    const list = notesByIssue.get(note.issue_id);
+    if (list) list.push(mapped);
+    else notesByIssue.set(note.issue_id, [mapped]);
+  }
+
+  return issues.map((issue) => ({
+    id: issue.id,
+    windowId: issue.window_id,
+    unitId: issue.unit_id,
+    openedByUserId: issue.opened_by_user_id,
+    openedByRole: issue.opened_by_role,
+    openedByName: profileNameById.get(issue.opened_by_user_id) ?? null,
+    openedAt: issue.opened_at,
+    resolvedByUserId: issue.resolved_by_user_id,
+    resolvedByName: issue.resolved_by_user_id
+      ? profileNameById.get(issue.resolved_by_user_id) ?? null
+      : null,
+    resolvedAt: issue.resolved_at,
+    status: issue.status,
+    createdAt: issue.created_at,
+    notes: notesByIssue.get(issue.id) ?? [],
+  }));
+}
+
+async function withPostInstallIssues(dataset: AppDataset): Promise<AppDataset> {
+  const unitIds = dataset.units.map((unit) => unit.id);
+  const postInstallIssues = await loadPostInstallIssues(unitIds);
+  const unitsWithOpenIssues = new Set(
+    postInstallIssues
+      .filter((issue) => issue.status === "open")
+      .map((issue) => issue.unitId)
+  );
+
+  return {
+    ...dataset,
+    units: dataset.units.map((unit) => ({
+      ...unit,
+      hasOpenPostInstallIssue: unitsWithOpenIssues.has(unit.id),
+    })),
+    postInstallIssues,
+  };
+}
+
 /**
  * Overrides each unit's `status` with a fresh derivation from current window
  * data + QC approvals. Schedules a background write-back so the cached
@@ -176,16 +311,25 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
   const supabase = await createClient();
   const unitIds = dataset.units.map((u) => u.id);
 
-  const { data: qcRows, error } = await supabase
+  const { data: prodRows, error } = await supabase
     .from("window_production_status")
-    .select("unit_id")
-    .in("unit_id", unitIds)
-    .eq("status", "qc_approved");
+    .select("unit_id, status")
+    .in("unit_id", unitIds);
   if (error) return dataset;
 
   const qcCountByUnit = new Map<string, number>();
-  for (const row of (qcRows ?? []) as Array<{ unit_id: string }>) {
-    qcCountByUnit.set(row.unit_id, (qcCountByUnit.get(row.unit_id) ?? 0) + 1);
+  const assembledOrLaterByUnit = new Map<string, number>();
+  const cutOrLaterByUnit = new Map<string, number>();
+  for (const row of (prodRows ?? []) as Array<{ unit_id: string; status: string }>) {
+    if (row.status === "qc_approved") {
+      qcCountByUnit.set(row.unit_id, (qcCountByUnit.get(row.unit_id) ?? 0) + 1);
+    }
+    if (row.status === "assembled" || row.status === "qc_approved") {
+      assembledOrLaterByUnit.set(row.unit_id, (assembledOrLaterByUnit.get(row.unit_id) ?? 0) + 1);
+    }
+    if (row.status === "cut" || row.status === "assembled" || row.status === "qc_approved") {
+      cutOrLaterByUnit.set(row.unit_id, (cutOrLaterByUnit.get(row.unit_id) ?? 0) + 1);
+    }
   }
 
   const unitIdByRoom = new Map(dataset.rooms.map((r) => [r.id, r.unitId]));
@@ -203,7 +347,11 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
     const ws = windowsByUnit.get(unit.id) ?? [];
     const totalWindows = ws.length;
     const installedCount = ws.filter((w) => w.installed).length;
+    const measuredCount = ws.filter((w) => w.measured).length;
+    const bracketedCount = ws.filter((w) => w.bracketed).length;
     const qcCount = qcCountByUnit.get(unit.id) ?? 0;
+    const assembledCount = assembledOrLaterByUnit.get(unit.id) ?? 0;
+    const cutCount = cutOrLaterByUnit.get(unit.id) ?? 0;
     // Legacy units installed before per-blind QC tracking lack qc_approved rows;
     // treat them as fully manufactured so we don't downgrade installed → bracketed.
     const manufacturedCount =
@@ -212,14 +360,27 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
         : qcCount;
     const derived = deriveUnitStatusFromCounts({
       totalWindows,
-      measuredCount: ws.filter((w) => w.measured).length,
-      bracketedCount: ws.filter((w) => w.bracketed).length,
+      measuredCount,
+      bracketedCount,
       manufacturedCount,
       installedCount,
     });
-    if (derived === unit.status) return unit;
-    drift.push({ id: unit.id, status: derived });
-    return { ...unit, status: derived };
+    const currentStage = deriveCurrentStageFromCounts({
+      totalWindows,
+      measuredCount,
+      bracketedCount,
+      cutCount,
+      assembledCount,
+      qcCount,
+      installedCount,
+      hasOpenPostInstallIssue: unit.hasOpenPostInstallIssue,
+    });
+    const updated = { ...unit, currentStage };
+    if (derived !== unit.status) {
+      drift.push({ id: unit.id, status: derived });
+      updated.status = derived;
+    }
+    return updated;
   });
 
   if (drift.length > 0) {
@@ -239,7 +400,8 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
 }
 
 async function finalizeDataset(dataset: AppDataset): Promise<AppDataset> {
-  const withLiveStatuses = await withLiveUnitStatuses(dataset);
+  const withIssues = await withPostInstallIssues(dataset);
+  const withLiveStatuses = await withLiveUnitStatuses(withIssues);
   return withManufacturingEscalations(withLiveStatuses);
 }
 
@@ -328,6 +490,7 @@ function emptyDataset(): AppDataset {
     cutters: [],
     schedulers: [],
     manufacturingEscalations: [],
+    postInstallIssues: [],
   };
 }
 
@@ -486,6 +649,7 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
     cutters: [],
     schedulers: [],
     manufacturingEscalations: [],
+    postInstallIssues: [],
   });
 }
 
@@ -550,6 +714,7 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     cutters: [],
     schedulers: [],
     manufacturingEscalations: [],
+    postInstallIssues: [],
   });
 }
 

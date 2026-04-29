@@ -7,12 +7,12 @@ export function useSessionStorage<T>(key: string, initialValue: T) {
     try {
       const item = window.sessionStorage.getItem(key);
       if (item) {
-        setState(JSON.parse(item) as T);
+        const parsed = JSON.parse(item) as T;
+        queueMicrotask(() => setState(parsed));
       }
     } catch (error) {
       console.warn(`Error reading sessionStorage key "${key}":`, error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   const setValue = useCallback((value: T | ((val: T) => T)) => {

@@ -10,6 +10,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -80,6 +81,7 @@ export function AssignUnitScheduler({ data }: { data: AppDataset }) {
         title="Assign installer"
         subtitle={`${unit.unitNumber} · ${unit.buildingName}`}
         backHref={`/scheduler/units/${unit.id}`}
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">

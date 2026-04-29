@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Plus, Envelope, Phone } from "@phosphor-icons/react";
 import type { Building, Client, Unit } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 
 export function ClientsList({
@@ -21,12 +22,15 @@ export function ClientsList({
       <PageHeader
         title="Clients"
         actions={
-          <Link href="/management/clients/new">
-            <Button size="sm">
-              <Plus size={14} weight="bold" />
-              Add
-            </Button>
-          </Link>
+          <>
+            <RefreshButton />
+            <Link href="/management/clients/new">
+              <Button size="sm">
+                <Plus size={14} weight="bold" />
+                Add
+              </Button>
+            </Link>
+          </>
         }
       />
 

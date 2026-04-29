@@ -37,6 +37,8 @@ function createItem(windowId: string): ManufacturingWindowItem {
     cutAt: null,
     assembledAt: null,
     qcApprovedAt: null,
+    manufacturingLabelPrintedAt: null,
+    packagingLabelPrintedAt: null,
     scheduledCutDate: "2026-04-23",
     scheduledAssemblyDate: null,
     scheduledQcDate: null,

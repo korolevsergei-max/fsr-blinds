@@ -18,6 +18,7 @@ import {
 } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "@/components/ui/section-label";
 import { Input } from "@/components/ui/input";
@@ -115,6 +116,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
         backHref="/management/clients"
         actions={
           <div className="flex items-center gap-2">
+            <RefreshButton />
             <Button size="sm" variant="secondary" onClick={() => setShowEditForm(!showEditForm)}>
               <PencilSimple size={14} weight="bold" />
               Edit

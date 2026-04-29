@@ -98,6 +98,18 @@ function buildWindowActivityDescription(log: UnitActivityLog): string {
   if (log.action === "installed_photo_added") {
     return "Installed photo uploaded.";
   }
+  if (log.action === "post_install_issue_opened") {
+    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
+    return `Post-install issue opened.${note}`;
+  }
+  if (log.action === "post_install_issue_note_added") {
+    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
+    return `Post-install issue note added.${note}`;
+  }
+  if (log.action === "post_install_issue_resolved") {
+    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
+    return `Post-install issue resolved.${note}`;
+  }
   return "Window activity recorded.";
 }
 
@@ -133,7 +145,11 @@ export function WindowForm({
         return (
           log.action === "window_created" ||
           log.action === "window_updated" ||
-          log.action === "post_bracketing_photo_added"
+          log.action === "post_bracketing_photo_added" ||
+          log.action === "installed_photo_added" ||
+          log.action === "post_install_issue_opened" ||
+          log.action === "post_install_issue_note_added" ||
+          log.action === "post_install_issue_resolved"
         ) && details?.windowId === existingWindow.id;
       })
     : [];

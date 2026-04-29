@@ -16,39 +16,44 @@ import { getFloor } from "@/lib/app-dataset";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
+/** Stage letter shown in the report cell — 7-stage taxonomy. */
+type StageLetter = "M" | "B" | "C" | "A" | "Q" | "I" | "PI" | "";
+type ProjectedColor =
+  | "measurement"
+  | "bracketing"
+  | "cutting"
+  | "assembling"
+  | "qc"
+  | "installation"
+  | "post_install_issue"
+  | "none";
+
 type ReportUnit = Unit & {
-  todayBadge: "M" | "B" | "MF" | "I" | "";
-  projectedColor:
-    | "measured"
-    | "bracketed"
-    | "manufactured"
-    | "installed"
-    | "none";
+  todayBadge: StageLetter;
+  projectedColor: ProjectedColor;
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-/** Corner badge from persisted unit status. */
-function getTodayBadge(status: string): "M" | "B" | "MF" | "I" | "" {
+/** Corner badge from persisted unit status, mapped onto the 7-stage taxonomy. */
+function getTodayBadge(status: string): StageLetter {
   if (status === "installed") return "I";
-  if (status === "manufactured") return "MF";
+  if (status === "manufactured") return "Q";
   if (status === "bracketed") return "B";
   if (status === "measured") return "M";
   return "";
 }
 
-function getProjectedColor(
-  unit: Unit,
-  asOfDate: string
-): ReportUnit["projectedColor"] {
+function getProjectedColor(unit: Unit, asOfDate: string): ProjectedColor {
+  if (unit.hasOpenPostInstallIssue) return "post_install_issue";
   const d = asOfDate;
   const m = Boolean(unit.measurementDate && unit.measurementDate <= d);
   const b = Boolean(unit.bracketingDate && unit.bracketingDate <= d);
   const i = Boolean(unit.installationDate && unit.installationDate <= d);
-  if (unit.status === "manufactured") return "manufactured";
-  if (i) return "installed";
-  if (b) return "bracketed";
-  if (m) return "measured";
+  if (unit.status === "manufactured") return "qc";
+  if (i) return "installation";
+  if (b) return "bracketing";
+  if (m) return "measurement";
   return "none";
 }
 
@@ -64,8 +69,18 @@ function formatDate(iso: string): string {
 
 // ─── Color Config ──────────────────────────────────────────────────────────
 
-const COLOR_MAP = {
-  measured: {
+const COLOR_MAP: Record<
+  ProjectedColor,
+  {
+    bg: string;
+    border: string;
+    label: string;
+    dot: string;
+    printBg: string;
+    printBorder: string;
+  }
+> = {
+  measurement: {
     bg: "bg-[#FFF9C4]",
     border: "border-[#F5C518]",
     label: "Measured",
@@ -73,7 +88,7 @@ const COLOR_MAP = {
     printBg: "#FFF9C4",
     printBorder: "#F5C518",
   },
-  bracketed: {
+  bracketing: {
     bg: "bg-[#FFE5D9]",
     border: "border-[#F4845F]",
     label: "Bracketed",
@@ -81,21 +96,45 @@ const COLOR_MAP = {
     printBg: "#FFE5D9",
     printBorder: "#F4845F",
   },
-  manufactured: {
-    bg: "bg-[#EEF2FF]",
-    border: "border-[#6366F1]",
-    label: "Manufactured",
-    dot: "#6366F1",
-    printBg: "#EEF2FF",
-    printBorder: "#6366F1",
+  cutting: {
+    bg: "bg-[#FEF3C7]",
+    border: "border-[#CA8A04]",
+    label: "Cut",
+    dot: "#CA8A04",
+    printBg: "#FEF3C7",
+    printBorder: "#CA8A04",
   },
-  installed: {
+  assembling: {
+    bg: "bg-[#FFEDD5]",
+    border: "border-[#EA580C]",
+    label: "Assembled",
+    dot: "#EA580C",
+    printBg: "#FFEDD5",
+    printBorder: "#EA580C",
+  },
+  qc: {
+    bg: "bg-[#DBEAFE]",
+    border: "border-[#2563EB]",
+    label: "Quality Checked",
+    dot: "#2563EB",
+    printBg: "#DBEAFE",
+    printBorder: "#2563EB",
+  },
+  installation: {
     bg: "bg-[#D4F5E2]",
     border: "border-[#27AE60]",
     label: "Installed",
     dot: "#27AE60",
     printBg: "#D4F5E2",
     printBorder: "#27AE60",
+  },
+  post_install_issue: {
+    bg: "bg-[#FEE2E2]",
+    border: "border-[#DC2626]",
+    label: "Post-Install Issue",
+    dot: "#DC2626",
+    printBg: "#FEE2E2",
+    printBorder: "#DC2626",
   },
   none: {
     bg: "bg-white",
@@ -105,15 +144,48 @@ const COLOR_MAP = {
     printBg: "#FFFFFF",
     printBorder: "#E5E7EB",
   },
-} as const;
+};
 
-/** Letter badge background colors — M=yellow, B=salmon, MF=indigo, I=green */
-const BADGE_COLOR: Record<"M" | "B" | "MF" | "I", string> = {
+/** Letter badge background colors — keyed by stage letter. */
+const BADGE_COLOR: Record<Exclude<StageLetter, "">, string> = {
   M: "#F5C518",
   B: "#F4845F",
-  MF: "#6366F1",
+  C: "#CA8A04",
+  A: "#EA580C",
+  Q: "#2563EB",
   I: "#27AE60",
+  PI: "#DC2626",
 };
+
+const BADGE_LABEL: Record<Exclude<StageLetter, "">, string> = {
+  M: "Measured",
+  B: "Bracketed",
+  C: "Cut",
+  A: "Assembled",
+  Q: "Quality Checked",
+  I: "Installed",
+  PI: "Post-Install Issue",
+};
+
+const LEGEND_KEYS: ProjectedColor[] = [
+  "measurement",
+  "bracketing",
+  "cutting",
+  "assembling",
+  "qc",
+  "installation",
+  "post_install_issue",
+];
+
+const BADGE_LETTERS: Array<Exclude<StageLetter, "">> = [
+  "M",
+  "B",
+  "C",
+  "A",
+  "Q",
+  "I",
+  "PI",
+];
 
 // ─── Props ─────────────────────────────────────────────────────────────────
 
@@ -214,29 +286,20 @@ function ReportPreviewModal({
 
                 {/* Badge legend in header */}
                 <div className="flex flex-col gap-1.5 items-end">
-                  {(
-                    [
-                      "measured",
-                      "bracketed",
-                      "manufactured",
-                      "installed",
-                    ] as const
-                  ).map(
-                    (key) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <span className="text-[11px] text-zinc-500 font-medium capitalize">
-                          {COLOR_MAP[key].label}
-                        </span>
-                        <span
-                          className="w-3.5 h-3.5 rounded-sm border"
-                          style={{
-                            backgroundColor: COLOR_MAP[key].printBg,
-                            borderColor: COLOR_MAP[key].printBorder,
-                          }}
-                        />
-                      </div>
-                    )
-                  )}
+                  {LEGEND_KEYS.map((key) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-[11px] text-zinc-500 font-medium capitalize">
+                        {COLOR_MAP[key].label}
+                      </span>
+                      <span
+                        className="w-3.5 h-3.5 rounded-sm border"
+                        style={{
+                          backgroundColor: COLOR_MAP[key].printBg,
+                          borderColor: COLOR_MAP[key].printBorder,
+                        }}
+                      />
+                    </div>
+                  ))}
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] text-zinc-500 font-medium">
                       Unscheduled
@@ -293,19 +356,13 @@ function ReportPreviewModal({
               <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
                 Today&apos;s Status Badge:
               </p>
-              {(["M", "B", "MF", "I"] as const).map((letter) => (
+              {BADGE_LETTERS.map((letter) => (
                 <div key={letter} className="flex items-center gap-1.5">
                   <span className="min-w-5 h-5 px-1 rounded-full bg-zinc-100 border border-zinc-200 text-[8px] font-bold text-zinc-700 flex items-center justify-center leading-none">
                     {letter}
                   </span>
                   <span className="text-[11px] text-zinc-500">
-                    {letter === "M"
-                      ? "Measured"
-                      : letter === "B"
-                        ? "Bracketed"
-                        : letter === "MF"
-                          ? "Manufactured"
-                          : "Installed"}
+                    {BADGE_LABEL[letter]}
                   </span>
                 </div>
               ))}
@@ -518,7 +575,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
     () =>
       filteredUnits.map((u) => ({
         ...u,
-        todayBadge: getTodayBadge(u.status),
+        todayBadge: u.hasOpenPostInstallIssue ? "PI" : getTodayBadge(u.status),
         projectedColor: getProjectedColor(u, asOfDate),
       })),
     [filteredUnits, asOfDate]
@@ -676,14 +733,7 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
             {/* Legend + Actions */}
             <div className="px-4 pt-4 pb-2 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
-                {(
-                  [
-                    "measured",
-                    "bracketed",
-                    "manufactured",
-                    "installed",
-                  ] as const
-                ).map((key) => (
+                {LEGEND_KEYS.map((key) => (
                   <span
                     key={key}
                     className="text-[11px] font-semibold px-2.5 py-1 rounded-md border"
@@ -706,19 +756,13 @@ export function StatusGridReport({ units, clients, buildings }: Props) {
             {/* Badge legend */}
             <div className="px-4 pb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               <p className="text-[11px] text-muted">Today&apos;s badge:</p>
-              {(["M", "B", "MF", "I"] as const).map((letter) => (
+              {BADGE_LETTERS.map((letter) => (
                 <div key={letter} className="flex items-center gap-1">
                   <span className="min-w-5 h-5 px-0.5 rounded-full bg-foreground/10 border border-border text-[8px] font-bold text-foreground flex items-center justify-center leading-none">
                     {letter}
                   </span>
                   <span className="text-[11px] text-muted">
-                    {letter === "M"
-                      ? "Measured"
-                      : letter === "B"
-                        ? "Bracketed"
-                        : letter === "MF"
-                          ? "Manufactured"
-                          : "Installed"}
+                    {BADGE_LABEL[letter]}
                   </span>
                 </div>
               ))}

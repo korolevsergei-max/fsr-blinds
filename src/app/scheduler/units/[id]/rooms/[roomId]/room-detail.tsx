@@ -7,6 +7,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
@@ -38,6 +39,7 @@ export function RoomDetail({
         title={room.name}
         subtitle={`${unit.unitNumber} • ${unit.buildingName}`}
         backHref={`/scheduler/units/${unit.id}`}
+        actions={<RefreshButton />}
       />
 
       <div className="flex-1 px-5 py-5">

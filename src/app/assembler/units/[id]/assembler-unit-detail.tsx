@@ -217,6 +217,8 @@ export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
                   issueReportedByRole: null,
                   issueReportedAt: null,
                   issueResolvedAt: null,
+                  manufacturingLabelPrintedAt: null,
+                  packagingLabelPrintedAt: null,
                   createdAt: new Date().toISOString(),
                 }),
                 status: "assembled" as const,

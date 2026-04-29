@@ -12,6 +12,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import type { Unit } from "@/lib/types";
 
 type Filter = "all" | "today" | "overdue" | "completed" | "no_dates";
@@ -76,6 +77,7 @@ export function BuildingUnits({
       <PageHeader
         title={building.name}
         backHref="/installer"
+        actions={<RefreshButton />}
       />
 
       <div className="px-5 pt-4">

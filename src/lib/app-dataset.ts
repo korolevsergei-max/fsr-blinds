@@ -9,6 +9,7 @@ import type {
   Unit,
   Window,
   WindowManufacturingEscalation,
+  WindowPostInstallIssue,
 } from "./types";
 
 export type AppDataset = {
@@ -22,6 +23,7 @@ export type AppDataset = {
   cutters: Cutter[];
   schedulers: Scheduler[];
   manufacturingEscalations: WindowManufacturingEscalation[];
+  postInstallIssues: WindowPostInstallIssue[];
 };
 
 export function getUnitsByInstaller(

@@ -192,7 +192,11 @@ export function DateInput({
           }
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            open ? setOpen(false) : openWithPosition();
+            if (open) {
+              setOpen(false);
+            } else {
+              openWithPosition();
+            }
           }
         }}
         className={[baseTriggerClass, triggerTone, triggerClassName].filter(Boolean).join(" ")}

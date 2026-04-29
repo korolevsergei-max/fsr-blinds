@@ -172,7 +172,8 @@ export function ManufacturingScheduleView({
   onScopeChange?: (scope: ScheduleScope) => void;
   showScopeToggle?: boolean;
 }) {
-  const today = new Date();
+  const [todayTime] = useState(() => Date.now());
+  const today = useMemo(() => new Date(todayTime), [todayTime]);
   const router = useRouter();
   const [selectedRole, setSelectedRole] = useState<ManufacturingRole>(fixedRole ?? "cutter");
   const [localScope, setLocalScope] = useState<ScheduleScope>("week");
@@ -205,7 +206,7 @@ export function ManufacturingScheduleView({
       buildManufacturingScheduleState({
         schedule,
         role,
-        today,
+        today: new Date(todayTime),
         scope,
         weekOffset,
         monthOffset,
@@ -213,7 +214,7 @@ export function ManufacturingScheduleView({
         buildingFilter,
         installDateFilter,
       }),
-    [buildingFilter, clientFilter, installDateFilter, monthOffset, role, schedule, scope, weekOffset]
+    [buildingFilter, clientFilter, installDateFilter, monthOffset, role, schedule, scope, todayTime, weekOffset]
   );
 
   const buildingOptions = [

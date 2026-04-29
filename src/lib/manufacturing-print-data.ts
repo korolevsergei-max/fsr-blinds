@@ -9,6 +9,7 @@ import type {
   WindowInstallation,
 } from "@/lib/types";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
+import type { LabelMode } from "@/lib/cut-labels";
 import { loadOpenManufacturingEscalationsByWindow } from "@/lib/manufacturing-escalations";
 
 type UnitRow = {
@@ -53,9 +54,14 @@ type ProductionRow = {
   cut_at: string | null;
   assembled_at: string | null;
   qc_approved_at: string | null;
+  manufacturing_label_printed_at: string | null;
+  packaging_label_printed_at: string | null;
 };
 
-export async function loadWindowsForPrint(windowIds: string[]): Promise<ManufacturingWindowItem[]> {
+export async function loadWindowsForPrint(
+  windowIds: string[],
+  options: { skipPrinted?: boolean; labelMode?: LabelMode } = {},
+): Promise<ManufacturingWindowItem[]> {
   if (windowIds.length === 0) return [];
 
   const supabase = await createClient();
@@ -71,7 +77,7 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
       .in("id", windowIds),
     supabase
       .from("window_production_status")
-      .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at")
+      .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at")
       .in("window_id", windowIds),
     loadOpenManufacturingEscalationsByWindow(supabase, windowIds),
   ]);
@@ -143,6 +149,8 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
       cutAt: production?.cut_at ?? null,
       assembledAt: production?.assembled_at ?? null,
       qcApprovedAt: production?.qc_approved_at ?? null,
+      manufacturingLabelPrintedAt: production?.manufacturing_label_printed_at ?? null,
+      packagingLabelPrintedAt: production?.packaging_label_printed_at ?? null,
       scheduledCutDate: schedule.scheduled_cut_date,
       scheduledAssemblyDate: null,
       scheduledQcDate: null,
@@ -156,6 +164,14 @@ export async function loadWindowsForPrint(windowIds: string[]): Promise<Manufact
     };
 
     if (item.productionStatus !== "pending") continue;
+
+    if (options.skipPrinted && options.labelMode) {
+      const mfgPrinted = production?.manufacturing_label_printed_at != null;
+      const pkgPrinted = production?.packaging_label_printed_at != null;
+      if (options.labelMode === "manufacturing" && mfgPrinted) continue;
+      if (options.labelMode === "packaging" && pkgPrinted) continue;
+      if (options.labelMode === "both" && mfgPrinted && pkgPrinted) continue;
+    }
 
     itemsByWindowId.set(windowId, item);
   }

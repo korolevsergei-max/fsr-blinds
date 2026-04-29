@@ -21,6 +21,7 @@ function createDataset(): AppDataset {
     cutters: [],
     schedulers: [],
     manufacturingEscalations: [],
+    postInstallIssues: [],
     units: [
       {
         id: "unit-1",

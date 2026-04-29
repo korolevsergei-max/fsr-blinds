@@ -3,15 +3,37 @@
 import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, CaretLeft, CaretRight, CheckCircle, Images, Ruler, Trash, User, X } from "@phosphor-icons/react";
+import {
+  Camera,
+  CaretLeft,
+  CaretRight,
+  ChatCircleText,
+  Check,
+  CheckCircle,
+  Images,
+  Ruler,
+  Trash,
+  User,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
 import { getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { WindowPostInstallIssue } from "@/lib/types";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
+import {
+  addPostInstallIssueNote,
+  openPostInstallIssue,
+  resolvePostInstallIssue,
+} from "@/app/actions/post-install-issue-actions";
+import { refreshDataset } from "@/app/actions/dataset-queries";
+import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
 
@@ -25,6 +47,22 @@ function formatRelativeTime(iso: string): string {
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatIssueTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-CA", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function roleLabel(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 type ImageOrientation = "portrait" | "landscape" | "square";
 type GalleryItem = {
@@ -80,11 +118,23 @@ export function RoomWindowsView({
   isManufacturedComplete = false,
   manufacturedWindowIds,
 }: RoomWindowsViewProps) {
+  const router = useRouter();
+  const datasetCtx = useAppDatasetMaybe();
   const windowsList = getWindowsByRoom(data, roomId);
+  const room = data.rooms.find((item) => item.id === roomId);
+  const unit = room ? data.units.find((item) => item.id === room.unitId) : null;
+  const currentRole = datasetCtx?.user.role;
+  const canManagePostInstallIssues = currentRole === "owner" || currentRole === "scheduler";
+  const issueLoaderKind = currentRole === "scheduler" ? "scheduler" : currentRole === "installer" ? "installer" : "full";
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
     Record<string, ImageOrientation>
   >({});
   const [galleryWindowId, setGalleryWindowId] = useState<string | null>(null);
+  const [issueWindowId, setIssueWindowId] = useState<string | null>(null);
+  const [issueNote, setIssueNote] = useState("");
+  const [noteDraftByIssueId, setNoteDraftByIssueId] = useState<Record<string, string>>({});
+  const [resolveDraftByIssueId, setResolveDraftByIssueId] = useState<Record<string, string>>({});
+  const [issueError, setIssueError] = useState<string | null>(null);
   const [photoIndexByWindowId, setPhotoIndexByWindowId] = useState<Record<string, number>>({});
   // User-selected active stage per window card (defaults to furthest-along stage)
   const [activeStageByWindowId, setActiveStageByWindowId] = useState<
@@ -92,6 +142,86 @@ export function RoomWindowsView({
   >({});
   const [confirmDeleteWindowId, setConfirmDeleteWindowId] = useState<string | null>(null);
   const [isPendingDelete, startDeleteTransition] = useTransition();
+  const [isPendingIssueAction, startIssueTransition] = useTransition();
+
+  const refreshIssueData = () =>
+    refreshDataset(issueLoaderKind).then((freshData) => {
+      if (freshData) datasetCtx?.setData(freshData);
+      router.refresh();
+    });
+
+  const issueWindow = issueWindowId
+    ? windowsList.find((windowItem) => windowItem.id === issueWindowId) ?? null
+    : null;
+
+  const issuesByWindowId = useMemo(() => {
+    const map = new Map<string, WindowPostInstallIssue[]>();
+    for (const issue of data.postInstallIssues ?? []) {
+      const existing = map.get(issue.windowId) ?? [];
+      existing.push(issue);
+      map.set(issue.windowId, existing);
+    }
+    for (const issues of map.values()) {
+      issues.sort((a, b) => {
+        if (a.status !== b.status) return a.status === "open" ? -1 : 1;
+        return b.openedAt.localeCompare(a.openedAt);
+      });
+    }
+    return map;
+  }, [data.postInstallIssues]);
+
+  const handleOpenIssue = () => {
+    if (!issueWindow || !unit) return;
+    const body = issueNote.trim();
+    if (!body) {
+      setIssueError("Note is required.");
+      return;
+    }
+    setIssueError(null);
+    startIssueTransition(async () => {
+      const result = await openPostInstallIssue({
+        windowId: issueWindow.id,
+        unitId: unit.id,
+        body,
+      });
+      if (!result.ok) {
+        setIssueError(result.error);
+        return;
+      }
+      setIssueWindowId(null);
+      setIssueNote("");
+      await refreshIssueData();
+    });
+  };
+
+  const handleAddIssueNote = (issueId: string) => {
+    const body = noteDraftByIssueId[issueId]?.trim() ?? "";
+    if (!body) return;
+    setIssueError(null);
+    startIssueTransition(async () => {
+      const result = await addPostInstallIssueNote({ issueId, body });
+      if (!result.ok) {
+        setIssueError(result.error);
+        return;
+      }
+      setNoteDraftByIssueId((prev) => ({ ...prev, [issueId]: "" }));
+      await refreshIssueData();
+    });
+  };
+
+  const handleResolveIssue = (issueId: string) => {
+    const closingNote = resolveDraftByIssueId[issueId]?.trim() ?? "";
+    setIssueError(null);
+    startIssueTransition(async () => {
+      const result = await resolvePostInstallIssue({ issueId, closingNote });
+      if (!result.ok) {
+        setIssueError(result.error);
+        return;
+      }
+      setResolveDraftByIssueId((prev) => ({ ...prev, [issueId]: "" }));
+      await refreshIssueData();
+    });
+  };
 
   const windowStageMediaMap = useMemo(() => {
     const map = new Map<string, Partial<Record<WindowStageKey, string>>>();
@@ -243,6 +373,8 @@ export function RoomWindowsView({
           }
 
           const galleryCount = windowGalleryMap.get(win.id)?.length ?? 0;
+          const postInstallIssues = issuesByWindowId.get(win.id) ?? [];
+          const openPostInstallIssues = postInstallIssues.filter((issue) => issue.status === "open");
           // Default to furthest-along stage; user can tap a pill to switch
           const defaultStage: "before" | "bracketed" | "installed" = win.installed
             ? "installed"
@@ -418,13 +550,21 @@ export function RoomWindowsView({
                 <div className="mb-2.5 flex items-start justify-between">
                   <div>
                     <p className="text-sm font-bold tracking-tight text-foreground">{win.label}</p>
-                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2 py-1">
-                      <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                        Type
-                      </span>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-700">
-                        {win.blindType}
-                      </span>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <div className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2 py-1">
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                          Type
+                        </span>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-700">
+                          {win.blindType}
+                        </span>
+                      </div>
+                      {openPostInstallIssues.length > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700">
+                          <WarningCircle size={12} weight="fill" />
+                          Post-install issue
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -439,6 +579,27 @@ export function RoomWindowsView({
                   <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent/15 bg-accent/5 px-2.5 py-1 text-[11px] font-semibold text-accent">
                     <Images size={13} />
                     View all images ({galleryCount})
+                  </div>
+                )}
+
+                {win.installed && canManagePostInstallIssues && openPostInstallIssues.length === 0 && (
+                  <div
+                    className="mb-2"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIssueWindowId(win.id);
+                        setIssueNote("");
+                        setIssueError(null);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-red-600 transition-colors hover:bg-red-50"
+                    >
+                      <WarningCircle size={13} weight="bold" />
+                      Flag post-install issue
+                    </button>
                   </div>
                 )}
 
@@ -484,6 +645,113 @@ export function RoomWindowsView({
                       blindType={win.blindType}
                       chainSide={win.chainSide}
                     />
+                  </div>
+                )}
+
+                {postInstallIssues.length > 0 && (
+                  <div
+                    className="mt-3 rounded-2xl border border-red-100 bg-red-50/60 p-3"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <ChatCircleText size={15} className="text-red-600" />
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-red-700">
+                        Post-install issue thread
+                      </p>
+                    </div>
+                    {issueError && (
+                      <p className="mb-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700">
+                        {issueError}
+                      </p>
+                    )}
+                    <div className="flex flex-col gap-3">
+                      {postInstallIssues.map((issue) => (
+                        <div
+                          key={issue.id}
+                          className="rounded-xl border border-red-100 bg-white px-3 py-2.5"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                issue.status === "open"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-zinc-100 text-zinc-600"
+                              }`}
+                            >
+                              {issue.status === "open" ? "Open" : "Resolved"}
+                            </span>
+                            <span className="text-[10px] text-zinc-400">
+                              Opened {formatIssueTime(issue.openedAt)}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {issue.notes.map((note) => (
+                              <div key={note.id} className="border-l-2 border-red-200 pl-2">
+                                <p className="text-[12px] text-foreground">{note.body}</p>
+                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                  {note.authorName ?? roleLabel(note.authorRole)} ·{" "}
+                                  {formatIssueTime(note.createdAt)}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                          {issue.status === "resolved" && issue.resolvedAt && (
+                            <p className="mt-2 text-[10px] font-medium text-zinc-500">
+                              Resolved by {issue.resolvedByName ?? "staff"} ·{" "}
+                              {formatIssueTime(issue.resolvedAt)}
+                            </p>
+                          )}
+                          {canManagePostInstallIssues && issue.status === "open" && (
+                            <div className="mt-3 flex flex-col gap-2">
+                              <textarea
+                                value={noteDraftByIssueId[issue.id] ?? ""}
+                                onChange={(event) =>
+                                  setNoteDraftByIssueId((prev) => ({
+                                    ...prev,
+                                    [issue.id]: event.target.value,
+                                  }))
+                                }
+                                placeholder="Add note"
+                                rows={2}
+                                className="w-full resize-none rounded-xl border border-border bg-white px-3 py-2 text-[12px] text-foreground outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isPendingIssueAction || !(noteDraftByIssueId[issue.id] ?? "").trim()}
+                                  onClick={() => handleAddIssueNote(issue.id)}
+                                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-white px-3 py-2 text-[12px] font-semibold text-foreground disabled:opacity-50"
+                                >
+                                  <ChatCircleText size={13} />
+                                  Add note
+                                </button>
+                                <input
+                                  value={resolveDraftByIssueId[issue.id] ?? ""}
+                                  onChange={(event) =>
+                                    setResolveDraftByIssueId((prev) => ({
+                                      ...prev,
+                                      [issue.id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Closing note"
+                                  className="min-w-0 flex-1 rounded-xl border border-border bg-white px-3 py-2 text-[12px] outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isPendingIssueAction}
+                                  onClick={() => handleResolveIssue(issue.id)}
+                                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
+                                >
+                                  <Check size={13} weight="bold" />
+                                  Resolve
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -585,6 +853,80 @@ export function RoomWindowsView({
                   }}
                 >
                   Delete
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {issueWindow && unit && room && (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Close post-install issue dialog"
+              className="fixed inset-0 z-40 bg-zinc-950/45"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIssueWindowId(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-4 bottom-1/4 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
+            >
+              <div className="border-b border-border px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+                    <WarningCircle size={22} weight="fill" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground">Flag Post-Install Issue</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Window: {issueWindow.label} · {room.name} · Unit {unit.unitNumber}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="px-5 py-4">
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                  Note
+                </label>
+                <textarea
+                  value={issueNote}
+                  onChange={(event) => {
+                    setIssueNote(event.target.value);
+                    setIssueError(null);
+                  }}
+                  required
+                  rows={4}
+                  className="w-full resize-none rounded-2xl border border-border bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
+                />
+                {issueError && (
+                  <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    {issueError}
+                  </p>
+                )}
+              </div>
+              <div className="flex border-t border-border">
+                <button
+                  type="button"
+                  className="flex-1 py-3.5 text-sm font-semibold text-muted"
+                  onClick={() => setIssueWindowId(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isPendingIssueAction || !issueNote.trim()}
+                  className="flex-1 border-l border-border py-3.5 text-sm font-semibold text-red-600 disabled:opacity-50"
+                  onClick={handleOpenIssue}
+                >
+                  Open issue
                 </button>
               </div>
             </motion.div>
