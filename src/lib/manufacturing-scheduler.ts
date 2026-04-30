@@ -338,6 +338,25 @@ function todayKey(): string {
   return formatDateKey(new Date());
 }
 
+// Supabase routes long URLs through proxies that reject requests above ~8KB.
+// `.in("id", ids)` puts every id in the URL, so a single 600+ id query 400s.
+// Chunk the ids and merge the results to keep each URL well under that limit.
+const SUPABASE_IN_CHUNK = 100;
+
+async function selectInChunks<Row>(
+  ids: readonly string[],
+  fetchChunk: (chunk: string[]) => PromiseLike<{ data: Row[] | null; error: unknown }>
+): Promise<Row[]> {
+  if (ids.length === 0) return [];
+  const out: Row[] = [];
+  for (let i = 0; i < ids.length; i += SUPABASE_IN_CHUNK) {
+    const chunk = ids.slice(i, i + SUPABASE_IN_CHUNK) as string[];
+    const { data } = await fetchChunk(chunk);
+    if (data) out.push(...data);
+  }
+  return out;
+}
+
 function getUnitManufacturingDueDate(unit: Pick<UnitRow, "installation_date" | "complete_by_date">): string | null {
   return unit.installation_date ?? unit.complete_by_date ?? null;
 }
@@ -385,35 +404,40 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
   }
 
   const unitIds = units.map((unit) => unit.id);
-  const { data: roomRows } = await supabase
-    .from("rooms")
-    .select("id, unit_id, name")
-    .in("unit_id", unitIds)
-    .order("name");
-  const rooms = (roomRows as RoomRow[] | null) ?? [];
+  const rooms = await selectInChunks<RoomRow>(unitIds, (chunk) =>
+    supabase
+      .from("rooms")
+      .select("id, unit_id, name")
+      .in("unit_id", chunk)
+      .order("name")
+      .then((res) => ({ data: res.data as RoomRow[] | null, error: res.error })),
+  );
   const roomIds = rooms.map((room) => room.id);
 
-  const [windowRows, productionRows, scheduleRows] = await Promise.all([
-    roomIds.length > 0
-      ? supabase
-          .from("windows")
-          .select("id, room_id, label, blind_type, width, height, depth, notes")
-          .in("room_id", roomIds)
-          .order("label")
-      : Promise.resolve({ data: [] as WindowRow[] }),
-    supabase
-      .from("window_production_status")
-      .select("id, window_id, unit_id, status, cut_at, assembled_at, qc_approved_at, issue_status, issue_reason, issue_notes, manufacturing_label_printed_at, packaging_label_printed_at")
-      .in("unit_id", unitIds),
-    supabase
-      .from("window_manufacturing_schedule")
-      .select("*")
-      .in("unit_id", unitIds),
+  const [windows, productions, schedules] = await Promise.all([
+    selectInChunks<WindowRow>(roomIds, (chunk) =>
+      supabase
+        .from("windows")
+        .select("id, room_id, label, blind_type, width, height, depth, notes")
+        .in("room_id", chunk)
+        .order("label")
+        .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ProductionRow>(unitIds, (chunk) =>
+      supabase
+        .from("window_production_status")
+        .select("id, window_id, unit_id, status, cut_at, assembled_at, qc_approved_at, issue_status, issue_reason, issue_notes, manufacturing_label_printed_at, packaging_label_printed_at")
+        .in("unit_id", chunk)
+        .then((res) => ({ data: res.data as ProductionRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ScheduleRow>(unitIds, (chunk) =>
+      supabase
+        .from("window_manufacturing_schedule")
+        .select("*")
+        .in("unit_id", chunk)
+        .then((res) => ({ data: res.data as ScheduleRow[] | null, error: res.error })),
+    ),
   ]);
-
-  const windows = (windowRows.data as WindowRow[] | null) ?? [];
-  const productions = (productionRows.data as ProductionRow[] | null) ?? [];
-  const schedules = (scheduleRows.data as ScheduleRow[] | null) ?? [];
 
   const roomById = new Map(rooms.map((room) => [room.id, room]));
   const productionByWindow = new Map(productions.map((row) => [row.window_id, row]));
@@ -711,45 +735,54 @@ export async function loadManufacturingRoleSchedule(
   const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
   const windowIds = [...new Set(schedules.map((row) => row.window_id))];
 
-  const [unitRows, windowRows, productionRows, escalationByWindow, escalationHistoryByWindow] = await Promise.all([
-    unitIds.length > 0
-      ? supabase
-          .from("units")
-          .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
-          .in("id", unitIds)
-      : Promise.resolve({ data: [] as UnitRow[] }),
-    windowIds.length > 0
-      ? supabase
-          .from("windows")
-          .select("id, room_id, label, blind_type, width, height, depth, notes, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, chain_side")
-          .in("id", windowIds)
-      : Promise.resolve({ data: [] as WindowRow[] }),
-    windowIds.length > 0
-      ? supabase
-          .from("window_production_status")
-          .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at")
-          .in("window_id", windowIds)
-      : Promise.resolve({
-          data: [] as Array<{
-            window_id: string;
-            status: ProductionStatus;
-            issue_status: ManufacturingIssueStatus;
-            issue_reason: string | null;
-            issue_notes: string | null;
-            cut_at: string | null;
-            assembled_at: string | null;
-            qc_approved_at: string | null;
-          }>,
-        }),
+  type ProductionStatusRow = {
+    window_id: string;
+    status: ProductionStatus;
+    issue_status: ManufacturingIssueStatus;
+    issue_reason: string | null;
+    issue_notes: string | null;
+    cut_at: string | null;
+    assembled_at: string | null;
+    qc_approved_at: string | null;
+    manufacturing_label_printed_at: string | null;
+    packaging_label_printed_at: string | null;
+  };
+
+  const [unitData, windowData, productionData, escalationByWindow, escalationHistoryByWindow] = await Promise.all([
+    selectInChunks<UnitRow>(unitIds, (chunk) =>
+      supabase
+        .from("units")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
+        .in("id", chunk)
+        .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
+    ),
+    selectInChunks<WindowRow>(windowIds, (chunk) =>
+      supabase
+        .from("windows")
+        .select("id, room_id, label, blind_type, width, height, depth, notes, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, chain_side")
+        .in("id", chunk)
+        .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ProductionStatusRow>(windowIds, (chunk) =>
+      supabase
+        .from("window_production_status")
+        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at")
+        .in("window_id", chunk)
+        .then((res) => ({ data: res.data as ProductionStatusRow[] | null, error: res.error })),
+    ),
     loadOpenManufacturingEscalationsByWindow(supabase, windowIds),
     loadManufacturingEscalationHistoryByWindow(supabase, windowIds),
   ]);
 
-  const windows = (windowRows.data as WindowRow[] | null) ?? [];
+  const windows = windowData;
   const roomIds = [...new Set(windows.map((window) => window.room_id))];
-  const roomRows = roomIds.length > 0
-    ? await supabase.from("rooms").select("id, name").in("id", roomIds)
-    : { data: [] as Array<{ id: string; name: string }> };
+  const roomData = await selectInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
+    supabase
+      .from("rooms")
+      .select("id, name")
+      .in("id", chunk)
+      .then((res) => ({ data: res.data as Array<{ id: string; name: string }> | null, error: res.error })),
+  );
 
   const items: ManufacturingWindowItem[] = [];
   const roleDateKey =
@@ -758,23 +791,10 @@ export async function loadManufacturingRoleSchedule(
       : role === "assembler"
         ? "scheduledAssemblyDate"
         : "scheduledQcDate";
-  const unitsById = new Map(((unitRows.data as UnitRow[] | null) ?? []).map((unit) => [unit.id, unit]));
+  const unitsById = new Map(unitData.map((unit) => [unit.id, unit]));
   const windowsById = new Map(windows.map((window) => [window.id, window]));
-  const roomsById = new Map((((roomRows.data as Array<{ id: string; name: string }> | null) ?? [])).map((room) => [room.id, room]));
-  const productionByWindow = new Map(
-    ((((productionRows.data as Array<{
-      window_id: string;
-      status: ProductionStatus;
-      issue_status: ManufacturingIssueStatus;
-      issue_reason: string | null;
-      issue_notes: string | null;
-      cut_at: string | null;
-      assembled_at: string | null;
-      qc_approved_at: string | null;
-      manufacturing_label_printed_at: string | null;
-      packaging_label_printed_at: string | null;
-    }> | null) ?? []))).map((production) => [production.window_id, production])
-  );
+  const roomsById = new Map(roomData.map((room) => [room.id, room]));
+  const productionByWindow = new Map(productionData.map((production) => [production.window_id, production]));
 
   const allItems: ManufacturingWindowItem[] = [];
   for (const row of schedules) {
