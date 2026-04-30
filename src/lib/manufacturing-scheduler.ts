@@ -22,6 +22,7 @@ import {
   loadManufacturingEscalationHistoryByWindow,
   loadOpenManufacturingEscalationsByWindow,
 } from "@/lib/manufacturing-escalations";
+import { selectInChunks } from "@/lib/supabase-chunking";
 
 type SettingsRow = {
   id: string;
@@ -336,25 +337,6 @@ async function getSettingsAndOverrides() {
 
 function todayKey(): string {
   return formatDateKey(new Date());
-}
-
-// Supabase routes long URLs through proxies that reject requests above ~8KB.
-// `.in("id", ids)` puts every id in the URL, so a single 600+ id query 400s.
-// Chunk the ids and merge the results to keep each URL well under that limit.
-const SUPABASE_IN_CHUNK = 100;
-
-async function selectInChunks<Row>(
-  ids: readonly string[],
-  fetchChunk: (chunk: string[]) => PromiseLike<{ data: Row[] | null; error: unknown }>
-): Promise<Row[]> {
-  if (ids.length === 0) return [];
-  const out: Row[] = [];
-  for (let i = 0; i < ids.length; i += SUPABASE_IN_CHUNK) {
-    const chunk = ids.slice(i, i + SUPABASE_IN_CHUNK) as string[];
-    const { data } = await fetchChunk(chunk);
-    if (data) out.push(...data);
-  }
-  return out;
 }
 
 function getUnitManufacturingDueDate(unit: Pick<UnitRow, "installation_date" | "complete_by_date">): string | null {

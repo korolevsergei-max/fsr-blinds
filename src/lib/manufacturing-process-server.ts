@@ -9,6 +9,7 @@ import {
   type ManufacturingProcessScope,
   type ManufacturingProcessUnitInput,
 } from "./manufacturing-process-core";
+import { selectInChunks } from "./supabase-chunking";
 
 type UnitRow = {
   id: string;
@@ -62,35 +63,44 @@ async function loadManufacturingProcessRowsForUnits(
   const unitIds = scopedUnits.map((unit) => unit.id);
   const supabase = await createClient();
 
-  const [{ data: roomRows }, { data: productionRows }] = await Promise.all([
-    supabase.from("rooms").select("id, unit_id").in("unit_id", unitIds),
-    supabase
-      .from("window_production_status")
-      .select("unit_id, status")
-      .in("unit_id", unitIds),
+  const [roomRows, productionRows] = await Promise.all([
+    selectInChunks<RoomRow>(unitIds, (chunk) =>
+      supabase
+        .from("rooms")
+        .select("id, unit_id")
+        .in("unit_id", chunk)
+        .then((res) => ({ data: res.data as RoomRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ProductionRow>(unitIds, (chunk) =>
+      supabase
+        .from("window_production_status")
+        .select("unit_id, status")
+        .in("unit_id", chunk)
+        .then((res) => ({ data: res.data as ProductionRow[] | null, error: res.error })),
+    ),
   ]);
 
   const roomToUnitId = new Map<string, string>(
-    ((roomRows ?? []) as RoomRow[]).map((room) => [room.id, room.unit_id])
+    roomRows.map((room) => [room.id, room.unit_id])
   );
   const roomIds = [...roomToUnitId.keys()];
 
-  let installedWindowUnitIds: string[] = [];
-  if (roomIds.length > 0) {
-    const { data: installedWindowRows } = await supabase
+  const installedWindowRows = await selectInChunks<InstalledWindowRow>(roomIds, (chunk) =>
+    supabase
       .from("windows")
       .select("room_id")
-      .in("room_id", roomIds)
-      .eq("installed", true);
+      .in("room_id", chunk)
+      .eq("installed", true)
+      .then((res) => ({ data: res.data as InstalledWindowRow[] | null, error: res.error })),
+  );
 
-    installedWindowUnitIds = ((installedWindowRows ?? []) as InstalledWindowRow[])
-      .map((row) => roomToUnitId.get(row.room_id) ?? null)
-      .filter((unitId): unitId is string => Boolean(unitId));
-  }
+  const installedWindowUnitIds = installedWindowRows
+    .map((row) => roomToUnitId.get(row.room_id) ?? null)
+    .filter((unitId): unitId is string => Boolean(unitId));
 
   return buildManufacturingProcessRows(
     scopedUnits,
-    ((productionRows ?? []) as ProductionRow[]).map((row) => ({
+    productionRows.map((row) => ({
       unitId: row.unit_id,
       status: row.status,
     })),

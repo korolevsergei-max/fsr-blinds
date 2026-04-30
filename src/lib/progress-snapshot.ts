@@ -1,5 +1,6 @@
 import { createAdminClient } from "./supabase/admin.ts";
 import type { ProgressStage } from "./types";
+import { selectInChunks } from "./supabase-chunking.ts";
 
 const TORONTO_TIME_ZONE = "America/Toronto";
 
@@ -239,16 +240,16 @@ async function loadUnitsByIds(
 ): Promise<Map<string, SnapshotUnitRow>> {
   if (unitIds.length === 0) return new Map();
 
-  const { data, error } = await supabase
-    .from("units")
-    .select(
-      "id, building_id, client_id, unit_number, window_count, assigned_installer_id, assigned_installer_name, measurement_date, bracketing_date, installation_date"
-    )
-    .in("id", unitIds);
+  const rows = await selectInChunks<SnapshotUnitRow>(unitIds, (chunk) =>
+    supabase
+      .from("units")
+      .select(
+        "id, building_id, client_id, unit_number, window_count, assigned_installer_id, assigned_installer_name, measurement_date, bracketing_date, installation_date"
+      )
+      .in("id", chunk)
+      .then((res) => ({ data: res.data as SnapshotUnitRow[] | null, error: res.error })),
+  );
 
-  if (error) throw new Error(`Failed to load units: ${error.message}`);
-
-  const rows = (data ?? []) as SnapshotUnitRow[];
   return new Map(rows.map((unit) => [unit.id, unit]));
 }
 
@@ -274,26 +275,27 @@ async function loadWindowsForUnits(
   const windowsByUnit = new Map<string, SnapshotWindowRow[]>();
   if (unitIds.length === 0) return windowsByUnit;
 
-  const { data: roomsData, error: roomsError } = await supabase
-    .from("rooms")
-    .select("id, unit_id")
-    .in("unit_id", unitIds);
+  const rooms = await selectInChunks<SnapshotRoomRow>(unitIds, (chunk) =>
+    supabase
+      .from("rooms")
+      .select("id, unit_id")
+      .in("unit_id", chunk)
+      .then((res) => ({ data: res.data as SnapshotRoomRow[] | null, error: res.error })),
+  );
 
-  if (roomsError) throw new Error(`Failed to load rooms: ${roomsError.message}`);
-
-  const rooms = (roomsData ?? []) as SnapshotRoomRow[];
   const unitIdByRoomId = new Map(rooms.map((room) => [room.id, room.unit_id]));
   const roomIds = rooms.map((room) => room.id);
   if (roomIds.length === 0) return windowsByUnit;
 
-  const { data: windowsData, error: windowsError } = await supabase
-    .from("windows")
-    .select("id, room_id, measured, bracketed, installed")
-    .in("room_id", roomIds);
+  const windowsData = await selectInChunks<SnapshotWindowRow>(roomIds, (chunk) =>
+    supabase
+      .from("windows")
+      .select("id, room_id, measured, bracketed, installed")
+      .in("room_id", chunk)
+      .then((res) => ({ data: res.data as SnapshotWindowRow[] | null, error: res.error })),
+  );
 
-  if (windowsError) throw new Error(`Failed to load windows: ${windowsError.message}`);
-
-  for (const window of (windowsData ?? []) as SnapshotWindowRow[]) {
+  for (const window of windowsData) {
     const unitId = unitIdByRoomId.get(window.room_id);
     if (!unitId) continue;
     const list = windowsByUnit.get(unitId) ?? [];
@@ -311,15 +313,17 @@ async function loadStageMediaByWindow(
   const mediaByWindow = new Map<string, Map<string, string[]>>();
   if (windowIds.length === 0) return mediaByWindow;
 
-  const { data, error } = await supabase
-    .from("media_uploads")
-    .select("window_id, stage, created_at")
-    .in("window_id", windowIds)
-    .in("stage", ["scheduled_bracketing", "bracketed_measured", "installed_pending_approval"]);
+  type MediaRow = { window_id: string | null; stage: string | null; created_at: string | null };
+  const data = await selectInChunks<MediaRow>(windowIds, (chunk) =>
+    supabase
+      .from("media_uploads")
+      .select("window_id, stage, created_at")
+      .in("window_id", chunk)
+      .in("stage", ["scheduled_bracketing", "bracketed_measured", "installed_pending_approval"])
+      .then((res) => ({ data: res.data as MediaRow[] | null, error: res.error })),
+  );
 
-  if (error) throw new Error(`Failed to load media timestamps: ${error.message}`);
-
-  for (const row of (data ?? []) as Array<{ window_id: string | null; stage: string | null; created_at: string | null }>) {
+  for (const row of data) {
     if (!row.window_id || !row.stage || !row.created_at) continue;
     const byStage = mediaByWindow.get(row.window_id) ?? new Map<string, string[]>();
     const values = byStage.get(row.stage) ?? [];
@@ -441,16 +445,16 @@ async function loadProductionRows(
 ): Promise<Map<string, ProductionRow>> {
   if (windowIds.length === 0) return new Map();
 
-  const { data, error } = await supabase
-    .from("window_production_status")
-    .select(
-      "window_id, unit_id, status, cut_by_cutter_id, cut_at, assembled_by_assembler_id, assembled_at, qc_approved_by_qc_id, qc_approved_by_assembler_id, qc_approved_at"
-    )
-    .in("window_id", windowIds);
+  const rows = await selectInChunks<ProductionRow>(windowIds, (chunk) =>
+    supabase
+      .from("window_production_status")
+      .select(
+        "window_id, unit_id, status, cut_by_cutter_id, cut_at, assembled_by_assembler_id, assembled_at, qc_approved_by_qc_id, qc_approved_by_assembler_id, qc_approved_at"
+      )
+      .in("window_id", chunk)
+      .then((res) => ({ data: res.data as ProductionRow[] | null, error: res.error })),
+  );
 
-  if (error) throw new Error(`Failed to load production rows: ${error.message}`);
-
-  const rows = (data ?? []) as ProductionRow[];
   return new Map(rows.map((row) => [row.window_id, row]));
 }
 
@@ -462,19 +466,16 @@ async function loadDisplayNames(
   if (ids.length === 0) return new Map();
 
   const nameColumn = table === "user_profiles" ? "display_name" : "name";
-  const { data, error } = await supabase
-    .from(table)
-    .select(`id, ${nameColumn}`)
-    .in("id", ids);
-
-  if (error) throw new Error(`Failed to load ${table} names: ${error.message}`);
-
-  return new Map(
-    ((data ?? []) as Array<{ id: string; name?: string | null; display_name?: string | null }>).map((row) => [
-      row.id,
-      row.name ?? row.display_name ?? row.id,
-    ])
+  type Row = { id: string; name?: string | null; display_name?: string | null };
+  const data = await selectInChunks<Row>(ids, (chunk) =>
+    supabase
+      .from(table)
+      .select(`id, ${nameColumn}`)
+      .in("id", chunk)
+      .then((res) => ({ data: res.data as Row[] | null, error: res.error })),
   );
+
+  return new Map(data.map((row) => [row.id, row.name ?? row.display_name ?? row.id]));
 }
 
 async function buildManufacturingStageRows(

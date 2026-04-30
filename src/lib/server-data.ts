@@ -39,6 +39,7 @@ import {
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
 import { mapManufacturingEscalation } from "@/lib/manufacturing-escalations";
+import { selectInChunks } from "@/lib/supabase-chunking";
 
 type MediaUploadRow = {
   id: string;
@@ -168,16 +169,17 @@ async function loadOpenManufacturingEscalations(
   if (unitIds.length === 0) return [];
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("window_manufacturing_escalations")
-    .select("*")
-    .in("unit_id", unitIds)
-    .eq("status", "open")
-    .order("opened_at", { ascending: false });
+  const rows = await selectInChunks<ManufacturingEscalationRow>(unitIds, (chunk) =>
+    supabase
+      .from("window_manufacturing_escalations")
+      .select("*")
+      .in("unit_id", chunk)
+      .eq("status", "open")
+      .order("opened_at", { ascending: false })
+      .then((res) => ({ data: res.data as ManufacturingEscalationRow[] | null, error: res.error })),
+  );
 
-  if (error) return [];
-
-  return ((data ?? []) as ManufacturingEscalationRow[]).map(mapManufacturingEscalation);
+  return rows.map(mapManufacturingEscalation);
 }
 
 async function withManufacturingEscalations(dataset: AppDataset): Promise<AppDataset> {
@@ -194,50 +196,60 @@ async function loadPostInstallIssues(
   if (unitIds.length === 0) return [];
 
   const supabase = await createClient();
-  const { data: issueRows, error } = await supabase
-    .from("window_post_install_issues")
-    .select("*")
-    .in("unit_id", unitIds)
-    .order("opened_at", { ascending: false });
-
-  if (error) return [];
-
-  const issues = (issueRows ?? []) as PostInstallIssueRow[];
+  const issues = await selectInChunks<PostInstallIssueRow>(unitIds, (chunk) =>
+    supabase
+      .from("window_post_install_issues")
+      .select("*")
+      .in("unit_id", chunk)
+      .order("opened_at", { ascending: false })
+      .then((res) => ({ data: res.data as PostInstallIssueRow[] | null, error: res.error })),
+  );
   const issueIds = issues.map((issue) => issue.id);
   if (issueIds.length === 0) return [];
 
-  const [notesRes, profilesRes] = await Promise.all([
-    supabase
-      .from("window_post_install_issue_notes")
-      .select("*")
-      .in("issue_id", issueIds)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("user_profiles")
-      .select("id, display_name")
-      .in(
-        "id",
-        [
-          ...new Set(
-            issues
-              .flatMap((issue) => [issue.opened_by_user_id, issue.resolved_by_user_id])
-              .filter((id): id is string => Boolean(id))
-          ),
-        ]
-      ),
+  const profileIdSeed = [
+    ...new Set(
+      issues
+        .flatMap((issue) => [issue.opened_by_user_id, issue.resolved_by_user_id])
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  const [noteRowsAll, profileSeedRows] = await Promise.all([
+    selectInChunks<PostInstallIssueNoteRow>(issueIds, (chunk) =>
+      supabase
+        .from("window_post_install_issue_notes")
+        .select("*")
+        .in("issue_id", chunk)
+        .order("created_at", { ascending: true })
+        .then((res) => ({ data: res.data as PostInstallIssueNoteRow[] | null, error: res.error })),
+    ),
+    selectInChunks<{ id: string; display_name: string }>(profileIdSeed, (chunk) =>
+      supabase
+        .from("user_profiles")
+        .select("id, display_name")
+        .in("id", chunk)
+        .then((res) => ({ data: res.data as Array<{ id: string; display_name: string }> | null, error: res.error })),
+    ),
   ]);
 
-  const noteRows = ((notesRes.data ?? []) as PostInstallIssueNoteRow[]).sort((a, b) =>
-    a.created_at.localeCompare(b.created_at)
-  );
+  const noteRows = noteRowsAll.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const noteAuthorIds = [...new Set(noteRows.map((note) => note.author_user_id))];
-  let noteProfileRows = profilesRes.data ?? [];
-  if (noteAuthorIds.some((id) => !noteProfileRows.some((profile) => profile.id === id))) {
-    const { data: authorProfiles } = await supabase
-      .from("user_profiles")
-      .select("id, display_name")
-      .in("id", noteAuthorIds);
-    noteProfileRows = [...noteProfileRows, ...(authorProfiles ?? [])];
+  let noteProfileRows: Array<{ id: string; display_name: string }> = profileSeedRows;
+  const missingAuthorIds = noteAuthorIds.filter(
+    (id) => !noteProfileRows.some((profile) => profile.id === id),
+  );
+  if (missingAuthorIds.length > 0) {
+    const authorProfiles = await selectInChunks<{ id: string; display_name: string }>(
+      missingAuthorIds,
+      (chunk) =>
+        supabase
+          .from("user_profiles")
+          .select("id, display_name")
+          .in("id", chunk)
+          .then((res) => ({ data: res.data as Array<{ id: string; display_name: string }> | null, error: res.error })),
+    );
+    noteProfileRows = [...noteProfileRows, ...authorProfiles];
   }
 
   const profileNameById = new Map(
@@ -311,16 +323,18 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
   const supabase = await createClient();
   const unitIds = dataset.units.map((u) => u.id);
 
-  const { data: prodRows, error } = await supabase
-    .from("window_production_status")
-    .select("unit_id, status")
-    .in("unit_id", unitIds);
-  if (error) return dataset;
+  const prodRows = await selectInChunks<{ unit_id: string; status: string }>(unitIds, (chunk) =>
+    supabase
+      .from("window_production_status")
+      .select("unit_id, status")
+      .in("unit_id", chunk)
+      .then((res) => ({ data: res.data as Array<{ unit_id: string; status: string }> | null, error: res.error })),
+  );
 
   const qcCountByUnit = new Map<string, number>();
   const assembledOrLaterByUnit = new Map<string, number>();
   const cutOrLaterByUnit = new Map<string, number>();
-  for (const row of (prodRows ?? []) as Array<{ unit_id: string; status: string }>) {
+  for (const row of prodRows) {
     if (row.status === "qc_approved") {
       qcCountByUnit.set(row.unit_id, (qcCountByUnit.get(row.unit_id) ?? 0) + 1);
     }
@@ -544,13 +558,14 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
 
   if (scopedUnitIds.length === 0) return emptyDataset();
 
-  const { data: unitData, error: unitError } = await supabase
-    .from("units")
-    .select("*")
-    .in("id", scopedUnitIds)
-    .order("unit_number");
-
-  if (unitError) return emptyDataset();
+  const unitData = await selectInChunks<UnitRow>(scopedUnitIds, (chunk) =>
+    supabase
+      .from("units")
+      .select("*")
+      .in("id", chunk)
+      .order("unit_number")
+      .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
+  );
   const { data: assignmentsData } = await supabase
     .from("scheduler_unit_assignments")
     .select("unit_id, assigned_at")
@@ -565,7 +580,7 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
   const { data: schedulerRow } = await supabase.from("schedulers").select("name").eq("id", schedulerId).single();
   const schedulerName = (schedulerRow as { name: string })?.name || "Unknown";
 
-  const units = ((unitData as UnitRow[]) ?? []).map((r) =>
+  const units = unitData.map((r) =>
     mapUnit({ ...r, assigned_at: assignmentAtMap.get(r.id) }, schedulerName, schedulerId)
   );
 
@@ -574,26 +589,46 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
   const allowedClientIds = [...new Set(units.map((u) => u.clientId))];
   const allowedUnitIds = units.map((u) => u.id);
 
-  const [buildingRows, clientRows, roomRows, scheduleRows, installerRows] = await Promise.all([
-    allowedBuildingIds.length > 0
-      ? supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedClientIds.length > 0
-      ? supabase.from("clients").select("*").in("id", allowedClientIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedUnitIds.length > 0
-      ? supabase.from("rooms").select("*").in("unit_id", allowedUnitIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedUnitIds.length > 0
-      ? supabase.from("schedule_entries").select("*").in("unit_id", allowedUnitIds).order("task_date")
-      : Promise.resolve({ data: [] }),
+  const [buildingRows, clientRows, schedulerRoomRows, schedulerScheduleRows, installerRows] = await Promise.all([
+    selectInChunks<BuildingRow>(allowedBuildingIds, (chunk) =>
+      supabase
+        .from("buildings")
+        .select("*")
+        .in("id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as BuildingRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ClientRow>(allowedClientIds, (chunk) =>
+      supabase
+        .from("clients")
+        .select("*")
+        .in("id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as ClientRow[] | null, error: res.error })),
+    ),
+    selectInChunks<RoomRow>(allowedUnitIds, (chunk) =>
+      supabase
+        .from("rooms")
+        .select("*")
+        .in("unit_id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as RoomRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ScheduleRow>(allowedUnitIds, (chunk) =>
+      supabase
+        .from("schedule_entries")
+        .select("*")
+        .in("unit_id", chunk)
+        .order("task_date")
+        .then((res) => ({ data: res.data as ScheduleRow[] | null, error: res.error })),
+    ),
     // Scope installers to this scheduler's team.
     supabase.from("installers").select("*").eq("scheduler_id", schedulerId).order("name"),
   ]);
 
-  const buildings = ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding);
-  const clients = ((clientRows.data as ClientRow[]) ?? []).map(mapClient);
-  const rooms = ((roomRows.data as RoomRow[]) ?? []).map(mapRoom);
+  const buildings = buildingRows.map(mapBuilding);
+  const clients = clientRows.map(mapClient);
+  const rooms = schedulerRoomRows.map(mapRoom);
 
   // Fall back to all installers when the scheduler has no team yet.
   let installers = ((installerRows.data as InstallerRow[]) ?? []).map(mapInstaller);
@@ -627,15 +662,19 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
   }
 
   const allowedRoomIds = rooms.map((r) => r.id);
-  const windowRows =
-    allowedRoomIds.length > 0
-      ? await supabase.from("windows").select("*").in("room_id", allowedRoomIds).order("label")
-      : { data: [] };
+  const schedulerWindowRows = await selectInChunks<WindowRow>(allowedRoomIds, (chunk) =>
+    supabase
+      .from("windows")
+      .select("*")
+      .in("room_id", chunk)
+      .order("label")
+      .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
+  );
 
-  const windows = ((windowRows.data as WindowRow[]) ?? []).map(mapWindow);
+  const windows = schedulerWindowRows.map(mapWindow);
   const schedule = normalizeScheduleEntries(
     units,
-    ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
+    schedulerScheduleRows.map(mapSchedule)
   );
 
   return finalizeDataset({
@@ -678,37 +717,62 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
   const allowedUnitIds = units.map((u) => u.id);
 
   const [buildingRows, clientRows, roomRows, scheduleRows] = await Promise.all([
-    allowedBuildingIds.length > 0
-      ? supabase.from("buildings").select("*").in("id", allowedBuildingIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedClientIds.length > 0
-      ? supabase.from("clients").select("*").in("id", allowedClientIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedUnitIds.length > 0
-      ? supabase.from("rooms").select("*").in("unit_id", allowedUnitIds).order("name")
-      : Promise.resolve({ data: [] }),
-    allowedUnitIds.length > 0
-      ? supabase.from("schedule_entries").select("*").in("unit_id", allowedUnitIds).order("task_date")
-      : Promise.resolve({ data: [] }),
+    selectInChunks<BuildingRow>(allowedBuildingIds, (chunk) =>
+      supabase
+        .from("buildings")
+        .select("*")
+        .in("id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as BuildingRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ClientRow>(allowedClientIds, (chunk) =>
+      supabase
+        .from("clients")
+        .select("*")
+        .in("id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as ClientRow[] | null, error: res.error })),
+    ),
+    selectInChunks<RoomRow>(allowedUnitIds, (chunk) =>
+      supabase
+        .from("rooms")
+        .select("*")
+        .in("unit_id", chunk)
+        .order("name")
+        .then((res) => ({ data: res.data as RoomRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ScheduleRow>(allowedUnitIds, (chunk) =>
+      supabase
+        .from("schedule_entries")
+        .select("*")
+        .in("unit_id", chunk)
+        .order("task_date")
+        .then((res) => ({ data: res.data as ScheduleRow[] | null, error: res.error })),
+    ),
   ]);
 
-  const rooms = ((roomRows.data as RoomRow[]) ?? []).map(mapRoom);
+  const rooms = roomRows.map(mapRoom);
   const allowedRoomIds = rooms.map((r) => r.id);
-  const windowRows = allowedRoomIds.length > 0
-    ? await supabase.from("windows").select("*").in("room_id", allowedRoomIds).order("label")
-    : { data: [] };
+  const windowRows = await selectInChunks<WindowRow>(allowedRoomIds, (chunk) =>
+    supabase
+      .from("windows")
+      .select("*")
+      .in("room_id", chunk)
+      .order("label")
+      .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
+  );
 
   const schedule = normalizeScheduleEntries(
     units,
-    ((scheduleRows.data as ScheduleRow[]) ?? []).map(mapSchedule)
+    scheduleRows.map(mapSchedule)
   );
 
   return finalizeDataset({
-    clients: ((clientRows.data as ClientRow[]) ?? []).map(mapClient),
-    buildings: ((buildingRows.data as BuildingRow[]) ?? []).map(mapBuilding),
+    clients: clientRows.map(mapClient),
+    buildings: buildingRows.map(mapBuilding),
     units,
     rooms,
-    windows: ((windowRows.data as WindowRow[]) ?? []).map(mapWindow),
+    windows: windowRows.map(mapWindow),
     installers: [],
     schedule,
     cutters: [],
@@ -785,17 +849,24 @@ export async function loadInstallerMedia(
   if (unitIds.length === 0) {
     return [];
   }
-  const { data: media, error: me } = await supabase
-    .from("media_uploads")
-    .select("id, public_url, label, unit_id, stage, phase, created_at")
-    .in("unit_id", unitIds)
-    .order("created_at", { ascending: false });
-  if (me) {
-    throw new Error(
-      `${me.message} Apply supabase/migrations/20250322140000_storage_and_media.sql if media_uploads is missing.`
-    );
-  }
-  return (media ?? []).map((m) => {
+  type InstallerMediaRow = {
+    id: string;
+    public_url: string;
+    label: string | null;
+    unit_id: string;
+    stage: string | null;
+    phase: string | null;
+    created_at: string;
+  };
+  const media = await selectInChunks<InstallerMediaRow>(unitIds, (chunk) =>
+    supabase
+      .from("media_uploads")
+      .select("id, public_url, label, unit_id, stage, phase, created_at")
+      .in("unit_id", chunk)
+      .order("created_at", { ascending: false })
+      .then((res) => ({ data: res.data as InstallerMediaRow[] | null, error: res.error })),
+  );
+  return media.map((m) => {
     const meta = unitMap.get(m.unit_id);
     return {
       id: m.id,

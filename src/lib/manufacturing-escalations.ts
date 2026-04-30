@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WindowManufacturingEscalation } from "@/lib/types";
+import { selectInChunks } from "@/lib/supabase-chunking";
 
 type DbLikeClient = SupabaseClient;
 
@@ -138,15 +139,18 @@ export async function loadOpenManufacturingEscalationsByWindow(
 ): Promise<Map<string, WindowManufacturingEscalation>> {
   if (windowIds.length === 0) return new Map();
 
-  const { data } = await supabase
-    .from("window_manufacturing_escalations")
-    .select("*")
-    .in("window_id", windowIds)
-    .eq("status", "open")
-    .order("opened_at", { ascending: false });
+  const rows = await selectInChunks<EscalationRow>(windowIds, (chunk) =>
+    supabase
+      .from("window_manufacturing_escalations")
+      .select("*")
+      .in("window_id", chunk)
+      .eq("status", "open")
+      .order("opened_at", { ascending: false })
+      .then((res) => ({ data: res.data as EscalationRow[] | null, error: res.error })),
+  );
 
   const byWindow = new Map<string, WindowManufacturingEscalation>();
-  for (const row of (data ?? []) as EscalationRow[]) {
+  for (const row of rows) {
     if (!byWindow.has(row.window_id)) {
       byWindow.set(row.window_id, mapManufacturingEscalation(row));
     }
@@ -160,14 +164,17 @@ export async function loadManufacturingEscalationHistoryByWindow(
 ): Promise<Map<string, WindowManufacturingEscalation[]>> {
   if (windowIds.length === 0) return new Map();
 
-  const { data } = await supabase
-    .from("window_manufacturing_escalations")
-    .select("*")
-    .in("window_id", windowIds)
-    .order("opened_at", { ascending: false });
+  const rows = await selectInChunks<EscalationRow>(windowIds, (chunk) =>
+    supabase
+      .from("window_manufacturing_escalations")
+      .select("*")
+      .in("window_id", chunk)
+      .order("opened_at", { ascending: false })
+      .then((res) => ({ data: res.data as EscalationRow[] | null, error: res.error })),
+  );
 
   const byWindow = new Map<string, WindowManufacturingEscalation[]>();
-  for (const row of (data ?? []) as EscalationRow[]) {
+  for (const row of rows) {
     const mapped = mapManufacturingEscalation(row);
     const list = byWindow.get(row.window_id) ?? [];
     list.push(mapped);

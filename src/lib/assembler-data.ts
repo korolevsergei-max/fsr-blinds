@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, WindowProductionStatus, ProductionStatus, WindowInstallation, WandChain, FabricAdjustmentSide } from "@/lib/types";
+import { selectInChunks } from "@/lib/supabase-chunking";
 
 export interface AssemblerUnit {
   id: string;
@@ -93,15 +94,25 @@ export async function loadAssemblerDataset(): Promise<{ units: AssemblerUnit[] }
 
   if (unitIdsReady.length === 0) return { units: [] };
 
-  const { data: units } = await supabase
-    .from("units")
-    .select(
-      "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag"
-    )
-    .in("id", unitIdsReady)
-    .order("installation_date", { ascending: true, nullsFirst: false });
-
-  if (!units) return { units: [] };
+  type UnitRow = {
+    id: string;
+    unit_number: string;
+    building_name: string;
+    client_name: string;
+    installation_date: string | null;
+    window_count: number | null;
+    manufacturing_risk_flag: string | null;
+  };
+  const units = await selectInChunks<UnitRow>(unitIdsReady, (chunk) =>
+    supabase
+      .from("units")
+      .select(
+        "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag"
+      )
+      .in("id", chunk)
+      .order("installation_date", { ascending: true, nullsFirst: false })
+      .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
+  );
 
   // Build counts per unit
   const cutMap = new Map<string, number>();
