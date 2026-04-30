@@ -13,6 +13,7 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { getOpenPostInstallIssueTargets } from "@/lib/window-issues";
 
 export function StatusUpdate({
   data,
@@ -33,6 +34,9 @@ export function StatusUpdate({
 
   const totalWindows = rooms.reduce((s, r) => s + r.windowCount, 0);
   const measuredWindows = rooms.reduce((s, r) => s + r.completedWindows, 0);
+  const openPostInstallIssueTargets = datasetData
+    ? getOpenPostInstallIssueTargets(datasetData, unit.id)
+    : [];
   const effectiveStatus: UnitStatus = deriveUnitStatusFromCounts({
     totalWindows: milestones.totalWindows,
     measuredCount: milestones.measuredCount,
@@ -93,6 +97,10 @@ export function StatusUpdate({
             milestones={milestones}
             layout="simple"
             title="Milestones"
+            openPostInstallIssueTargets={openPostInstallIssueTargets.map((target) => ({
+              ...target,
+              href: `/scheduler/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
+            }))}
           />
         </motion.div>
 

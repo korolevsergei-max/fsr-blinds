@@ -31,7 +31,13 @@ import { CompleteByHighlightCard } from "@/components/units/complete-by-highligh
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
-import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag, getUnitEscalations } from "@/lib/window-issues";
+import {
+  getEscalationSurfaceClasses,
+  getOpenPostInstallIssueTargets,
+  getRoomEscalationRiskFlag,
+  getUnitEscalations,
+} from "@/lib/window-issues";
+import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -215,6 +221,12 @@ export function SchedulerUnitDetail({
 
   const flags = computeUnitFlags(unit, today);
   const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
+  const openPostInstallIssueTargets = datasetData
+    ? getOpenPostInstallIssueTargets(datasetData, unit.id)
+    : [];
+  const openPostInstallIssueWindowIds = new Set(
+    openPostInstallIssueTargets.map((target) => target.windowId)
+  );
 
   const isPastDue = (dateStr: string | null | undefined) =>
     dateStr ? dateStr < today : false;
@@ -339,6 +351,26 @@ export function SchedulerUnitDetail({
           <UnitEscalationsPanel escalations={escalations} />
         </motion.div>
 
+        {milestones.hasOpenPostInstallIssue && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="surface-card p-4"
+          >
+            <UnitProgressMilestonesPanel
+              unit={unit}
+              milestones={milestones}
+              layout="detail"
+              title="Progress"
+              openPostInstallIssueTargets={openPostInstallIssueTargets.map((target) => ({
+                ...target,
+                href: `/scheduler/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
+              }))}
+            />
+          </motion.div>
+        )}
+
         {/* Rooms overview */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -360,9 +392,13 @@ export function SchedulerUnitDetail({
             </div>
           ) : (
             rooms.map((room, i) => {
-              const roomEscalation = getRoomEscalationRiskFlag(
-                getWindowsByRoom(datasetData!, room.id)
+              const roomWindows = getWindowsByRoom(datasetData!, room.id);
+              const hasRoomOpenPostInstallIssue = roomWindows.some((window) =>
+                openPostInstallIssueWindowIds.has(window.id)
               );
+              const roomEscalation = hasRoomOpenPostInstallIssue
+                ? "red"
+                : getRoomEscalationRiskFlag(roomWindows);
               const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
               const progressTrackClass =
                 roomEscalation === "green" ? "bg-white/20" : "bg-white/30";

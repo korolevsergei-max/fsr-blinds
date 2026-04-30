@@ -19,7 +19,7 @@ import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel"
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
-import { getUnitEscalations } from "@/lib/window-issues";
+import { getOpenPostInstallIssueTargets, getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
@@ -235,6 +235,11 @@ export function UnitDetail({
       : [];
   const escalations = unit && datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const escalationCount = escalations.length;
+  const openPostInstallIssueTargets =
+    unit && datasetData ? getOpenPostInstallIssueTargets(datasetData, unit.id) : [];
+  const openPostInstallIssueWindowIds = new Set(
+    openPostInstallIssueTargets.map((target) => target.windowId)
+  );
   const bracketedWindowIdsByRoom = new Map<string, Set<string>>();
   for (const item of mediaItems) {
     if (
@@ -363,9 +368,13 @@ export function UnitDetail({
             </h3>
             <div className="flex flex-col gap-2">
               {rooms.map((room) => {
-                const roomEscalation = getRoomEscalationRiskFlag(
-                  getWindowsByRoom(datasetData!, room.id)
+                const roomWindows = getWindowsByRoom(datasetData!, room.id);
+                const hasRoomOpenPostInstallIssue = roomWindows.some((window) =>
+                  openPostInstallIssueWindowIds.has(window.id)
                 );
+                const roomEscalation = hasRoomOpenPostInstallIssue
+                  ? "red"
+                  : getRoomEscalationRiskFlag(roomWindows);
                 const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
 
                 return (
@@ -427,6 +436,10 @@ export function UnitDetail({
             layout="detail"
             density="comfortable"
             title="Installation progress"
+            openPostInstallIssueTargets={openPostInstallIssueTargets.map((target) => ({
+              ...target,
+              href: `/installer/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
+            }))}
             mediaViewerSlot={
               <UnitStageMediaViewer
                 items={mediaItems}

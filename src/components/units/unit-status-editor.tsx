@@ -10,6 +10,7 @@ import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { getOpenPostInstallIssueTargets } from "@/lib/window-issues";
 
 type UnitStatusEditorProps = {
   data?: AppDataset;
@@ -36,6 +37,9 @@ export function UnitStatusEditor({
   const detailHref = `${unitsBasePath}/${unit.id}`;
   const totalWindows = rooms.reduce((s, r) => s + r.windowCount, 0);
   const measuredWindows = rooms.reduce((s, r) => s + r.completedWindows, 0);
+  const openPostInstallIssueTargets = datasetData
+    ? getOpenPostInstallIssueTargets(datasetData, unit.id)
+    : [];
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
@@ -97,6 +101,10 @@ export function UnitStatusEditor({
             milestones={milestones}
             layout="simple"
             title="Milestones"
+            openPostInstallIssueTargets={openPostInstallIssueTargets.map((target) => ({
+              ...target,
+              href: `${unitsBasePath}/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
+            }))}
           />
         </motion.div>
 

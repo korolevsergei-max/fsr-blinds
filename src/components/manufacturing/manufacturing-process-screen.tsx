@@ -379,11 +379,11 @@ export function ManufacturingProcessScreen({
   const floorStickyClass = "bg-inherit";
   const unitStickyClass = "bg-inherit";
   const filterRailClass = compactFilterRail
-    ? "flex items-center gap-1.5 overflow-x-auto no-scrollbar"
-    : "flex items-center gap-2 overflow-x-auto no-scrollbar";
+    ? "flex flex-wrap items-center gap-1.5"
+    : "flex flex-wrap items-center gap-2";
   const compactFilterTriggerClass = compactFilterRail
     ? "max-w-[10.5rem] pr-2.5"
-    : "";
+    : "max-w-[12rem]";
   const compactFloorTriggerClass = compactFilterRail ? "w-[5.5rem] pr-2.5" : "";
   const compactInstallTriggerClass = compactFilterRail ? "max-w-[9.5rem] pr-2.5" : "";
   const compactDateTriggerClass = compactFilterRail
@@ -392,9 +392,9 @@ export function ManufacturingProcessScreen({
   const compactDateClass = compactFilterRail ? "w-[9.5rem] min-w-[9.5rem] flex-shrink-0" : "min-w-[12rem] flex-shrink-0";
   const tableWrapClass = "w-full min-w-0 border-separate border-spacing-0 table-fixed text-center";
   const totalsCellClass =
-    "border-b border-border bg-card px-0.5 py-1.5 text-center truncate tabular-nums sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+    "border-b border-border bg-card px-0.5 py-1.5 text-center tabular-nums sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
   const columnHeaderCellClass =
-    "border-b border-border bg-surface px-0.5 py-1.5 text-center truncate sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
+    "border-b border-border bg-surface px-0.5 py-1.5 text-center sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
   const tableBodyCellClass =
     "border-b border-border px-0.5 py-1.5 text-center truncate tabular-nums sm:px-1.5 sm:py-2 md:px-2 md:py-2.5 lg:px-2.5";
 
@@ -490,6 +490,7 @@ export function ManufacturingProcessScreen({
                   label="Client"
                   value={normalizedFilters.clientId}
                   options={clientOptions}
+                  triggerClassName={compactFilterTriggerClass}
                   onChange={(value) =>
                     setFilters((current) => ({
                       ...current,
@@ -596,16 +597,20 @@ export function ManufacturingProcessScreen({
         />
       ) : (
         <div className="flex-1 min-h-0 px-2 py-3 sm:px-3 sm:py-4">
-          <div className="flex h-full min-h-0 flex-col rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <div className="w-full pb-24">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-border bg-card shadow-[var(--shadow-sm)]">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              <div className="w-full pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
                 <div className="sticky top-0 z-40 isolate bg-card">
                   <table className={tableWrapClass}>
                     <ManufacturingProcessTableColGroup showByUnit={showByUnit} />
                     <thead>
                       <tr className="text-[10px] text-secondary sm:text-[11px]">
-                        <th className={`${floorStickyClass} ${totalsCellClass} z-30 font-semibold`}>
-                          Totals
+                        <th
+                          className={`${floorStickyClass} ${totalsCellClass} z-30 font-semibold`}
+                          aria-label="Totals"
+                          title="Totals"
+                        >
+                          TOT
                         </th>
                         {showByUnit ? (
                           <>
@@ -647,7 +652,13 @@ export function ManufacturingProcessScreen({
                           </th>
                         )}
                         <th className={`${columnHeaderCellClass} font-semibold`}>DUE</th>
-                        <th className={`${columnHeaderCellClass} font-semibold`}>Blinds</th>
+                        <th
+                          className={`${columnHeaderCellClass} font-semibold`}
+                          aria-label="Blinds"
+                          title="Blinds"
+                        >
+                          BL
+                        </th>
                         <th className={`${columnHeaderCellClass} font-semibold`}>CUT</th>
                         <th className={`${columnHeaderCellClass} font-semibold`}>ASSE</th>
                         <th className={`${columnHeaderCellClass} font-semibold`}>QC</th>

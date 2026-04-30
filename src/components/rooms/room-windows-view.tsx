@@ -350,9 +350,6 @@ export function RoomWindowsView({
         </p>
 
         {windowsList.map((win, i) => {
-          const escalationFlag = getHighestEscalationRiskFlag([win.riskFlag]);
-          const cardTone = getEscalationSurfaceClasses(escalationFlag, "card");
-
           const stageMedia = windowStageMediaMap.get(win.id) ?? {};
           const stageOptions: { key: WindowStageKey; label: string; url: string }[] = [];
           const preUrl = stageMedia.pre ?? win.photoUrl ?? "";
@@ -375,6 +372,11 @@ export function RoomWindowsView({
           const galleryCount = windowGalleryMap.get(win.id)?.length ?? 0;
           const postInstallIssues = issuesByWindowId.get(win.id) ?? [];
           const openPostInstallIssues = postInstallIssues.filter((issue) => issue.status === "open");
+          const escalationFlag = getHighestEscalationRiskFlag([win.riskFlag]);
+          const cardTone = getEscalationSurfaceClasses(
+            openPostInstallIssues.length > 0 ? "red" : escalationFlag,
+            "card"
+          );
           // Default to furthest-along stage; user can tap a pill to switch
           const defaultStage: "before" | "bracketed" | "installed" = win.installed
             ? "installed"
@@ -411,6 +413,8 @@ export function RoomWindowsView({
           return (
             <motion.div
               key={win.id}
+              id={`window-${win.id}`}
+              className="scroll-mt-24"
               initial={false}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}

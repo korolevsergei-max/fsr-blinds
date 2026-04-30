@@ -23,6 +23,15 @@ export type UnitEscalationSummary = {
   openedAt?: string;
 };
 
+export type OpenPostInstallIssueTarget = {
+  issueId: string;
+  roomId: string;
+  roomName: string;
+  windowId: string;
+  windowLabel: string;
+  openedAt: string;
+};
+
 export function describeRiskFlag(flag: RiskFlag): string {
   if (flag === "yellow") {
     return "Can proceed with concern or additional work.";
@@ -66,6 +75,44 @@ export function getEscalationSurfaceClasses(
     : flag === "yellow"
       ? "border-amber-300 bg-amber-50"
       : "border-border bg-white";
+}
+
+export function getOpenPostInstallIssueTargets(
+  data: AppDataset,
+  unitId: string
+): OpenPostInstallIssueTarget[] {
+  const roomsById = new Map(
+    data.rooms
+      .filter((room) => room.unitId === unitId)
+      .map((room) => [room.id, room])
+  );
+  const windowsById = new Map(
+    data.windows
+      .filter((window) => roomsById.has(window.roomId))
+      .map((window) => [window.id, window])
+  );
+
+  return data.postInstallIssues
+    .filter((issue) => issue.unitId === unitId && issue.status === "open")
+    .flatMap((issue) => {
+      const window = windowsById.get(issue.windowId);
+      const room = window ? roomsById.get(window.roomId) : undefined;
+      if (!window || !room) return [];
+      return {
+        issueId: issue.id,
+        roomId: room.id,
+        roomName: room.name,
+        windowId: issue.windowId,
+        windowLabel: window.label,
+        openedAt: issue.openedAt,
+      };
+    })
+    .sort((a, b) => {
+      const roomCompare = a.roomName.localeCompare(b.roomName);
+      if (roomCompare !== 0) return roomCompare;
+      const windowCompare = a.windowLabel.localeCompare(b.windowLabel);
+      return windowCompare !== 0 ? windowCompare : b.openedAt.localeCompare(a.openedAt);
+    });
 }
 
 export function getUnitEscalations(

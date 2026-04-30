@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import type { AppDataset } from "./app-dataset";
 import {
+  getOpenPostInstallIssueTargets,
   getHighestEscalationRiskFlag,
   getRoomEscalationRiskFlag,
   getUnitEscalations,
@@ -154,4 +155,93 @@ test("getUnitEscalations includes open manufacturing pushbacks alongside field e
   assert.equal(escalations[0]?.note, "Left panel needs to be recut.");
   assert.equal(escalations[1]?.issueType, "manufacturing");
   assert.equal(escalations[1]?.note, "Bracket misalignment.");
+});
+
+test("getOpenPostInstallIssueTargets returns sorted room and window labels for open issues only", () => {
+  const data = createDataset();
+  data.rooms.push({
+    id: "room-2",
+    unitId: "unit-1",
+    name: "Bedroom",
+    windowCount: 1,
+    completedWindows: 0,
+  });
+  data.windows.push({
+    id: "window-3",
+    roomId: "room-2",
+    label: "Window 3",
+    blindType: "screen",
+    chainSide: "left",
+    riskFlag: "green",
+    width: null,
+    height: null,
+    depth: null,
+    windowInstallation: "inside" as const,
+    wandChain: null,
+    fabricAdjustmentSide: "none" as const,
+    fabricAdjustmentInches: null,
+    notes: "",
+    photoUrl: null,
+    measured: false,
+    bracketed: false,
+    installed: true,
+  });
+  data.postInstallIssues = [
+    {
+      id: "issue-resolved",
+      windowId: "window-1",
+      unitId: "unit-1",
+      openedByUserId: "user-1",
+      openedByRole: "scheduler",
+      openedByName: "Scheduler One",
+      openedAt: "2026-04-14T10:00:00.000Z",
+      resolvedByUserId: "user-2",
+      resolvedByName: "Owner One",
+      resolvedAt: "2026-04-15T10:00:00.000Z",
+      status: "resolved",
+      createdAt: "2026-04-14T10:00:00.000Z",
+      notes: [],
+    },
+    {
+      id: "issue-bedroom",
+      windowId: "window-3",
+      unitId: "unit-1",
+      openedByUserId: "user-1",
+      openedByRole: "scheduler",
+      openedByName: "Scheduler One",
+      openedAt: "2026-04-16T10:00:00.000Z",
+      resolvedByUserId: null,
+      resolvedByName: null,
+      resolvedAt: null,
+      status: "open",
+      createdAt: "2026-04-16T10:00:00.000Z",
+      notes: [],
+    },
+    {
+      id: "issue-living",
+      windowId: "window-2",
+      unitId: "unit-1",
+      openedByUserId: "user-1",
+      openedByRole: "owner",
+      openedByName: "Owner One",
+      openedAt: "2026-04-13T10:00:00.000Z",
+      resolvedByUserId: null,
+      resolvedByName: null,
+      resolvedAt: null,
+      status: "open",
+      createdAt: "2026-04-13T10:00:00.000Z",
+      notes: [],
+    },
+  ];
+
+  const targets = getOpenPostInstallIssueTargets(data, "unit-1");
+
+  assert.deepEqual(
+    targets.map((target) => `${target.roomName} - ${target.windowLabel}`),
+    ["Bedroom - Window 3", "Living - South"]
+  );
+  assert.deepEqual(
+    targets.map((target) => target.issueId),
+    ["issue-bedroom", "issue-living"]
+  );
 });

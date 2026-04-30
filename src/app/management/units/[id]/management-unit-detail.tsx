@@ -38,7 +38,12 @@ import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel"
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { countDisplayableUnitPhotos } from "@/lib/unit-media";
-import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag, getUnitEscalations } from "@/lib/window-issues";
+import {
+  getEscalationSurfaceClasses,
+  getOpenPostInstallIssueTargets,
+  getRoomEscalationRiskFlag,
+  getUnitEscalations,
+} from "@/lib/window-issues";
 import { resolveEscalationHref } from "@/lib/escalation-helpers";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 
@@ -346,6 +351,12 @@ export function ManagementUnitDetail({
     windows: unitWindows,
   });
   const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
+  const openPostInstallIssueTargets = datasetData
+    ? getOpenPostInstallIssueTargets(datasetData, unit.id)
+    : [];
+  const openPostInstallIssueWindowIds = new Set(
+    openPostInstallIssueTargets.map((target) => target.windowId)
+  );
 
   return (
     <div className="flex flex-col">
@@ -478,6 +489,10 @@ export function ManagementUnitDetail({
             milestones={milestones}
             layout="detail"
             title="Progress"
+            openPostInstallIssueTargets={openPostInstallIssueTargets.map((target) => ({
+              ...target,
+              href: `/management/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
+            }))}
             mediaViewerSlot={
               <UnitStageMediaViewer
                 items={mediaItems}
@@ -539,9 +554,13 @@ export function ManagementUnitDetail({
             <SectionLabel as="h2">Rooms</SectionLabel>
             <div className="flex flex-col gap-2">
               {rooms.map((room) => {
-                const roomEscalation = getRoomEscalationRiskFlag(
-                  getWindowsByRoom(datasetData!, room.id)
+                const roomWindows = getWindowsByRoom(datasetData!, room.id);
+                const hasRoomOpenPostInstallIssue = roomWindows.some((window) =>
+                  openPostInstallIssueWindowIds.has(window.id)
                 );
+                const roomEscalation = hasRoomOpenPostInstallIssue
+                  ? "red"
+                  : getRoomEscalationRiskFlag(roomWindows);
                 const roomCardClass = getEscalationSurfaceClasses(roomEscalation, "room");
 
                 return (

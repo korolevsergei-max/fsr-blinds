@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CheckCircle, Circle, GitBranch, WarningCircle } from "@phosphor-icons/react";
 import type { Unit } from "@/lib/types";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -17,6 +18,13 @@ function formatWhen(iso: string | null | undefined): string | null {
 }
 
 type Density = "comfortable" | "compact";
+
+type OpenPostInstallIssueTargetLink = {
+  issueId: string;
+  roomName: string;
+  windowLabel: string;
+  href: string;
+};
 
 function Row({
   title,
@@ -92,6 +100,7 @@ export function UnitProgressMilestonesPanel({
   density = "compact",
   title = "Progress milestones",
   mediaViewerSlot,
+  openPostInstallIssueTargets = [],
   className = "",
 }: {
   unit: Unit;
@@ -100,6 +109,7 @@ export function UnitProgressMilestonesPanel({
   density?: Density;
   title?: string;
   mediaViewerSlot?: React.ReactNode;
+  openPostInstallIssueTargets?: OpenPostInstallIssueTargetLink[];
   className?: string;
 }) {
   const {
@@ -134,6 +144,10 @@ export function UnitProgressMilestonesPanel({
   const hasWindows = totalWindows > 0;
   const fmtCount = (n: number) =>
     hasWindows ? `${n}/${totalWindows} windows` : "No windows yet";
+  const postInstallFallbackSubtitle =
+    postInstallIssueOpenCount > 0
+      ? `${postInstallIssueOpenCount} open issue${postInstallIssueOpenCount === 1 ? "" : "s"}`
+      : "Open issue flagged";
 
   return (
     <div className={className}>
@@ -245,17 +259,45 @@ export function UnitProgressMilestonesPanel({
             completed={showDates ? doneI : undefined}
           />
           {hasOpenPostInstallIssue && (
-            <Row
-              density={density}
-              title="Post-Install Issue"
-              subtitle={
-                postInstallIssueOpenCount > 0
-                  ? `${postInstallIssueOpenCount} open issue${postInstallIssueOpenCount === 1 ? "" : "s"}`
-                  : "Open issue flagged"
-              }
-              met={false}
-              variant="warning"
-            />
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 pt-0.5">
+                <WarningCircle
+                  size={density === "comfortable" ? 22 : 18}
+                  weight="fill"
+                  className="text-red-500"
+                />
+              </div>
+              <div className="min-w-0 flex-1 pb-1">
+                <p
+                  className={
+                    density === "comfortable"
+                      ? "text-sm font-semibold text-red-600"
+                      : "text-[12px] font-semibold text-red-600"
+                  }
+                >
+                  Post-Install Issue
+                </p>
+                {openPostInstallIssueTargets.length > 0 ? (
+                  <div className="mt-1.5 flex flex-col gap-1.5">
+                    {openPostInstallIssueTargets.map((target) => (
+                      <Link
+                        key={target.issueId}
+                        href={target.href}
+                        className="inline-flex w-fit max-w-full items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.98]"
+                      >
+                        <span className="truncate">
+                          {target.roomName} - {target.windowLabel}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-tertiary mt-0.5 leading-snug">
+                    {postInstallFallbackSubtitle}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
