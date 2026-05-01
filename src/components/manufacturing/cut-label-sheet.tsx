@@ -123,7 +123,23 @@ function LabelContent({
 
       <div style={{ borderTop: "0.75pt solid #000" }} />
 
-      {/* Row 4: secondary identity — building · window code · room + install date */}
+      {/* Row 4a: emphasized building + window code */}
+      <div
+        style={{
+          fontSize: "10pt",
+          fontWeight: 800,
+          lineHeight: 1.05,
+          color: "#000",
+          minWidth: 0,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {item.buildingName} · {item.label}
+      </div>
+
+      {/* Row 4b: secondary identity — room + install date */}
       <div
         style={{
           display: "flex",
@@ -135,7 +151,7 @@ function LabelContent({
         }}
       >
         <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.buildingName} · {item.label} · {item.roomName}
+          {item.roomName}
         </span>
         {dueDate && <span style={{ flexShrink: 0 }}>{dueDatePrefix} {dueDate}</span>}
       </div>
