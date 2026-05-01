@@ -62,15 +62,22 @@ function LabelContent({
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
-        gap: "0.04in",
+        gap: "0.03in",
         overflow: "hidden",
       }}
     >
-      {/* Row 1: HUGE unit number + kind badge */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.08in" }}>
-        <span style={{ fontSize: "20pt", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.01em" }}>
-          UNIT {item.unitNumber}
-        </span>
+      {/* Row 1: HUGE unit number + room name (stacked) + kind badge */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.08in" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.01in", minWidth: 0 }}>
+          <span style={{ fontSize: "20pt", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.01em" }}>
+            UNIT {item.unitNumber}
+          </span>
+          {(item.roomName || item.label) && (
+            <span style={{ fontSize: "9pt", fontWeight: 800, lineHeight: 1, textTransform: "uppercase", letterSpacing: "0.03em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.roomName}{item.roomName && item.label ? ` - ${item.label}` : item.label}
+            </span>
+          )}
+        </div>
         <span
           style={{
             flexShrink: 0,
@@ -137,7 +144,7 @@ function LabelContent({
             whiteSpace: "nowrap",
           }}
         >
-          {item.buildingName}{item.roomName ? ` · ${item.roomName}` : ""} · {item.label}
+          {item.buildingName}
         </div>
         {dueDate && (
           <span style={{ flexShrink: 0, fontSize: "7pt", lineHeight: 1, color: "#333" }}>
@@ -154,8 +161,8 @@ function LabelContent({
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             columnGap: "0.08in",
-            rowGap: "0.025in",
-            fontSize: "7pt",
+            rowGap: "0.015in",
+            fontSize: "9pt",
             lineHeight: 1.2,
             color: "#222",
           }}
@@ -204,8 +211,9 @@ export function CutLabelSheet({ labels }: { labels: PrintableLabelItem[] }) {
       display: "grid",
       gridTemplateColumns: "4in 4in",
       gridTemplateRows: "2in 2in 2in 2in 2in",
-      paddingLeft: "0.1in",
-      paddingRight: "0.25in",
+      columnGap: "0.19in",
+      paddingLeft: "0",
+      paddingRight: "0",
       paddingTop: "0.5in",
       paddingBottom: "0.5in",
       pageBreakAfter: "always",
