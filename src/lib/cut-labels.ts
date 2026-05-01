@@ -36,7 +36,7 @@ export function buildPrintableLabelItems(
 
 export function packPrintableLabelItems(
   labels: PrintableLabelItem[],
-  pageSize = 3
+  pageSize = 10
 ): PrintableLabelItem[][] {
   const groups: PrintableLabelItem[][] = [];
 

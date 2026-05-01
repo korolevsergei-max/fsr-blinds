@@ -37,7 +37,7 @@ export function LabelPdfClient({ items, labelMode }: Props) {
         const doc = new jsPDF({
           orientation: "portrait",
           unit: "in",
-          format: [4, 6],
+          format: [8.5, 11],
         });
 
         for (let i = 0; i < sheets.length; i++) {
@@ -48,13 +48,13 @@ export function LabelPdfClient({ items, labelMode }: Props) {
             logging: false,
           });
 
-          if (i > 0) doc.addPage([4, 6]);
-          doc.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 4, 6);
+          if (i > 0) doc.addPage([8.5, 11]);
+          doc.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 8.5, 11);
 
           const pageNum = `${i + 1} / ${sheets.length}`;
           doc.setFontSize(7);
           doc.setTextColor(60, 60, 60);
-          doc.text(pageNum, 4 - 0.08, 6 - 0.08, { align: "right" });
+          doc.text(pageNum, 8.5 - 0.08, 11 - 0.08, { align: "right" });
         }
 
         const today = new Date().toISOString().slice(0, 10);
@@ -139,12 +139,12 @@ export function LabelPdfClient({ items, labelMode }: Props) {
           position: "fixed",
           top: 0,
           left: "-9999px",
-          width: "4in",
+          width: "8.5in",
           pointerEvents: "none",
         }}
       >
         {labelPages.map((page, idx) => (
-          <div key={idx} className="label-sheet" style={{ width: "4in", height: "6in", background: "#fff" }}>
+          <div key={idx} className="label-sheet" style={{ width: "8.5in", height: "11in", background: "#fff" }}>
             <CutLabelSheet labels={page} />
           </div>
         ))}

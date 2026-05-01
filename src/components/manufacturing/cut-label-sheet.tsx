@@ -24,7 +24,7 @@ function getLabelKindStyles(kind: LabelKind) {
   };
 }
 
-// Each physical Avery 2315 label: 3" wide × 2" tall
+// Each physical label: 4" wide × 2" tall (2×4 Avery sheet, 10-up)
 function LabelContent({
   item,
   kind,
@@ -56,7 +56,7 @@ function LabelContent({
       style={{
         fontFamily: "'Arial','Helvetica',sans-serif",
         color: "#000",
-        width: "3in",
+        width: "4in",
         height: "2in",
         padding: "0.1in",
         boxSizing: "border-box",
@@ -193,7 +193,7 @@ function Label({
 }) {
   return (
     <div style={{
-      width: "3in",
+      width: "4in",
       height: "2in",
       boxSizing: "border-box",
       flexShrink: 0,
@@ -203,20 +203,21 @@ function Label({
   );
 }
 
-// Sheet = one physical Avery 2315 sheet: 4" × 6"
-// Labels centred horizontally with 0.5" margin each side, stacked 3-high.
-// Each page holds up to 3 explicit label instances in queue order.
+// Sheet = 8.5" × 11" (US Letter), 2 cols × 5 rows = 10 labels per sheet.
+// Label size: 4" wide × 2" tall. Margins: 0.25" L/R, 0.5" T/B.
 export function CutLabelSheet({ labels }: { labels: PrintableLabelItem[] }) {
   return (
     <div style={{
-      width: "4in",
-      height: "6in",
+      width: "8.5in",
+      height: "11in",
       boxSizing: "border-box",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "flex-start",
-      paddingLeft: "0.5in",
-      paddingTop: "0.15in",
+      display: "grid",
+      gridTemplateColumns: "4in 4in",
+      gridTemplateRows: "2in 2in 2in 2in 2in",
+      paddingLeft: "0.25in",
+      paddingRight: "0.25in",
+      paddingTop: "0.5in",
+      paddingBottom: "0.5in",
       pageBreakAfter: "always",
       breakAfter: "page",
       flexShrink: 0,
