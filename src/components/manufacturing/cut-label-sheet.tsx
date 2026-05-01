@@ -123,37 +123,27 @@ function LabelContent({
 
       <div style={{ borderTop: "0.75pt solid #000" }} />
 
-      {/* Row 4a: emphasized building + window code */}
-      <div
-        style={{
-          fontSize: "10pt",
-          fontWeight: 800,
-          lineHeight: 1.05,
-          color: "#000",
-          minWidth: 0,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {item.buildingName} · {item.label}
-      </div>
-
-      {/* Row 4b: secondary identity — room + install date */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "0.08in",
-          fontSize: "7pt",
-          lineHeight: 1,
-          color: "#333",
-        }}
-      >
-        <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.roomName}
-        </span>
-        {dueDate && <span style={{ flexShrink: 0 }}>{dueDatePrefix} {dueDate}</span>}
+      {/* Row 4: building · room · window code + due date */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.08in", alignItems: "baseline" }}>
+        <div
+          style={{
+            fontSize: "10pt",
+            fontWeight: 800,
+            lineHeight: 1.05,
+            color: "#000",
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.buildingName}{item.roomName ? ` · ${item.roomName}` : ""} · {item.label}
+        </div>
+        {dueDate && (
+          <span style={{ flexShrink: 0, fontSize: "7pt", lineHeight: 1, color: "#333" }}>
+            {dueDatePrefix} {dueDate}
+          </span>
+        )}
       </div>
 
       {/* Manufacturing summary block — small, 2-column grid */}
@@ -165,7 +155,7 @@ function LabelContent({
             gridTemplateColumns: "1fr 1fr",
             columnGap: "0.08in",
             rowGap: "0.025in",
-            fontSize: "5.5pt",
+            fontSize: "7pt",
             lineHeight: 1.2,
             color: "#222",
           }}
@@ -214,7 +204,7 @@ export function CutLabelSheet({ labels }: { labels: PrintableLabelItem[] }) {
       display: "grid",
       gridTemplateColumns: "4in 4in",
       gridTemplateRows: "2in 2in 2in 2in 2in",
-      paddingLeft: "0.25in",
+      paddingLeft: "0.1in",
       paddingRight: "0.25in",
       paddingTop: "0.5in",
       paddingBottom: "0.5in",
