@@ -9,12 +9,15 @@ import {
   CheckCircle,
   CircleNotch,
   FunnelSimple,
+  MagnifyingGlass,
   Printer,
   SortAscending,
   Trash,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
+import { useSessionStorage } from "@/hooks/use-session-storage";
+import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
   ManufacturingRoleSchedule,
   ManufacturingWindowItem,
@@ -310,6 +313,7 @@ export function ManufacturingRoleQueue({
   const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
+  const [search, setSearch] = useSessionStorage<string>(`${role}-queue-search`, "");
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [installDates, setInstallDates] = useState<string[]>([]);
   const [completionDates, setCompletionDates] = useState<string[]>([]);
@@ -338,6 +342,26 @@ export function ManufacturingRoleQueue({
   useEffect(() => {
     setLocalSchedule(normalizeSchedule(schedule, role));
   }, [role, schedule]);
+
+  const isFirstFilterRun = useRef(true);
+  useEffect(() => {
+    if (isFirstFilterRun.current) {
+      isFirstFilterRun.current = false;
+      return;
+    }
+    const id = setTimeout(() => router.refresh(), 400);
+    return () => clearTimeout(id);
+  }, [
+    router,
+    search,
+    buildingFilter,
+    floorFilter,
+    installDates,
+    completionDates,
+    statusFilters,
+    fabricTypeFilter,
+    componentFilter,
+  ]);
 
   useEffect(() => {
     if (!errorMsg) return;
@@ -489,21 +513,6 @@ export function ManufacturingRoleQueue({
       .map((t) => t.slice(0, 10))
   );
 
-  const unitLabelPrintedFlags = new Map<string, { mfg: boolean; pkg: boolean }>();
-  {
-    const byUnit = new Map<string, ManufacturingWindowItem[]>();
-    for (const item of localSchedule.allItems) {
-      if (!byUnit.has(item.unitId)) byUnit.set(item.unitId, []);
-      byUnit.get(item.unitId)!.push(item);
-    }
-    for (const [unitId, items] of byUnit) {
-      unitLabelPrintedFlags.set(unitId, {
-        mfg: items.length > 0 && items.every((w) => w.manufacturingLabelPrintedAt != null),
-        pkg: items.length > 0 && items.every((w) => w.packagingLabelPrintedAt != null),
-      });
-    }
-  }
-
   const queueStatusOptions = [
     { value: "all", label: "All queue states" },
     { value: "returned", label: "Returned" },
@@ -515,6 +524,7 @@ export function ManufacturingRoleQueue({
   ];
 
   const activeFilterCount = [
+    search.trim().length > 0,
     buildingFilter.length > 0,
     installDates.length > 0,
     completionDates.length > 0,
@@ -625,6 +635,7 @@ export function ManufacturingRoleQueue({
               bucketLabel: bucket.label,
             })) continue;
             if (fabricTypeFilter.length > 0 && !fabricTypeFilter.includes(item.blindType)) continue;
+            if (!matchesQueueSearch(item, search)) continue;
             windows.push(item);
           }
         }
@@ -803,7 +814,32 @@ export function ManufacturingRoleQueue({
           )}
         </div>
 
-        <div className="mt-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+        <div className="mt-3 relative">
+          <MagnifyingGlass
+            size={16}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+          />
+          <input
+            type="text"
+            inputMode="search"
+            placeholder="Search unit, building, room, window — comma-separate for multi"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full h-10 pl-10 pr-9 rounded-xl border border-border bg-white text-[13px] placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+            >
+              <X size={12} weight="bold" />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
           <div className="flex items-center gap-1.5 flex-shrink-0 text-zinc-400">
             <FunnelSimple size={14} />
             {activeFilterCount > 0 && (
@@ -904,6 +940,7 @@ export function ManufacturingRoleQueue({
             <button
               type="button"
               onClick={() => {
+                setSearch("");
                 setBuildingFilter([]);
                 setFloorFilter([]);
                 setInstallDates([]);
@@ -1005,21 +1042,9 @@ export function ManufacturingRoleQueue({
                           ].join(" ")}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <p className="text-[11px] font-medium text-secondary">
-                                Unit {item.unitNumber} · {item.buildingName}
-                              </p>
-                              {unitLabelPrintedFlags.get(item.unitId)?.mfg && (
-                                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[9px] font-semibold text-zinc-700 border border-zinc-300">
-                                  MFG labels printed
-                                </span>
-                              )}
-                              {unitLabelPrintedFlags.get(item.unitId)?.pkg && (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700 border border-amber-200">
-                                  PKG labels printed
-                                </span>
-                              )}
-                            </div>
+                            <p className="text-[11px] font-medium text-secondary">
+                              Unit {item.unitNumber} · {item.buildingName}
+                            </p>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
                               {dueDateLabel && <span>{dueDateLabel}</span>}
                             </div>

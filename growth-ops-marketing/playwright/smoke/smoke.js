@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+import { chromium } from 'playwright';
 
 (async () => {
   console.log('🚀 Starting Playwright smoke test...');
