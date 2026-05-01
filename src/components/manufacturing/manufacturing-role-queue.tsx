@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle,
+  CircleNotch,
   FunnelSimple,
   Printer,
   SortAscending,
@@ -304,6 +305,7 @@ export function ManufacturingRoleQueue({
 }) {
   const router = useRouter();
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [localSchedule, setLocalSchedule] = useState(() => normalizeSchedule(schedule, role));
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -336,6 +338,12 @@ export function ManufacturingRoleQueue({
   useEffect(() => {
     setLocalSchedule(normalizeSchedule(schedule, role));
   }, [role, schedule]);
+
+  useEffect(() => {
+    if (!errorMsg) return;
+    const id = setTimeout(() => setErrorMsg(null), 5000);
+    return () => clearTimeout(id);
+  }, [errorMsg]);
 
   useEffect(() => {
     const node = headerRef.current;
@@ -380,7 +388,7 @@ export function ManufacturingRoleQueue({
         if (options?.optimisticUpdate) {
           setLocalSchedule(previousSchedule);
         }
-        globalThis.window.alert(result.error);
+        setErrorMsg(result.error);
         setBusyWindowId(null);
         return;
       }
@@ -915,6 +923,19 @@ export function ManufacturingRoleQueue({
           )}
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">
+          <WarningCircle size={16} weight="fill" className="flex-shrink-0 text-red-500" />
+          <span className="flex-1">{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="flex-shrink-0 text-red-400 hover:text-red-600"
+          >
+            <X size={14} weight="bold" />
+          </button>
+        </div>
+      )}
 
       <div className="space-y-4 px-4 pt-4">
         {visibleBuckets.length === 0 ? (
@@ -1834,11 +1855,12 @@ function ActionButton({
       disabled={busy || disabled}
       onClick={onClick}
       className={[
-        "rounded-full border px-3 py-2 text-[12px] font-semibold transition-all",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[12px] font-semibold transition-all",
         "active:scale-[0.98] disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400 disabled:shadow-none",
         toneClasses[tone],
       ].join(" ")}
     >
+      {busy && <CircleNotch size={12} weight="bold" className="animate-spin" />}
       {label}
     </button>
   );

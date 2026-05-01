@@ -695,10 +695,9 @@ export async function buildManufacturingCalendarMonth(
   }));
 }
 
-export async function loadManufacturingRoleSchedule(
+export async function loadPersistedRoleSchedule(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
-  await reflowManufacturingSchedules("load_queue");
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
   const { data: scheduleRows } = await supabase
@@ -1009,6 +1008,13 @@ export async function loadManufacturingRoleSchedule(
     allItems,
     buckets,
   };
+}
+
+export async function loadManufacturingRoleSchedule(
+  role: "cutter" | "assembler" | "qc"
+): Promise<ManufacturingRoleSchedule> {
+  await reflowManufacturingSchedules("load_queue");
+  return loadPersistedRoleSchedule(role);
 }
 
 function getRoleCompletedAt(

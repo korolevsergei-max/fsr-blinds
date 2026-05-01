@@ -28,12 +28,11 @@ import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-es
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-function revalidateAll() {
-  revalidatePath("/cutter", "layout");
-  revalidatePath("/assembler", "layout");
-  revalidatePath("/qc", "layout");
-  revalidatePath("/management", "layout");
-}
+const REVALIDATE_PATH_BY_REASON = {
+  mark_cut: "/cutter",
+  mark_assembled: "/assembler",
+  mark_qc: "/qc",
+} as const;
 
 function scheduleManufacturingFollowUp(args: {
   unitId: string;
@@ -54,7 +53,7 @@ function scheduleManufacturingFollowUp(args: {
 
     await recomputeUnitStatus(followUpSupabase, args.unitId);
     await reflowManufacturingSchedules(args.scheduleReason);
-    revalidateAll();
+    revalidatePath(REVALIDATE_PATH_BY_REASON[args.scheduleReason], "layout");
   });
 }
 
