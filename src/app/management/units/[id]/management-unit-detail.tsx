@@ -595,6 +595,18 @@ export function ManagementUnitDetail({
               Manage rooms
             </Button>
           </Link>
+          {resolvedUserRole === "owner" && (
+            <Link href={`/management/units/${unit.id}/verification-photos`}>
+              <Button
+                variant="secondary"
+                fullWidth
+                size="lg"
+                className="border-accent/25 bg-accent/5 text-accent hover:border-accent/35 hover:bg-accent/8"
+              >
+                View or Add Verification Photos
+              </Button>
+            </Link>
+          )}
           <Link href={`/management/units/${unit.id}/summary`}>
             <Button variant="secondary" fullWidth size="lg">
               View Summary
