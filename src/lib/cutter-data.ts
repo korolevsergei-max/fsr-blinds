@@ -38,6 +38,7 @@ export interface CutterWindow {
 
 export interface CutterDataset {
   units: CutterUnit[];
+  productionUnitCount: number;
 }
 
 export interface CutterUnitDetail {
@@ -78,18 +79,27 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
 export async function loadCutterDataset(): Promise<CutterDataset> {
   const supabase = await createClient();
 
-  const { data: units, error } = await supabase
-    .from("units")
-    .select(
-      "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
-    )
-    .eq("status", "measured")
-    .order("installation_date", { ascending: true, nullsFirst: false });
+  const [unitsRes, productionCountRes] = await Promise.all([
+    supabase
+      .from("units")
+      .select(
+        "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
+      )
+      .eq("status", "measured")
+      .is("production_entered_at", null)
+      .order("installation_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("units")
+      .select("id", { count: "exact", head: true })
+      .not("production_entered_at", "is", null),
+  ]);
 
-  if (error || !units) return { units: [] };
+  if (unitsRes.error || !unitsRes.data) {
+    return { units: [], productionUnitCount: productionCountRes.count ?? 0 };
+  }
 
   return {
-    units: units.map((u) => ({
+    units: unitsRes.data.map((u) => ({
       id: u.id,
       unitNumber: u.unit_number,
       buildingName: u.building_name,
@@ -99,6 +109,7 @@ export async function loadCutterDataset(): Promise<CutterDataset> {
       windowCount: u.window_count ?? 0,
       manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
     })),
+    productionUnitCount: productionCountRes.count ?? 0,
   };
 }
 

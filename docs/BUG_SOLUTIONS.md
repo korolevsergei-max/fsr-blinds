@@ -145,3 +145,15 @@ setAll(cookiesToSet) {
 **Root cause:** `loadFullDataset` merges schedulers into the installer list with `id: \`sch-${sch.id}\``. Scheduler PKs are already `sch-…`, so the UI id is `sch-sch-…`, which is **not** an `installers.id`. `deleteInstallerAccount` only deleted from `installers`, so no row matched.
 
 **Fix:** At the start of `deleteInstallerAccount` in `src/app/actions/auth-actions.ts`, if `installerId.startsWith("sch-")`, strip the synthetic prefix (`installerId.slice(4)`) and delegate to `deleteSchedulerAccount` so the `schedulers` row and related data are removed.
+
+---
+
+## Security Advisor: RLS Disabled on 3 Public Tables
+
+**Symptoms:** Supabase Security Advisor reports 3 errors — "RLS Disabled in Public" for `window_post_install_issues`, `window_post_install_issue_notes`, and `daily_progress_snapshots`.
+
+**Root Cause:** The migration `20260428120000_label_printing_issues_snapshots.sql` created these tables but omitted `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and `CREATE POLICY` statements, unlike every other table in the schema.
+
+**Fix:** Migration `20260521120000_enable_rls_missing_tables.sql` enables RLS and creates `authenticated` full-access policies on all 3 tables, matching the existing codebase convention. The `daily_progress_snapshots` table is written by the admin client (`service_role` key) which bypasses RLS, so the `authenticated` policy only covers reads.
+
+**Prevention:** When creating new tables, always include `ENABLE ROW LEVEL SECURITY` + a `CREATE POLICY` statement in the same migration.

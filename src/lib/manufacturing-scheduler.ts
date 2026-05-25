@@ -66,6 +66,8 @@ type UnitRow = {
   installation_date: string | null;
   complete_by_date: string | null;
   status: string;
+  all_measured_at: string | null;
+  production_entered_at: string | null;
 };
 
 type RoomRow = {
@@ -143,6 +145,9 @@ export interface ManufacturingWindowItem {
   qcApprovedAt: string | null;
   manufacturingLabelPrintedAt: string | null;
   packagingLabelPrintedAt: string | null;
+  cutListPrintedAt: string | null;
+  allMeasuredAt: string | null;
+  productionEnteredAt: string | null;
   scheduledCutDate: string | null;
   scheduledAssemblyDate: string | null;
   scheduledQcDate: string | null;
@@ -727,13 +732,14 @@ export async function loadPersistedRoleSchedule(
     qc_approved_at: string | null;
     manufacturing_label_printed_at: string | null;
     packaging_label_printed_at: string | null;
+    cut_list_printed_at: string | null;
   };
 
   const [unitData, windowData, productionData, escalationByWindow, escalationHistoryByWindow] = await Promise.all([
     selectInChunks<UnitRow>(unitIds, (chunk) =>
       supabase
         .from("units")
-        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at")
         .in("id", chunk)
         .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
     ),
@@ -747,7 +753,7 @@ export async function loadPersistedRoleSchedule(
     selectInChunks<ProductionStatusRow>(windowIds, (chunk) =>
       supabase
         .from("window_production_status")
-        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at")
+        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at, cut_list_printed_at")
         .in("window_id", chunk)
         .then((res) => ({ data: res.data as ProductionStatusRow[] | null, error: res.error })),
     ),
@@ -822,6 +828,9 @@ export async function loadPersistedRoleSchedule(
       qcApprovedAt: production?.qc_approved_at ?? null,
       manufacturingLabelPrintedAt: production?.manufacturing_label_printed_at ?? null,
       packagingLabelPrintedAt: production?.packaging_label_printed_at ?? null,
+      cutListPrintedAt: production?.cut_list_printed_at ?? null,
+      allMeasuredAt: unit.all_measured_at ?? null,
+      productionEnteredAt: unit.production_entered_at ?? null,
       scheduledCutDate: row.scheduled_cut_date,
       scheduledAssemblyDate: row.scheduled_assembly_date,
       scheduledQcDate: row.scheduled_qc_date,

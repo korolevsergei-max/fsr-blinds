@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { SignOut, WarningCircle, CheckCircle, Hourglass, Queue } from "@phosphor-icons/react";
+import { SignOut, WarningCircle, CheckCircle, Hourglass, Queue, Package } from "@phosphor-icons/react";
 import { signOut } from "@/app/actions/auth-actions";
 import type { CutterDataset } from "@/lib/cutter-data";
 
@@ -27,7 +27,7 @@ export function CutterDashboard({
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
-  const { units } = data;
+  const { units, productionUnitCount } = data;
 
   const overdue = units.filter((u) => urgencyBucket(u.installationDate) === "overdue");
   const dueSoon = units.filter((u) => urgencyBucket(u.installationDate) === "due_soon");
@@ -86,6 +86,20 @@ export function CutterDashboard({
           Open Cutting Queue
         </span>
         <span className="text-white/80">{units.length} unit{units.length !== 1 ? "s" : ""}</span>
+      </button>
+
+      {/* Production */}
+      <button
+        onClick={() => router.push("/cutter/production")}
+        className="w-full flex items-center justify-between px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium text-sm active:opacity-80 transition-opacity"
+      >
+        <span className="flex items-center gap-2">
+          <Package size={18} />
+          In Production
+        </span>
+        <span className="text-white/80">
+          {productionUnitCount} unit{productionUnitCount !== 1 ? "s" : ""}
+        </span>
       </button>
 
       {/* Overdue alert */}

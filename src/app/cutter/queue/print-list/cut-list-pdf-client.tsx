@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ManufacturingWindowItem } from "@/lib/manufacturing-scheduler";
+import { markCutListPrinted } from "@/app/actions/label-print-actions";
 
 interface Props {
   items: ManufacturingWindowItem[];
@@ -28,6 +29,9 @@ export function CutListPdfClient({ items, filterSummary, sortSummary }: Props) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+
+        const printedWindows = items.map((i) => ({ windowId: i.windowId, unitId: i.unitId }));
+        await markCutListPrinted({ windows: printedWindows });
 
         setStatus("done");
       } catch (err) {

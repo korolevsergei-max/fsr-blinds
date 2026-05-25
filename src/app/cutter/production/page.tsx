@@ -6,9 +6,9 @@ import {
   loadPersistedRoleSchedule,
   reflowManufacturingSchedules,
 } from "@/lib/manufacturing-scheduler";
-import { CutterQueue } from "@/components/manufacturing/cutter-queue";
+import { CutterProduction } from "@/components/manufacturing/cutter-production";
 
-export default async function CutterQueuePage() {
+export default async function CutterProductionPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
@@ -16,8 +16,8 @@ export default async function CutterQueuePage() {
 
   after(async () => {
     await reflowManufacturingSchedules("load_queue");
-    revalidatePath("/cutter/queue", "layout");
+    revalidatePath("/cutter/production", "layout");
   });
 
-  return <CutterQueue schedule={schedule} userName={user.displayName} />;
+  return <CutterProduction schedule={schedule} userName={user.displayName} />;
 }

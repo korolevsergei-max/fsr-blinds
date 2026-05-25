@@ -40,6 +40,9 @@ function createItem(windowId: string): ManufacturingWindowItem {
     qcApprovedAt: null,
     manufacturingLabelPrintedAt: null,
     packagingLabelPrintedAt: null,
+    cutListPrintedAt: null,
+    allMeasuredAt: null,
+    productionEnteredAt: null,
     scheduledCutDate: "2026-04-23",
     scheduledAssemblyDate: null,
     scheduledQcDate: null,
@@ -91,7 +94,7 @@ test("packPrintableLabelItems groups labels into pages of three", () => {
     "manufacturing"
   );
 
-  const pages = packPrintableLabelItems(labels);
+  const pages = packPrintableLabelItems(labels, 3);
 
   assert.deepEqual(
     pages.map((page) => page.map((label) => label.key)),

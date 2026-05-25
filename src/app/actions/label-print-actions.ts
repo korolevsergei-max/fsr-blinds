@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { maybeSetProductionEnteredAt } from "@/lib/production-entered";
 
 export async function markLabelsPrinted(input: {
   windows: Array<{ windowId: string; unitId: string }>;
@@ -48,6 +49,57 @@ export async function markLabelsPrinted(input: {
     const { error } = await supabase.from("window_production_status").insert(rows);
     if (error) return { ok: false, error: error.message };
   }
+
+  const unitIds = [...new Set(input.windows.map((w) => w.unitId))];
+  await maybeSetProductionEnteredAt(supabase, unitIds);
+
+  revalidatePath("/cutter/queue");
+  return { ok: true };
+}
+
+export async function markCutListPrinted(input: {
+  windows: Array<{ windowId: string; unitId: string }>;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (input.windows.length === 0) return { ok: true };
+
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+
+  const windowIds = input.windows.map((w) => w.windowId);
+
+  const { data: existing, error: selErr } = await supabase
+    .from("window_production_status")
+    .select("window_id")
+    .in("window_id", windowIds);
+
+  if (selErr) return { ok: false, error: selErr.message };
+
+  const existingIds = new Set((existing ?? []).map((r) => r.window_id as string));
+  const toInsert = input.windows.filter((w) => !existingIds.has(w.windowId));
+  const toUpdateIds = windowIds.filter((id) => existingIds.has(id));
+
+  if (toUpdateIds.length > 0) {
+    const { error } = await supabase
+      .from("window_production_status")
+      .update({ cut_list_printed_at: now })
+      .in("window_id", toUpdateIds);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  if (toInsert.length > 0) {
+    const rows = toInsert.map((w) => ({
+      id: `wps-${crypto.randomUUID().slice(0, 8)}`,
+      window_id: w.windowId,
+      unit_id: w.unitId,
+      status: "pending" as const,
+      cut_list_printed_at: now,
+    }));
+    const { error } = await supabase.from("window_production_status").insert(rows);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  const unitIds = [...new Set(input.windows.map((w) => w.unitId))];
+  await maybeSetProductionEnteredAt(supabase, unitIds);
 
   revalidatePath("/cutter/queue");
   return { ok: true };

@@ -22,6 +22,8 @@ type UnitRow = {
   client_name: string;
   installation_date: string | null;
   complete_by_date: string | null;
+  all_measured_at: string | null;
+  production_entered_at: string | null;
 };
 
 type WindowRow = {
@@ -58,6 +60,7 @@ type ProductionRow = {
   qc_approved_at: string | null;
   manufacturing_label_printed_at: string | null;
   packaging_label_printed_at: string | null;
+  cut_list_printed_at: string | null;
 };
 
 export async function loadWindowsForPrint(
@@ -86,7 +89,7 @@ export async function loadWindowsForPrint(
     selectInChunks<ProductionRow>(windowIds, (chunk) =>
       supabase
         .from("window_production_status")
-        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at")
+        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at, cut_list_printed_at")
         .in("window_id", chunk)
         .then((res) => ({ data: res.data as ProductionRow[] | null, error: res.error })),
     ),
@@ -100,7 +103,7 @@ export async function loadWindowsForPrint(
     selectInChunks<UnitRow>(unitIds, (chunk) =>
       supabase
         .from("units")
-        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, all_measured_at, production_entered_at")
         .in("id", chunk)
         .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
     ),
@@ -164,6 +167,9 @@ export async function loadWindowsForPrint(
       qcApprovedAt: production?.qc_approved_at ?? null,
       manufacturingLabelPrintedAt: production?.manufacturing_label_printed_at ?? null,
       packagingLabelPrintedAt: production?.packaging_label_printed_at ?? null,
+      cutListPrintedAt: production?.cut_list_printed_at ?? null,
+      allMeasuredAt: unit.all_measured_at ?? null,
+      productionEnteredAt: unit.production_entered_at ?? null,
       scheduledCutDate: schedule.scheduled_cut_date,
       scheduledAssemblyDate: null,
       scheduledQcDate: null,

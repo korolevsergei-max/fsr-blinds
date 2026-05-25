@@ -442,6 +442,47 @@ async function getSchedulerForUnit(
   return data?.scheduler_id ?? null;
 }
 
+/**
+ * Recomputes units.all_measured_at after a window measurement is saved.
+ * Sets to NOW() if every window in the unit has width+height; clears to NULL otherwise.
+ */
+async function recomputeAllMeasuredAt(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string
+): Promise<void> {
+  const { data: rooms } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("unit_id", unitId);
+  if (!rooms || rooms.length === 0) {
+    await supabase.from("units").update({ all_measured_at: null }).eq("id", unitId);
+    return;
+  }
+  const roomIds = rooms.map((r) => r.id as string);
+
+  const { data: anyWindow } = await supabase
+    .from("windows")
+    .select("id")
+    .in("room_id", roomIds)
+    .limit(1);
+  if (!anyWindow || anyWindow.length === 0) {
+    await supabase.from("units").update({ all_measured_at: null }).eq("id", unitId);
+    return;
+  }
+
+  const { data: unmeasured } = await supabase
+    .from("windows")
+    .select("id")
+    .in("room_id", roomIds)
+    .or("width.is.null,height.is.null")
+    .limit(1);
+  const allMeasured = !unmeasured || unmeasured.length === 0;
+  await supabase
+    .from("units")
+    .update({ all_measured_at: allMeasured ? new Date().toISOString() : null })
+    .eq("id", unitId);
+}
+
 
 export async function bulkAssignUnits(
   unitIds: string[],
@@ -1469,6 +1510,8 @@ export async function createWindowWithPhoto(
       return { ok: false, error: insErr.message };
     }
 
+    await recomputeAllMeasuredAt(supabase, unitId);
+
     if (publicUrl && storagePath) {
       const { actorRole: uploadRole, actorName: uploadName, actorUserId: uploadUserId } =
         await resolveFieldActor(null);
@@ -1690,6 +1733,8 @@ export async function updateWindowWithOptionalPhoto(
       }
       return { ok: false, error: upWin.message };
     }
+
+    await recomputeAllMeasuredAt(supabase, unitId);
 
     const { data: unit } = await supabase
       .from("units")
