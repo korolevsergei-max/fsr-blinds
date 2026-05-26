@@ -46,6 +46,7 @@ import {
 } from "@/lib/window-issues";
 import { resolveEscalationHref } from "@/lib/escalation-helpers";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { BulkInstallButton } from "@/components/units/bulk-install-button";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the database",
@@ -265,6 +266,7 @@ export function ManagementUnitDetail({
       ? rooms.flatMap((room) => getWindowsByRoom(datasetData, room.id))
       : [];
 
+  const allGreenRiskFlags = unitWindows.every((w) => w.riskFlag === "green");
   const unitId = unit?.id;
   const unitCreatedAt = unit?.createdAt;
   const unitNumber = unit?.unitNumber;
@@ -612,6 +614,13 @@ export function ManagementUnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkInstallButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            allGreenRiskFlags={allGreenRiskFlags}
+            milestones={milestones}
+          />
         </motion.div>
 
         {/* Activity Log */}

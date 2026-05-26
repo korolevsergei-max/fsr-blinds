@@ -2576,3 +2576,96 @@ export async function deleteWindowMeasurementPhoto(
     return { ok: false, error: msg };
   }
 }
+
+export async function bulkMarkUnitWindowsInstalled(
+  unitId: string
+): Promise<{ ok: boolean; error?: string; unitStatus?: UnitStatus }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+    if (!unitId) return { ok: false, error: "Missing unit ID." };
+
+    const supabase = await createClient();
+
+    const { data: unitRow, error: unitErr } = await supabase
+      .from("units")
+      .select("id, status, assigned_installer_name")
+      .eq("id", unitId)
+      .single();
+    if (unitErr || !unitRow) return { ok: false, error: "Unit not found." };
+
+    const { data: rooms, error: roomsErr } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("unit_id", unitId);
+    if (roomsErr || !rooms?.length) return { ok: false, error: "No rooms found for unit." };
+
+    const roomIds = (rooms as Array<{ id: string }>).map((r) => r.id);
+
+    const { data: windows, error: windowsErr } = await supabase
+      .from("windows")
+      .select("id, room_id, risk_flag, installed")
+      .in("room_id", roomIds);
+    if (windowsErr || !windows?.length) return { ok: false, error: "No windows found for unit." };
+
+    const windowIds = (windows as Array<{ id: string }>).map((w) => w.id);
+
+    // Gate: all windows must be qc_approved (manufactured)
+    const { data: productionRows } = await supabase
+      .from("window_production_status")
+      .select("window_id, status")
+      .eq("unit_id", unitId);
+    const qcApprovedIds = new Set(
+      ((productionRows ?? []) as Array<{ window_id: string; status: string }>)
+        .filter((r) => r.status === "qc_approved")
+        .map((r) => r.window_id)
+    );
+    const allManufactured = windowIds.every((wid) => qcApprovedIds.has(wid));
+    if (!allManufactured) {
+      return { ok: false, error: "All windows must pass manufacturing QC before bulk install." };
+    }
+
+    // Gate: all windows must have green risk flag
+    const hasNonGreen = (windows as Array<{ risk_flag: string }>).some(
+      (w) => w.risk_flag !== "green"
+    );
+    if (hasNonGreen) {
+      return { ok: false, error: "All windows must have green risk status before bulk install." };
+    }
+
+    const uninstalledIds = (windows as Array<{ id: string; installed: boolean }>)
+      .filter((w) => !w.installed)
+      .map((w) => w.id);
+
+    if (uninstalledIds.length > 0) {
+      const { error: updateErr } = await supabase
+        .from("windows")
+        .update({ installed: true })
+        .in("id", uninstalledIds);
+      if (updateErr) return { ok: false, error: updateErr.message };
+    }
+
+    const { actorRole, actorName } = await resolveFieldActor(unitRow.assigned_installer_name);
+    const prevStatus = (unitRow.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, roomIds);
+
+    after(async () => {
+      const db = createAdminClient();
+      await logUnitActivity(db, unitId, actorRole, actorName, "installation_completed", {
+        bulk: true,
+        windowCount: uninstalledIds.length,
+      });
+      if (unitStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(db, unitId);
+        if (schedulerId) {
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
+        }
+      }
+    });
+
+    return { ok: true, unitStatus };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}

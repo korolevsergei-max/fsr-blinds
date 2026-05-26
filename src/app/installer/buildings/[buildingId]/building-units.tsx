@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
 } from "@phosphor-icons/react";
-import { getUnitsByInstaller } from "@/lib/app-dataset";
+import { getFloor, getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MfgBadge } from "@/components/ui/risk-badge";
@@ -58,13 +58,22 @@ export function BuildingUnits({
 }) {
   const { buildingId } = useParams<{ buildingId: string }>();
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
+  const [floorFilter, setFloorFilter] = useState<string | "all">("all");
 
   const building = data.buildings.find((b) => b.id === buildingId);
   const allInstallerUnits = getUnitsByInstaller(data, installerId);
   const buildingUnits = allInstallerUnits.filter(
     (u) => u.buildingId === buildingId
   );
-  const filtered = filterUnits(buildingUnits, activeFilter);
+  const availableFloors = useMemo(() => {
+    const floors = new Set<string>();
+    buildingUnits.forEach((u) => floors.add(getFloor(u.unitNumber)));
+    return [...floors].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [buildingUnits]);
+  const statusFiltered = filterUnits(buildingUnits, activeFilter);
+  const filtered = floorFilter === "all"
+    ? statusFiltered
+    : statusFiltered.filter((u) => getFloor(u.unitNumber) === floorFilter);
 
   if (!building) {
     return (
@@ -97,6 +106,34 @@ export function BuildingUnits({
             </button>
           ))}
         </div>
+
+        {availableFloors.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-4">
+            <button
+              onClick={() => setFloorFilter("all")}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-[0.96] ${
+                floorFilter === "all"
+                  ? "bg-accent text-white shadow-sm"
+                  : "bg-white text-zinc-500 border border-border hover:bg-surface"
+              }`}
+            >
+              ALL FLOORS
+            </button>
+            {availableFloors.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFloorFilter(f)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all active:scale-[0.96] ${
+                  floorFilter === f
+                    ? "bg-accent text-white shadow-sm"
+                    : "bg-white text-zinc-500 border border-border hover:bg-surface"
+                }`}
+              >
+                FLOOR {f}
+              </button>
+            ))}
+          </div>
+        )}
 
         <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-3">
           {filtered.length} unit{filtered.length !== 1 ? "s" : ""}

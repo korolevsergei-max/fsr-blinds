@@ -543,18 +543,32 @@ export async function loadAllSchedulerBuildingAccess(): Promise<Record<string, s
  * `scheduler_unit_assignments` plus units assigned to installers on this scheduler's team
  * (`installers.scheduler_id`). The latter keeps units visible after handoff to a team installer.
  */
-export async function loadSchedulerDataset(): Promise<AppDataset> {
+export async function loadSchedulerDataset(
+  preloadedSchedulerId?: string | null
+): Promise<AppDataset> {
   const user = await getCurrentUser();
   if (!user || user.role !== "scheduler") {
     return emptyDataset();
   }
 
-  const schedulerId = await getLinkedSchedulerId(user.id);
+  const schedulerId =
+    preloadedSchedulerId === undefined
+      ? await getLinkedSchedulerId(user.id)
+      : preloadedSchedulerId;
   if (!schedulerId) return emptyDataset();
 
   const supabase = await createClient();
 
-  const scopedUnitIds = await getSchedulerScopedUnitIds(supabase, schedulerId);
+  // scopedUnitIds, assignments, and the scheduler row all derive from schedulerId only —
+  // run them in parallel so we don't stack three round-trips before the units query.
+  const [scopedUnitIds, assignmentsRes, schedulerRowRes] = await Promise.all([
+    getSchedulerScopedUnitIds(supabase, schedulerId),
+    supabase
+      .from("scheduler_unit_assignments")
+      .select("unit_id, assigned_at")
+      .eq("scheduler_id", schedulerId),
+    supabase.from("schedulers").select("name").eq("id", schedulerId).single(),
+  ]);
 
   if (scopedUnitIds.length === 0) return emptyDataset();
 
@@ -566,19 +580,14 @@ export async function loadSchedulerDataset(): Promise<AppDataset> {
       .order("unit_number")
       .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
   );
-  const { data: assignmentsData } = await supabase
-    .from("scheduler_unit_assignments")
-    .select("unit_id, assigned_at")
-    .eq("scheduler_id", schedulerId);
   const assignmentAtMap = new Map(
-    ((assignmentsData ?? []) as { unit_id: string; assigned_at: string }[]).map((a) => [
+    ((assignmentsRes.data ?? []) as { unit_id: string; assigned_at: string }[]).map((a) => [
       a.unit_id,
       a.assigned_at,
     ])
   );
 
-  const { data: schedulerRow } = await supabase.from("schedulers").select("name").eq("id", schedulerId).single();
-  const schedulerName = (schedulerRow as { name: string })?.name || "Unknown";
+  const schedulerName = (schedulerRowRes.data as { name: string } | null)?.name || "Unknown";
 
   const units = unitData.map((r) =>
     mapUnit({ ...r, assigned_at: assignmentAtMap.get(r.id) }, schedulerName, schedulerId)

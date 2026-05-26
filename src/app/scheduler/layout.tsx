@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getLinkedSchedulerId, type AppUser } from "@/lib/auth";
 import { loadSchedulerDataset, getUnreadNotificationCount } from "@/lib/server-data";
@@ -22,14 +21,6 @@ function emptyDataset(): AppDataset {
     manufacturingEscalations: [],
     postInstallIssues: [],
   };
-}
-
-function shouldDeferInitialDatasetForUserAgent(userAgent: string): boolean {
-  const ua = userAgent.toLowerCase();
-  const isiOSFamily =
-    /iphone|ipad|ipod/.test(ua) || (ua.includes("macintosh") && ua.includes("mobile"));
-  const isAndroidFamily = ua.includes("android");
-  return isiOSFamily || isAndroidFamily;
 }
 
 export default async function SchedulerLayout({
@@ -71,7 +62,9 @@ export default async function SchedulerLayout({
         <div className="mx-auto max-w-lg min-h-[100dvh] pb-24 bg-card shadow-[0_0_0_1px_var(--border)]">
           <main id="main-content">
             <Suspense fallback={<SchedulerLoading />}>
-              <SchedulerDataShell user={user}>{children}</SchedulerDataShell>
+              <SchedulerDataShell user={user} schedulerId={schedulerId}>
+                {children}
+              </SchedulerDataShell>
             </Suspense>
           </main>
         </div>
@@ -83,25 +76,23 @@ export default async function SchedulerLayout({
 
 async function SchedulerDataShell({
   user,
+  schedulerId,
   children,
 }: {
   user: AppUser;
+  schedulerId: string | null;
   children: React.ReactNode;
 }) {
-  const headerStore = await headers();
-  const schedulerId = await getLinkedSchedulerId(user.id);
-  const deferInitialDataset = shouldDeferInitialDatasetForUserAgent(
-    headerStore.get("user-agent") ?? ""
-  );
+  // Stream the real dataset via Suspense — the outer <Suspense fallback={<SchedulerLoading />}>
+  // shows the skeleton while this awaits, replacing the prior empty-then-client-refresh path.
+  // Realtime, offline cache, and visibility refresh in AppDatasetClientShell are unchanged.
   let data = emptyDataset();
-  let eagerRefreshOnMount = true;
-  if (!deferInitialDataset) {
-    try {
-      data = await loadSchedulerDataset();
-      eagerRefreshOnMount = false;
-    } catch (error) {
-      console.error("Failed to load scheduler dataset:", error);
-    }
+  let needsClientFallback = false;
+  try {
+    data = await loadSchedulerDataset(schedulerId);
+  } catch (error) {
+    console.error("Failed to load scheduler dataset:", error);
+    needsClientFallback = true;
   }
 
   return (
@@ -110,7 +101,7 @@ async function SchedulerDataShell({
       user={user}
       linkedEntityId={schedulerId}
       portalDataLoader="scheduler"
-      eagerRefreshOnMount={eagerRefreshOnMount}
+      eagerRefreshOnMount={needsClientFallback}
     >
       {children}
     </AppDatasetClientShell>

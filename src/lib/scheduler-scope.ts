@@ -15,24 +15,24 @@ export async function getSchedulerScopedUnitIds(
   supabase: SupabaseServerClient,
   schedulerId: string
 ): Promise<string[]> {
-  const [{ data: assignmentRows }, { data: teamInstallerRows }] = await Promise.all([
-    supabase.from("scheduler_unit_assignments").select("unit_id").eq("scheduler_id", schedulerId),
-    supabase.from("installers").select("id").eq("scheduler_id", schedulerId),
+  // Both queries run fully in parallel: the installer query embeds units via the
+  // assigned_installer_id FK so we avoid a sequential 3rd round-trip.
+  const [{ data: assignmentRows }, { data: installerRows }] = await Promise.all([
+    supabase
+      .from("scheduler_unit_assignments")
+      .select("unit_id")
+      .eq("scheduler_id", schedulerId),
+    supabase
+      .from("installers")
+      .select("id, units:units!assigned_installer_id(id)")
+      .eq("scheduler_id", schedulerId),
   ]);
 
   const fromAssignments = (assignmentRows ?? []).map((r: { unit_id: string }) => r.unit_id);
-  const teamInstallerIds = (teamInstallerRows ?? []).map((r: { id: string }) => r.id);
+  const fromTeam = (installerRows ?? []).flatMap(
+    (r) => ((r as { id: string; units: { id: string }[] }).units ?? []).map((u) => u.id)
+  );
 
-  if (teamInstallerIds.length === 0) {
-    return [...new Set(fromAssignments)];
-  }
-
-  const { data: teamUnits } = await supabase
-    .from("units")
-    .select("id")
-    .in("assigned_installer_id", teamInstallerIds);
-
-  const fromTeam = (teamUnits ?? []).map((r: { id: string }) => r.id);
   return [...new Set([...fromAssignments, ...fromTeam])];
 }
 

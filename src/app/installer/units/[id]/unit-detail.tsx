@@ -24,6 +24,7 @@ import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date"
 import { SectionLabel } from "@/components/ui/section-label";
 import { useAppDatasetMaybe } from "@/lib/dataset-context";
 import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag } from "@/lib/window-issues";
+import { BulkInstallButton } from "@/components/units/bulk-install-button";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -233,6 +234,7 @@ export function UnitDetail({
     datasetData && unit
       ? rooms.flatMap((room) => getWindowsByRoom(datasetData, room.id))
       : [];
+  const allGreenRiskFlags = unitWindows.every((w) => w.riskFlag === "green");
   const escalations = unit && datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const escalationCount = escalations.length;
   const openPostInstallIssueTargets =
@@ -493,6 +495,13 @@ export function UnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkInstallButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            allGreenRiskFlags={allGreenRiskFlags}
+            milestones={milestones}
+          />
         </motion.div>
 
         {/* Activity log */}

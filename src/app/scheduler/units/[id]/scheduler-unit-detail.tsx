@@ -38,6 +38,7 @@ import {
   getUnitEscalations,
 } from "@/lib/window-issues";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
+import { BulkInstallButton } from "@/components/units/bulk-install-button";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -220,6 +221,8 @@ export function SchedulerUnitDetail({
       : "not_started";
 
   const flags = computeUnitFlags(unit, today);
+  const unitWindows = datasetData ? rooms.flatMap((r) => getWindowsByRoom(datasetData, r.id)) : [];
+  const allGreenRiskFlags = unitWindows.every((w) => w.riskFlag === "green");
   const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const openPostInstallIssueTargets = datasetData
     ? getOpenPostInstallIssueTargets(datasetData, unit.id)
@@ -463,6 +466,13 @@ export function SchedulerUnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkInstallButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            allGreenRiskFlags={allGreenRiskFlags}
+            milestones={milestones}
+          />
         </motion.div>
 
         {/* Activity log */}

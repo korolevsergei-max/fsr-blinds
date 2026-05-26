@@ -15,7 +15,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
-import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
+import { getFloor, getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
 import { StatusChip } from "@/components/ui/status-chip";
 import { MfgBadge } from "@/components/ui/risk-badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -42,6 +42,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
 
   const [search, setSearch] = useSessionStorage("scheduler-search", "");
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-buildingFilter", []);
+  const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("scheduler-floorFilter", []);
   const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("scheduler-statusFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-installerFilter", []);
   const [dateAddedFilter, setDateAddedFilter] = useSessionStorage<AddedDateFilter>("scheduler-dateAddedFilter", "all");
@@ -106,6 +107,12 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     return [...set].sort((a, b) => b.localeCompare(a));
   }, [unitsForDateOptions]);
 
+  const availableFloors = useMemo(() => {
+    const floors = new Set<string>();
+    for (const u of unitsForDateOptions) floors.add(getFloor(u.unitNumber));
+    return [...floors].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [unitsForDateOptions]);
+
   const unitIdsWithIssues = useMemo(() => getUnitIdsWithWindowEscalations(data), [data]);
 
   const filteredUnits = useMemo(() => {
@@ -128,6 +135,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
           }
         }
         if (buildingFilter.length > 0 && !buildingFilter.includes(u.buildingId)) return false;
+        if (floorFilter.length > 0 && !floorFilter.includes(getFloor(u.unitNumber))) return false;
         if (statusFilter.length > 0 && !statusFilter.includes(u.status)) return false;
         if (installerFilter.length > 0) {
           const wantsUnassigned = installerFilter.includes("__unassigned__");
@@ -158,6 +166,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     today,
     search,
     buildingFilter,
+    floorFilter,
     statusFilter,
     installerFilter,
     dateAddedFilter,
@@ -197,6 +206,10 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
     { value: "all", label: "All buildings" },
     ...buildings.map((b) => ({ value: b.id, label: b.name })),
   ];
+  const floorOptions = [
+    { value: "all", label: "All floors" },
+    ...availableFloors.map((f) => ({ value: f, label: `Floor ${f}` })),
+  ];
   const installerOptions = [
     { value: "all", label: "All installers" },
     { value: "__unassigned__", label: "Unassigned" },
@@ -233,6 +246,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
 
   const activeFilterCount = [
     buildingFilter.length > 0,
+    floorFilter.length > 0,
     statusFilter.length > 0,
     installerFilter.length > 0,
     dateAddedFilter !== "all",
@@ -343,7 +357,8 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                 )}
               </div>
               <FilterDropdown label="Sort" value={sortOrder} options={sortOptions} onChange={setSortOrder} />
-              <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={setBuildingFilter} />
+              <FilterDropdown multiple label="Building" values={buildingFilter} options={buildingOptions} onChange={(v) => { setBuildingFilter(v); setFloorFilter([]); }} />
+              <FilterDropdown multiple label="Floor" values={floorFilter} options={floorOptions} onChange={setFloorFilter} />
               <FilterDropdown multiple label="Status" values={statusFilter} options={statusOptions} onChange={setStatusFilter} />
               <FilterDropdown multiple label="Installer" values={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
               <CreatedDateFilter value={dateAddedFilter} onChange={setDateAddedFilter} distinctDates={distinctAddedDates} />
@@ -387,6 +402,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
                   type="button"
                   onClick={() => {
                     setBuildingFilter([]);
+                    setFloorFilter([]);
                     setStatusFilter([]);
                     setInstallerFilter([]);
                     setDateAddedFilter("all");

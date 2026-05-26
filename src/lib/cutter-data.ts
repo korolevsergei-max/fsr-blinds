@@ -75,7 +75,7 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
   };
 }
 
-/** All units in 'measured' status with an installation date — the cutting queue. */
+/** All units ready for cutting (measured/bracketed) with no production entry — the cutting queue. */
 export async function loadCutterDataset(): Promise<CutterDataset> {
   const supabase = await createClient();
 
@@ -85,7 +85,7 @@ export async function loadCutterDataset(): Promise<CutterDataset> {
       .select(
         "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
       )
-      .eq("status", "measured")
+      .in("status", ["measured", "bracketed", "measured_and_bracketed"])
       .is("production_entered_at", null)
       .order("installation_date", { ascending: true, nullsFirst: false }),
     supabase
