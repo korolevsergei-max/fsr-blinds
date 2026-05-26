@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowRight,
   CheckSquare,
   FunnelSimple,
   MagnifyingGlass,
   Square,
   X,
 } from "@phosphor-icons/react";
+import { moveUnitToProduction } from "@/app/actions/cutter-production-actions";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
-import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
+import type {
+  ManufacturingRoleSchedule,
+  ManufacturingWindowItem,
+} from "@/lib/manufacturing-scheduler";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { getFloor } from "@/lib/app-dataset";
 import type { ManufacturingHighlightSection } from "@/components/windows/manufacturing-summary-card";
@@ -25,6 +30,54 @@ import { CutterBulkActionBar } from "@/components/manufacturing/cutter-bulk-acti
 
 type ComponentFilter = "all" | ManufacturingHighlightSection;
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
+
+function getMissingLabels(windows: ManufacturingWindowItem[]): string[] {
+  const missing: string[] = [];
+  if (windows.some((w) => !w.cutListPrintedAt)) missing.push("Cut list");
+  if (windows.some((w) => !w.manufacturingLabelPrintedAt)) missing.push("Manufacturing label");
+  if (windows.some((w) => !w.packagingLabelPrintedAt)) missing.push("Packaging label");
+  return missing;
+}
+
+function MoveToProductionButton({
+  unitId,
+  missingLabels,
+}: {
+  unitId: string;
+  missingLabels: string[];
+}) {
+  const [pending, startTransition] = useTransition();
+  const hasMissing = missingLabels.length > 0;
+
+  function handleClick() {
+    const message = hasMissing
+      ? `This unit hasn't passed the auto-gate yet — missing: ${missingLabels.join(", ")}.\n\nAre you sure you want to move it to Production anyway?`
+      : "Move this unit to Production?";
+    if (!globalThis.window.confirm(message)) return;
+    startTransition(async () => {
+      const res = await moveUnitToProduction(unitId);
+      if (!res.ok) {
+        globalThis.window.alert(res.error ?? "Failed to move unit to production.");
+      }
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={pending}
+      className={[
+        "inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1 text-[11px] font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-50",
+        hasMissing ? "bg-amber-600" : "bg-accent",
+      ].join(" ")}
+      title={hasMissing ? `Missing: ${missingLabels.join(", ")}` : undefined}
+    >
+      <ArrowRight size={12} weight="bold" />
+      {pending ? "Moving…" : "Move to Production"}
+    </button>
+  );
+}
 
 export function CutterQueue({
   schedule,
@@ -138,11 +191,25 @@ export function CutterQueue({
     displayLimit !== "all",
   ].filter(Boolean).length;
 
-  // Build unit groups from allItems, excluding units already in production.
+  // Units whose cutting has already started (any window cut/assembled/qc_approved)
+  // have effectively left the queue, even if production_entered_at was never set.
+  // Compute this set once so we can drop those units even when filtered windows
+  // happen to be pending.
+  const unitsWithStartedCutting = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of schedule.allItems) {
+      if (item.productionStatus !== "pending") ids.add(item.unitId);
+    }
+    return ids;
+  }, [schedule.allItems]);
+
+  // Build unit groups from allItems, excluding units already in production
+  // or units where any cutting has already started.
   const unitGroups: CutterUnitGroup[] = useMemo(() => {
     const groups = new Map<string, CutterUnitGroup>();
     for (const item of schedule.allItems) {
       if (item.productionEnteredAt != null) continue;
+      if (unitsWithStartedCutting.has(item.unitId)) continue;
 
       // Filters applied per-window
       if (buildingFilter.length > 0 && !buildingFilter.includes(item.buildingId)) continue;
@@ -197,7 +264,14 @@ export function CutterQueue({
     }
 
     return sortedGroups;
-  }, [schedule.allItems, buildingFilter, floorFilter, fabricTypeFilter, search]);
+  }, [
+    schedule.allItems,
+    unitsWithStartedCutting,
+    buildingFilter,
+    floorFilter,
+    fabricTypeFilter,
+    search,
+  ]);
 
   const maxVisibleUnits = displayLimit === "all" ? Infinity : Number(displayLimit);
   const visibleGroups = unitGroups.slice(0, maxVisibleUnits);
@@ -384,6 +458,14 @@ export function CutterQueue({
               selected={selectedUnitIds.has(unit.unitId)}
               onToggleSelect={() => toggleUnit(unit.unitId)}
               unitHrefBase="/cutter/units"
+              headerAction={
+                selectMode ? null : (
+                  <MoveToProductionButton
+                    unitId={unit.unitId}
+                    missingLabels={getMissingLabels(unit.windows)}
+                  />
+                )
+              }
             />
           ))
         )}

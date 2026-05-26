@@ -55,6 +55,8 @@ interface UnitCardProps {
   renderWindowActions?: (item: ManufacturingWindowItem) => React.ReactNode;
   /** Optional label rendered in the header (e.g. "In production since X"). */
   headerMeta?: React.ReactNode;
+  /** Optional action rendered below the header button (e.g. Move back to Queue). */
+  headerAction?: React.ReactNode;
 }
 
 export function UnitCard({
@@ -66,6 +68,7 @@ export function UnitCard({
   unitHrefBase,
   renderWindowActions,
   headerMeta,
+  headerAction,
 }: UnitCardProps) {
   const router = useRouter();
   const dueDateLabel = formatDueDate(unit);
@@ -98,50 +101,57 @@ export function UnitCard({
         ringClass,
       ].join(" ")}
     >
-      <button
-        type="button"
-        onClick={handleHeaderClick}
+      <div
         className={[
-          "w-full border-b px-4 py-3 text-left",
+          "border-b",
           unit.hasIssue
             ? "border-red-100 bg-red-50/60"
             : "border-border/70 bg-surface/40",
         ].join(" ")}
       >
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <div className="flex items-center gap-2 min-w-0">
-            {selectable && (
-              <span
-                aria-hidden
-                className={[
-                  "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
-                  selected
-                    ? "border-accent bg-accent text-white"
-                    : "border-border bg-card text-transparent",
-                ].join(" ")}
-              >
-                {selected ? (
-                  <Check size={12} weight="bold" />
-                ) : (
-                  <Circle size={6} weight="fill" />
-                )}
+        <button
+          type="button"
+          onClick={handleHeaderClick}
+          className="w-full px-4 py-3 text-left"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex items-center gap-2 min-w-0">
+              {selectable && (
+                <span
+                  aria-hidden
+                  className={[
+                    "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
+                    selected
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-card text-transparent",
+                  ].join(" ")}
+                >
+                  {selected ? (
+                    <Check size={12} weight="bold" />
+                  ) : (
+                    <Circle size={6} weight="fill" />
+                  )}
+                </span>
+              )}
+              <p className="text-[13px] font-semibold text-foreground truncate">
+                Unit {unit.unitNumber} · {unit.buildingName}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
+              {dueDateLabel && <span>{dueDateLabel}</span>}
+              {measuredLabel && <span>Measured {measuredLabel}</span>}
+              <span>
+                {unit.windows.length} window
+                {unit.windows.length === 1 ? "" : "s"}
               </span>
-            )}
-            <p className="text-[13px] font-semibold text-foreground truncate">
-              Unit {unit.unitNumber} · {unit.buildingName}
-            </p>
+              {headerMeta}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-tertiary">
-            {dueDateLabel && <span>{dueDateLabel}</span>}
-            {measuredLabel && <span>Measured {measuredLabel}</span>}
-            <span>
-              {unit.windows.length} window
-              {unit.windows.length === 1 ? "" : "s"}
-            </span>
-            {headerMeta}
-          </div>
-        </div>
-      </button>
+        </button>
+        {headerAction && (
+          <div className="px-4 pb-3">{headerAction}</div>
+        )}
+      </div>
 
       <div className="divide-y divide-border/70">
         {unit.windows.map((item) => {
