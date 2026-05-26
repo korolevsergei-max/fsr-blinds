@@ -131,7 +131,6 @@ export interface ManufacturingScheduleState {
 }
 
 export type ManufacturingDashboardCategory =
-  | "today"
   | "returned"
   | "at_risk"
   | "behind"
@@ -299,10 +298,6 @@ function getManufacturingDashboardCategory(
   }
 
   const roleDate = getManufacturingRoleDate(item, role, currentWorkDate, earliestScheduledDate);
-  if (roleDate === currentWorkDate) {
-    return "today";
-  }
-
   if (!dueDate && !roleDate) {
     return "unscheduled";
   }
@@ -440,9 +435,8 @@ export function buildManufacturingDashboardState(args: {
   } = args;
 
   const currentWorkDate = schedule.currentWorkDate ?? formatDateKey(today);
-  const categories: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today", "unscheduled"];
+  const categories: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "unscheduled"];
   const categoryLabels: Record<ManufacturingDashboardCategory, string> = {
-    today: "Today",
     returned: "Returned",
     at_risk: "At Risk",
     behind: "Behind",
@@ -450,7 +444,6 @@ export function buildManufacturingDashboardState(args: {
   };
 
   const itemsByCategory = {
-    today: [] as ManufacturingWindowItem[],
     returned: [] as ManufacturingWindowItem[],
     at_risk: [] as ManufacturingWindowItem[],
     behind: [] as ManufacturingWindowItem[],
@@ -484,7 +477,6 @@ export function buildManufacturingDashboardState(args: {
   }
 
   const counts = {
-    today: itemsByCategory.today.length,
     returned: itemsByCategory.returned.length,
     at_risk: itemsByCategory.at_risk.length,
     behind: itemsByCategory.behind.length,
@@ -500,7 +492,6 @@ export function buildManufacturingDashboardState(args: {
       units: groupDashboardUnits(itemsByCategory[category]),
     })),
     unitsByCategory: {
-      today: groupDashboardUnits(itemsByCategory.today),
       returned: groupDashboardUnits(itemsByCategory.returned),
       at_risk: groupDashboardUnits(itemsByCategory.at_risk),
       behind: groupDashboardUnits(itemsByCategory.behind),

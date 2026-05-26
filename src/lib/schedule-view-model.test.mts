@@ -115,24 +115,6 @@ test("complete-by-only cut work appears in assembler dashboard lane", () => {
   assert.equal(state.counts.at_risk, 1);
 });
 
-test("earliest future scheduled role work is visible as today", () => {
-  const state = buildManufacturingDashboardState({
-    schedule: makeSchedule([
-      makeWindow({
-        productionStatus: "pending",
-        scheduledCutDate: "2026-05-06",
-      }),
-    ]),
-    role: "cutter",
-    today: new Date(`${CURRENT_WORK_DATE}T00:00:00`),
-    clientFilter: [],
-    buildingFilter: [],
-    installDateFilter: "all",
-  });
-
-  assert.equal(state.counts.today, 1);
-});
-
 test("role-visible work with no dates lands in unscheduled dashboard lane", () => {
   const state = buildManufacturingDashboardState({
     schedule: makeSchedule([

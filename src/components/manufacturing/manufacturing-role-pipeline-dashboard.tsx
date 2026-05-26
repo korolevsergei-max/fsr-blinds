@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   CalendarBlank,
-  CheckCircle,
   FunnelSimple,
   WarningCircle,
   X,
@@ -40,19 +39,6 @@ const CATEGORY_COPY: Record<
     };
   }
 > = {
-  today: {
-    label: "Today",
-    description: "Scheduled into the current workday.",
-    cardClass: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    iconClass: "text-emerald-600",
-    sectionClass: "border-emerald-200 bg-emerald-50/50",
-    badgeClass: "bg-emerald-100 text-emerald-800",
-    activeStyle: {
-      backgroundColor: "#047857",
-      borderColor: "#065f46",
-      color: "#ffffff",
-    },
-  },
   returned: {
     label: "Returned",
     description: "Sent back to this role and needs rework.",
@@ -107,7 +93,7 @@ const CATEGORY_COPY: Record<
   },
 };
 
-const CATEGORY_ORDER: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "today", "unscheduled"];
+const CATEGORY_ORDER: ManufacturingDashboardCategory[] = ["returned", "behind", "at_risk", "unscheduled"];
 
 function formatUnitDueDate(unit: ManufacturingDashboardUnitCard) {
   if (unit.installationDate) {
@@ -184,15 +170,13 @@ function PipelineCard({
 }) {
   const copy = CATEGORY_COPY[category];
   const Icon =
-    category === "today"
-      ? CheckCircle
-      : category === "returned"
-        ? WarningCircle
-        : category === "at_risk"
+    category === "returned"
+      ? WarningCircle
+      : category === "at_risk"
+        ? CalendarBlank
+        : category === "unscheduled"
           ? CalendarBlank
-          : category === "unscheduled"
-            ? CalendarBlank
-            : WarningCircle;
+          : WarningCircle;
 
   return (
     <button
@@ -314,7 +298,7 @@ export function ManufacturingRolePipelineDashboard({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {CATEGORY_ORDER.map((category) => (
           <PipelineCard
             key={category}
@@ -334,7 +318,7 @@ export function ManufacturingRolePipelineDashboard({
           <p className="mt-1 text-[12px] text-tertiary">
             {activeCategory
               ? `${dashboardState.counts[activeCategory]} blind${dashboardState.counts[activeCategory] === 1 ? "" : "s"} in this lane.`
-              : "Returned work is shown first, followed by behind, at-risk, today, and unscheduled."}
+              : "Returned work is shown first, followed by behind, at-risk, and unscheduled."}
           </p>
         </div>
         {activeCategory && (
