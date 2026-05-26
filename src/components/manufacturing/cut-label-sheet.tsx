@@ -138,9 +138,6 @@ function LabelContent({
             fontWeight: 800,
             lineHeight: 1.05,
             color: "#000",
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}
         >

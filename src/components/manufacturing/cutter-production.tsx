@@ -369,6 +369,24 @@ export function CutterProduction({
     setSelectedUnitIds(new Set());
   }
 
+  const [bulkPickerOpen, setBulkPickerOpen] = useState(false);
+  const [bulkPickerValue, setBulkPickerValue] = useState("");
+
+  function applyBulkPick() {
+    const n = Number.parseInt(bulkPickerValue, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      setBulkPickerOpen(false);
+      setBulkPickerValue("");
+      return;
+    }
+    const take = Math.min(n, visibleGroups.length);
+    const next = new Set<string>();
+    for (let i = 0; i < take; i++) next.add(visibleGroups[i].unitId);
+    setSelectedUnitIds(next);
+    setBulkPickerOpen(false);
+    setBulkPickerValue("");
+  }
+
   function handleStatusChange(windowId: string, next: "pending" | "cut") {
     setStatusOverrides((prev) => {
       const m = new Map(prev);
@@ -405,24 +423,69 @@ export function CutterProduction({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectMode((s) => {
-                if (s) clearSelection();
-                return !s;
-              });
-            }}
-            className={[
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors",
-              selectMode
-                ? "border-accent bg-accent text-white"
-                : "border-border bg-card text-secondary hover:bg-surface",
-            ].join(" ")}
-          >
-            {selectMode ? <CheckSquare size={14} weight="fill" /> : <Square size={14} />}
-            {selectMode ? "Done" : "Select"}
-          </button>
+          <div className="flex items-center gap-2">
+            {selectMode && (
+              bulkPickerOpen ? (
+                <div className="inline-flex items-center gap-1 rounded-full border border-accent bg-card px-1.5 py-1">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    autoFocus
+                    value={bulkPickerValue}
+                    onChange={(e) => setBulkPickerValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") applyBulkPick();
+                      if (e.key === "Escape") {
+                        setBulkPickerOpen(false);
+                        setBulkPickerValue("");
+                      }
+                    }}
+                    placeholder="N"
+                    className="w-12 bg-transparent px-1 text-[12px] font-semibold text-foreground outline-none placeholder:text-tertiary"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyBulkPick}
+                    className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-white"
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setBulkPickerOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-[12px] font-semibold text-secondary transition-colors hover:bg-surface"
+                  title={`Select first # of ${visibleGroups.length} visible units`}
+                >
+                  Select #
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode((s) => {
+                  if (s) {
+                    clearSelection();
+                    setBulkPickerOpen(false);
+                    setBulkPickerValue("");
+                  }
+                  return !s;
+                });
+              }}
+              className={[
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors",
+                selectMode
+                  ? "border-accent bg-accent text-white"
+                  : "border-border bg-card text-secondary hover:bg-surface",
+              ].join(" ")}
+            >
+              {selectMode ? <CheckSquare size={14} weight="fill" /> : <Square size={14} />}
+              {selectMode ? "Done" : "Select"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 relative">
