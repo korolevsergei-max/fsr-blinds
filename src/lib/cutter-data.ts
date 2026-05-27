@@ -85,7 +85,7 @@ export async function loadCutterDataset(): Promise<CutterDataset> {
       .select(
         "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
       )
-      .in("status", ["measured", "bracketed", "measured_and_bracketed"])
+      .in("status", ["measured", "bracketed"])
       .is("production_entered_at", null)
       .order("installation_date", { ascending: true, nullsFirst: false }),
     supabase

@@ -23,6 +23,26 @@ import {
   loadOpenManufacturingEscalationsByWindow,
 } from "@/lib/manufacturing-escalations";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import {
+  buildRoleScheduleOutput,
+  countQueueReadyWindows,
+  getQueueWindowPriority,
+  isReworkPriority,
+  sortQueueWindows,
+} from "@/lib/manufacturing-queue-core";
+import type {
+  ManufacturingDayBucket,
+  ManufacturingRoleSchedule,
+  ManufacturingUnitCard,
+  ManufacturingWindowItem,
+} from "@/lib/manufacturing-queue-core";
+export type {
+  ManufacturingDayBucket,
+  ManufacturingRoleSchedule,
+  ManufacturingUnitCard,
+  ManufacturingWindowItem,
+} from "@/lib/manufacturing-queue-core";
+export { buildRoleScheduleOutput } from "@/lib/manufacturing-queue-core";
 
 type SettingsRow = {
   id: string;
@@ -114,88 +134,6 @@ export type ManufacturingCalendarDay = {
   override: ManufacturingCalendarOverride | null;
 };
 
-export interface ManufacturingWindowItem {
-  windowId: string;
-  unitId: string;
-  buildingId: string;
-  clientId: string;
-  unitNumber: string;
-  buildingName: string;
-  clientName: string;
-  installationDate: string | null;
-  completeByDate: string | null;
-  targetReadyDate: string | null;
-  roomName: string;
-  label: string;
-  blindType: BlindType;
-  width: number | null;
-  height: number | null;
-  depth: number | null;
-  notes: string;
-  productionStatus: ProductionStatus;
-  issueStatus: ManufacturingIssueStatus;
-  issueReason: string;
-  issueNotes: string;
-  escalation: WindowManufacturingEscalation | null;
-  latestEscalation: WindowManufacturingEscalation | null;
-  escalationHistory: WindowManufacturingEscalation[];
-  wasReworkInCycle: boolean;
-  cutAt: string | null;
-  assembledAt: string | null;
-  qcApprovedAt: string | null;
-  manufacturingLabelPrintedAt: string | null;
-  packagingLabelPrintedAt: string | null;
-  cutListPrintedAt: string | null;
-  allMeasuredAt: string | null;
-  productionEnteredAt: string | null;
-  scheduledCutDate: string | null;
-  scheduledAssemblyDate: string | null;
-  scheduledQcDate: string | null;
-  isScheduleLocked: boolean;
-  overCapacityOverride: boolean;
-  windowInstallation: WindowInstallation;
-  wandChain: WandChain | null;
-  fabricAdjustmentSide: FabricAdjustmentSide;
-  fabricAdjustmentInches: number | null;
-  chainSide: ChainSide | null;
-}
-
-export interface ManufacturingUnitCard {
-  unitId: string;
-  unitNumber: string;
-  buildingName: string;
-  clientName: string;
-  installationDate: string | null;
-  completeByDate: string | null;
-  scheduledCount: number;
-  blindTypeGroups: Array<{
-    blindType: BlindType;
-    windows: ManufacturingWindowItem[];
-  }>;
-}
-
-export interface ManufacturingDayBucket {
-  date: string | null;
-  label: string;
-  capacity: number;
-  scheduledCount: number;
-  isOverCapacity: boolean;
-  units: ManufacturingUnitCard[];
-}
-
-export interface ManufacturingRoleSchedule {
-  settings: ManufacturingSettings;
-  currentWorkDate: string;
-  todayCount: number;
-  tomorrowCount: number;
-  upcomingCount: number;
-  issueCount: number;
-  overdueCount: number;
-  unscheduledCount: number;
-  allItems: ManufacturingWindowItem[];
-  buckets: ManufacturingDayBucket[];
-}
-
 export interface ManufacturingCompletedWindowItem extends ManufacturingWindowItem {
   escalationHistory: WindowManufacturingEscalation[];
   roleCompletedAt: string | null;
@@ -204,71 +142,6 @@ export interface ManufacturingCompletedWindowItem extends ManufacturingWindowIte
 export interface ManufacturingCompletedRoleData {
   role: "cutter" | "assembler" | "qc";
   items: ManufacturingCompletedWindowItem[];
-}
-
-function getQueueWindowPriority(
-  role: "cutter" | "assembler" | "qc",
-  item: ManufacturingWindowItem
-) {
-  if (item.issueStatus === "open" && item.escalation?.targetRole === role) return 0;
-  if (item.issueStatus === "open") return 0;
-  if (item.wasReworkInCycle) return 0;
-  if (role === "cutter") {
-    return item.productionStatus === "pending" ? 1 : 2;
-  }
-  if (role === "assembler") {
-    return item.productionStatus === "cut" ? 1 : 2;
-  }
-  if (item.productionStatus === "assembled") return 1;
-  return 3;
-}
-
-function isReturnedToRole(
-  role: "cutter" | "assembler" | "qc",
-  item: ManufacturingWindowItem
-) {
-  return item.issueStatus === "open" && item.escalation?.targetRole === role;
-}
-
-function isReworkPriority(
-  role: "cutter" | "assembler" | "qc",
-  item: ManufacturingWindowItem
-) {
-  return isReturnedToRole(role, item) || item.wasReworkInCycle;
-}
-
-function countQueueReadyWindows(
-  role: "cutter" | "assembler" | "qc",
-  windows: ManufacturingWindowItem[]
-) {
-  return windows.filter((item) => getQueueWindowPriority(role, item) < 3).length;
-}
-
-function sortQueueWindows(
-  role: "cutter" | "assembler" | "qc",
-  windows: ManufacturingWindowItem[]
-) {
-  return [...windows].sort((a, b) => {
-    const priorityDiff = getQueueWindowPriority(role, a) - getQueueWindowPriority(role, b);
-    if (priorityDiff !== 0) return priorityDiff;
-
-    if (isReworkPriority(role, a) || isReworkPriority(role, b)) {
-      const aReturned = isReturnedToRole(role, a) ? 0 : 1;
-      const bReturned = isReturnedToRole(role, b) ? 0 : 1;
-      if (aReturned !== bReturned) return aReturned - bReturned;
-
-      const aOpened = a.latestEscalation?.openedAt ?? "9999-12-31T00:00:00Z";
-      const bOpened = b.latestEscalation?.openedAt ?? "9999-12-31T00:00:00Z";
-      if (aOpened !== bOpened) return aOpened.localeCompare(bOpened);
-    }
-
-    const readyDateA = a.targetReadyDate ?? "9999-12-31";
-    const readyDateB = b.targetReadyDate ?? "9999-12-31";
-    if (readyDateA !== readyDateB) return readyDateA.localeCompare(readyDateB);
-
-    if (a.roomName !== b.roomName) return a.roomName.localeCompare(b.roomName);
-    return a.label.localeCompare(b.label);
-  });
 }
 
 function formatDateKey(date: Date): string {
@@ -381,7 +254,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
   const { data: unitRows } = await supabase
     .from("units")
     .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
-    .in("status", ["measured", "bracketed", "manufactured", "measured_and_bracketed"])
+    .in("status", ["measured", "bracketed", "manufactured"])
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
 
@@ -650,7 +523,7 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
     for (const item of unitCandidates) {
       const existing = item.existing;
       upserts.set(item.window.id, {
-        id: existing?.id ?? `mfg-${crypto.randomUUID().slice(0, 8)}`,
+        id: existing?.id ?? `mfg-${crypto.randomUUID()}`,
         window_id: item.window.id,
         unit_id: item.unit.id,
         target_ready_date: item.targetReadyDate,
@@ -700,24 +573,97 @@ export async function buildManufacturingCalendarMonth(
   }));
 }
 
+/**
+ * Detects units in the manufacturing zone whose windows have no
+ * window_manufacturing_schedule row. Such units are invisible to the
+ * cutter/assembler/QC queues even though their unit.status says they
+ * should be cut. This can happen when status is mutated outside the
+ * Node code path (SQL seeds, backfills, direct DB edits) or when a
+ * window is added to an already-measured unit without a status change.
+ */
+async function hasUnscheduledManufacturingWindows(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<boolean> {
+  const { data: zoneUnits } = await supabase
+    .from("units")
+    .select("id")
+    .in("status", ["measured", "bracketed", "manufactured"])
+    .is("production_entered_at", null);
+  const zoneUnitIds = (zoneUnits ?? []).map((u) => u.id as string);
+  if (zoneUnitIds.length === 0) return false;
+
+  const rooms = await selectInChunks<{ id: string }>(zoneUnitIds, (chunk) =>
+    supabase
+      .from("rooms")
+      .select("id")
+      .in("unit_id", chunk)
+      .then((res) => ({ data: res.data as Array<{ id: string }> | null, error: res.error })),
+  );
+  const roomIds = rooms.map((r) => r.id);
+  if (roomIds.length === 0) return false;
+
+  const [windows, scheduledRows] = await Promise.all([
+    selectInChunks<{ id: string }>(roomIds, (chunk) =>
+      supabase
+        .from("windows")
+        .select("id")
+        .in("room_id", chunk)
+        .then((res) => ({ data: res.data as Array<{ id: string }> | null, error: res.error })),
+    ),
+    selectInChunks<{ window_id: string }>(zoneUnitIds, (chunk) =>
+      supabase
+        .from("window_manufacturing_schedule")
+        .select("window_id")
+        .in("unit_id", chunk)
+        .then((res) => ({
+          data: res.data as Array<{ window_id: string }> | null,
+          error: res.error,
+        })),
+    ),
+  ]);
+
+  const scheduledSet = new Set(scheduledRows.map((s) => s.window_id));
+  return windows.some((w) => !scheduledSet.has(w.id));
+}
+
 export async function loadPersistedRoleSchedule(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
-  const { data: scheduleRows } = await supabase
-    .from("window_manufacturing_schedule")
-    .select("*")
-    .order(
-      role === "cutter"
-        ? "scheduled_cut_date"
-        : role === "assembler"
-          ? "scheduled_assembly_date"
-          : "scheduled_qc_date",
-      { ascending: true, nullsFirst: false }
-    );
 
-  const schedules = (scheduleRows as ScheduleRow[] | null) ?? [];
+  // Self-heal: if any unit in the manufacturing zone has windows without
+  // schedule rows, planning never ran for them and they would be silently
+  // missing from the queue. Reflow synchronously so the read below sees
+  // them. The after()-triggered reflow on the page is then purely a
+  // re-planning optimization, not a correctness requirement.
+  if (await hasUnscheduledManufacturingWindows(supabase)) {
+    await reflowManufacturingSchedules("self_heal_missing_schedule");
+  }
+
+  const dateColumn =
+    role === "cutter"
+      ? "scheduled_cut_date"
+      : role === "assembler"
+        ? "scheduled_assembly_date"
+        : "scheduled_qc_date";
+
+  // Paginate through all schedule rows — the PostgREST default caps at 1000 rows
+  // so we must page until exhausted rather than issuing a single unbounded query.
+  const allScheduleRows: ScheduleRow[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("window_manufacturing_schedule")
+      .select("*")
+      .order(dateColumn, { ascending: true, nullsFirst: false })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    allScheduleRows.push(...(data as ScheduleRow[]));
+    if (data.length < PAGE) break;
+  }
+
+  const schedules = allScheduleRows;
   const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
   const windowIds = [...new Set(schedules.map((row) => row.window_id))];
 
@@ -772,12 +718,6 @@ export async function loadPersistedRoleSchedule(
   );
 
   const items: ManufacturingWindowItem[] = [];
-  const roleDateKey =
-    role === "cutter"
-      ? "scheduledCutDate"
-      : role === "assembler"
-        ? "scheduledAssemblyDate"
-        : "scheduledQcDate";
   const unitsById = new Map(unitData.map((unit) => [unit.id, unit]));
   const windowsById = new Map(windows.map((window) => [window.id, window]));
   const roomsById = new Map(roomData.map((room) => [room.id, room]));
@@ -857,166 +797,7 @@ export async function loadPersistedRoleSchedule(
     items.push(item);
   }
 
-  const today = currentWorkDate;
-  const tomorrow = addWorkingDays(today, 1, settings, overrides);
-  const capacity =
-    role === "cutter"
-      ? settings.cutterDailyCapacity
-      : role === "assembler"
-        ? settings.assemblerDailyCapacity
-        : settings.qcDailyCapacity;
-
-  const byBucket = new Map<string, ManufacturingWindowItem[]>();
-  for (const item of items) {
-    const rawDate = item[roleDateKey];
-    const date = rawDate && rawDate < currentWorkDate ? currentWorkDate : rawDate;
-    if (isReworkPriority(role, item) || item.issueStatus === "open") {
-      const list = byBucket.get("__issues__") ?? [];
-      list.push(item);
-      byBucket.set("__issues__", list);
-      continue;
-    }
-    if (!date) {
-      const list = byBucket.get("__unscheduled__") ?? [];
-      list.push(item);
-      byBucket.set("__unscheduled__", list);
-      continue;
-    }
-    const bucketList = byBucket.get(date) ?? [];
-    bucketList.push(item);
-    byBucket.set(date, bucketList);
-  }
-
-  // Clamp the earliest scheduled date to today so the queue always starts with
-  // a "Today" bucket — cutters/assemblers should work on the next available
-  // items now, not wait until the scheduled date.
-  const dateBucketKeys = [...byBucket.keys()].filter((k) => !k.startsWith("__"));
-  if (dateBucketKeys.length > 0) {
-    const earliestKey = dateBucketKeys.sort()[0];
-    if (earliestKey > currentWorkDate) {
-      const items = byBucket.get(earliestKey)!;
-      byBucket.delete(earliestKey);
-      const existing = byBucket.get(currentWorkDate) ?? [];
-      byBucket.set(currentWorkDate, [...existing, ...items]);
-    }
-  }
-
-  const rankKey = (key: string): number => {
-    if (key === "__issues__") return 0;
-    if (key === "__unscheduled__") return 2;
-    return 1;
-  };
-  const orderedKeys = [...byBucket.keys()].sort((a, b) => {
-    const rankDiff = rankKey(a) - rankKey(b);
-    if (rankDiff !== 0) return rankDiff;
-    return a.localeCompare(b);
-  });
-
-  const buckets: ManufacturingDayBucket[] = orderedKeys.map((key) => {
-    const bucketItems = [...(byBucket.get(key) ?? [])];
-    const unitsMap = new Map<string, ManufacturingUnitCard>();
-    for (const item of bucketItems) {
-      const existing = unitsMap.get(item.unitId);
-      if (!existing) {
-        unitsMap.set(item.unitId, {
-          unitId: item.unitId,
-          unitNumber: item.unitNumber,
-          buildingName: item.buildingName,
-          clientName: item.clientName,
-          installationDate: item.installationDate,
-          completeByDate: unitsById.get(item.unitId)?.complete_by_date ?? null,
-          scheduledCount: 1,
-          blindTypeGroups: [{ blindType: item.blindType, windows: [item] }],
-        });
-        continue;
-      }
-      existing.scheduledCount += 1;
-      const group = existing.blindTypeGroups.find((entry) => entry.blindType === item.blindType);
-      if (group) {
-        group.windows.push(item);
-      } else {
-        existing.blindTypeGroups.push({ blindType: item.blindType, windows: [item] });
-      }
-    }
-
-    const units = [...unitsMap.values()]
-      .map((unit) => ({
-        ...unit,
-        blindTypeGroups: [...unit.blindTypeGroups]
-          .map((group) => ({
-            ...group,
-            windows: sortQueueWindows(role, group.windows),
-          }))
-          .sort((a, b) => {
-            const aReady = countQueueReadyWindows(role, a.windows);
-            const bReady = countQueueReadyWindows(role, b.windows);
-            if (aReady !== bReady) return bReady - aReady;
-
-            const aPriority = Math.min(...a.windows.map((window) => getQueueWindowPriority(role, window)));
-            const bPriority = Math.min(...b.windows.map((window) => getQueueWindowPriority(role, window)));
-            if (aPriority !== bPriority) return aPriority - bPriority;
-
-            return a.blindType.localeCompare(b.blindType);
-          }),
-      }))
-      .sort((a, b) => {
-        const aWindows = a.blindTypeGroups.flatMap((group) => group.windows);
-        const bWindows = b.blindTypeGroups.flatMap((group) => group.windows);
-        const aPriority = Math.min(...aWindows.map((window) => getQueueWindowPriority(role, window)));
-        const bPriority = Math.min(...bWindows.map((window) => getQueueWindowPriority(role, window)));
-        if (aPriority !== bPriority) return aPriority - bPriority;
-
-        const aReady = countQueueReadyWindows(role, aWindows);
-        const bReady = countQueueReadyWindows(role, bWindows);
-        if (aReady !== bReady) return bReady - aReady;
-
-        const aDate = a.installationDate ?? a.completeByDate ?? "9999-12-31";
-        const bDate = b.installationDate ?? b.completeByDate ?? "9999-12-31";
-        if (aDate !== bDate) return aDate.localeCompare(bDate);
-
-        return a.unitNumber.localeCompare(b.unitNumber);
-      });
-
-    return {
-      date: key.startsWith("__") ? null : key,
-      label:
-        key === "__issues__"
-          ? "Rework — priority"
-          : key === "__unscheduled__"
-          ? "Unscheduled"
-          : key === today
-          ? "Today"
-          : key === tomorrow
-          ? "Next Working Day"
-          : key,
-      capacity,
-      scheduledCount: bucketItems.length,
-      isOverCapacity: !key.startsWith("__") && bucketItems.length > capacity,
-      units,
-    };
-  });
-
-  const datedBuckets = buckets.filter((bucket) => bucket.date);
-  const issueCount = byBucket.get("__issues__")?.length ?? 0;
-  const unscheduledCount = byBucket.get("__unscheduled__")?.length ?? 0;
-  const overdueCount = datedBuckets
-    .filter((bucket) => bucket.date !== null && bucket.date < today)
-    .reduce((sum, bucket) => sum + bucket.scheduledCount, 0);
-
-  return {
-    settings,
-    currentWorkDate,
-    todayCount: buckets.find((bucket) => bucket.date === today)?.scheduledCount ?? 0,
-    tomorrowCount: buckets.find((bucket) => bucket.date === tomorrow)?.scheduledCount ?? 0,
-    upcomingCount: datedBuckets
-      .filter((bucket) => bucket.date !== null && bucket.date > tomorrow)
-      .reduce((sum, bucket) => sum + bucket.scheduledCount, 0),
-    issueCount,
-    overdueCount,
-    unscheduledCount,
-    allItems,
-    buckets,
-  };
+  return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
 }
 
 export async function loadManufacturingRoleSchedule(

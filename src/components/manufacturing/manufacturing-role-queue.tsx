@@ -129,7 +129,9 @@ export function ManufacturingRoleQueue({
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [localItems, setLocalItems] = useState<ManufacturingWindowItem[]>(() => schedule.allItems);
+  const [localItems, setLocalItems] = useState<ManufacturingWindowItem[]>(() =>
+    schedule.buckets.flatMap((b) => b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows)))
+  );
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
   const [search, setSearch] = useSessionStorage<string>(`${role}-queue-search`, "");
@@ -143,7 +145,7 @@ export function ManufacturingRoleQueue({
   } | null>(null);
 
   useEffect(() => {
-    setLocalItems(schedule.allItems);
+    setLocalItems(schedule.buckets.flatMap((b) => b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))));
   }, [schedule]);
 
   const isFirstFilterRun = useRef(true);

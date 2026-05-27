@@ -329,7 +329,7 @@ export async function computeAndUpdateManufacturingRisk(): Promise<void> {
     const { data: units } = await supabase
       .from("units")
       .select("id, installation_date, window_count, client_name, building_name, unit_number")
-      .in("status", ["measured", "bracketed", "manufactured", "measured_and_bracketed"])
+      .in("status", ["measured", "bracketed", "manufactured"])
       .not("installation_date", "is", null);
 
     if (!units || units.length === 0) return;

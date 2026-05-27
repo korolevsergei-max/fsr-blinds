@@ -8,6 +8,7 @@ import {
   FunnelSimple,
   MagnifyingGlass,
   Scissors,
+  SortAscending,
   Square,
   X,
   ArrowUUpLeft,
@@ -31,6 +32,23 @@ import {
   type CutterUnitGroup,
 } from "@/components/manufacturing/cutter-unit-card";
 import { CutterBulkActionBar } from "@/components/manufacturing/cutter-bulk-action-bar";
+import { CutterUnitSortModal } from "@/components/manufacturing/cutter-unit-sort-modal";
+import {
+  sortCutterUnitGroups,
+  type CutterUnitSortField,
+  type CutterUnitSortLevel,
+} from "@/lib/cutter-unit-sort";
+
+const PRODUCTION_SORT_FIELDS: CutterUnitSortField[] = [
+  "clientName",
+  "buildingName",
+  "unitNumber",
+  "floor",
+  "productionEnteredAt",
+  "measurementDate",
+  "installationDate",
+  "completeByDate",
+];
 
 type ComponentFilter = "all" | ManufacturingHighlightSection;
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
@@ -151,6 +169,11 @@ export function CutterProduction({
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedUnitIds, setSelectedUnitIds] = useState<Set<string>>(new Set());
+
+  // Custom sort state (empty levels = default FIFO sort)
+  const [sortLevels, setSortLevels] = useState<CutterUnitSortLevel[]>([]);
+  const [draftSortLevels, setDraftSortLevels] = useState<CutterUnitSortLevel[]>([]);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
 
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
@@ -308,17 +331,26 @@ export function CutterProduction({
       }
     }
 
-    const sortedGroups = [...groups.values()];
-    sortedGroups.sort((a, b) => {
-      // Issues first (mirrors queue), then production_entered_at ASC (oldest first → cut first).
-      if (a.hasIssue !== b.hasIssue) return a.hasIssue ? -1 : 1;
-      const aEntered = a.productionEnteredAt ?? "";
-      const bEntered = b.productionEnteredAt ?? "";
-      if (aEntered === bEntered) {
-        return a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
-      }
-      return aEntered.localeCompare(bEntered);
-    });
+    let sortedGroups = [...groups.values()];
+    if (sortLevels.length > 0) {
+      // Custom sort overrides FIFO, but keep open issues pinned to the top.
+      const customSorted = sortCutterUnitGroups(sortedGroups, sortLevels);
+      sortedGroups = customSorted.sort((a, b) => {
+        if (a.hasIssue !== b.hasIssue) return a.hasIssue ? -1 : 1;
+        return 0;
+      });
+    } else {
+      sortedGroups.sort((a, b) => {
+        // Issues first (mirrors queue), then production_entered_at ASC (oldest first → cut first).
+        if (a.hasIssue !== b.hasIssue) return a.hasIssue ? -1 : 1;
+        const aEntered = a.productionEnteredAt ?? "";
+        const bEntered = b.productionEnteredAt ?? "";
+        if (aEntered === bEntered) {
+          return a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true });
+        }
+        return aEntered.localeCompare(bEntered);
+      });
+    }
 
     // Sort windows within each unit: pending first, then by label.
     for (const group of sortedGroups) {
@@ -333,7 +365,7 @@ export function CutterProduction({
     }
 
     return sortedGroups;
-  }, [productionItems, buildingFilter, floorFilter, fabricTypeFilter, search]);
+  }, [productionItems, buildingFilter, floorFilter, fabricTypeFilter, search, sortLevels]);
 
   const maxVisibleUnits = displayLimit === "all" ? Infinity : Number(displayLimit);
   const visibleGroups = unitGroups.slice(0, maxVisibleUnits);
@@ -522,6 +554,22 @@ export function CutterProduction({
               </span>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDraftSortLevels(sortLevels);
+              setSortModalOpen(true);
+            }}
+            className={[
+              "flex h-8 flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-all",
+              sortLevels.length > 0
+                ? "border-accent bg-accent text-white"
+                : "border-border bg-card text-secondary hover:border-zinc-300",
+            ].join(" ")}
+          >
+            <SortAscending size={12} weight="bold" />
+            {sortLevels.length > 0 ? `Sort (${sortLevels.length})` : "Sort"}
+          </button>
           <FilterDropdown
             label="Component"
             value={componentFilter}
@@ -629,6 +677,19 @@ export function CutterProduction({
         windowIds={selectedWindowIds}
         onClear={clearSelection}
       />
+
+      {sortModalOpen && (
+        <CutterUnitSortModal
+          draftLevels={draftSortLevels}
+          availableFields={PRODUCTION_SORT_FIELDS}
+          onClose={() => setSortModalOpen(false)}
+          onChange={setDraftSortLevels}
+          onApply={(levels) => {
+            setSortLevels(levels);
+            setSortModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUnitMilestoneCoverageWithClient } from "@/lib/unit-milestones";
 import type { UnitStatus } from "@/lib/types";
 import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
+import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -32,6 +33,9 @@ export async function recomputeUnitStatus(
       (current?.status as string) ?? "not_started",
       newStatus
     );
+    if ((["measured", "bracketed", "manufactured"] as UnitStatus[]).includes(newStatus)) {
+      await reflowManufacturingSchedules("status_changed");
+    }
   }
 
   await supabase.from("schedule_entries").update({ status: newStatus }).eq("unit_id", unitId);

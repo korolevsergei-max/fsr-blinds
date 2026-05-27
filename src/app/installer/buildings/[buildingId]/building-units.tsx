@@ -145,11 +145,7 @@ export function BuildingUnits({
               key={unit.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: i * 0.055,
-                duration: 0.32,
-                ease: [0.16, 1, 0.3, 1],
-              }}
+              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
             >
               <Link href={`/installer/units/${unit.id}`}>
                 <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">

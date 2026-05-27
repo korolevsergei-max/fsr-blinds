@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -41,6 +41,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const today = new Date().toISOString().split("T")[0];
 
   const [search, setSearch] = useSessionStorage("scheduler-search", "");
+  const deferredSearch = useDeferredValue(search);
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-buildingFilter", []);
   const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("scheduler-floorFilter", []);
   const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("scheduler-statusFilter", []);
@@ -118,14 +119,14 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   const filteredUnits = useMemo(() => {
     return units
       .filter((u) => {
-        if (search) {
-          if (search.includes(", ")) {
-            const tokens = search.split(", ").map((t) => t.trim().toLowerCase()).filter(Boolean);
+        if (deferredSearch) {
+          if (deferredSearch.includes(", ")) {
+            const tokens = deferredSearch.split(", ").map((t) => t.trim().toLowerCase()).filter(Boolean);
             if (tokens.length > 0) {
               if (!tokens.includes(u.unitNumber.trim().toLowerCase())) return false;
             }
           } else {
-            const q = search.toLowerCase();
+            const q = deferredSearch.toLowerCase();
             if (
               !u.unitNumber.toLowerCase().includes(q) &&
               !u.buildingName.toLowerCase().includes(q)
@@ -164,7 +165,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
   }, [
     units,
     today,
-    search,
+    deferredSearch,
     buildingFilter,
     floorFilter,
     statusFilter,
@@ -465,7 +466,7 @@ export function SchedulerUnitsList({ data }: { data: AppDataset }) {
               key={unit.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.03, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             >
               {selectMode ? (
                 <button

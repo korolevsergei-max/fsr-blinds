@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -51,6 +51,7 @@ export function UnitsList({
   const { units, clients, buildings, installers } = data;
 
   const [search, setSearch] = useSessionStorage("management-search", "");
+  const deferredSearch = useDeferredValue(search);
   const [clientFilter, setClientFilter] = useSessionStorage<string[]>("management-clientFilter", []);
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("management-buildingFilter", []);
   const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("management-statusFilter", []);
@@ -213,14 +214,14 @@ export function UnitsList({
 
   const filtered = useMemo(() => {
     return units.filter((u) => {
-      if (search) {
-        if (search.includes(", ")) {
-          const tokens = search.split(", ").map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (deferredSearch) {
+        if (deferredSearch.includes(", ")) {
+          const tokens = deferredSearch.split(", ").map((t) => t.trim().toLowerCase()).filter(Boolean);
           if (tokens.length > 0) {
             if (!tokens.includes(u.unitNumber.trim().toLowerCase())) return false;
           }
         } else {
-          const q = search.toLowerCase();
+          const q = deferredSearch.toLowerCase();
           if (
             !u.unitNumber.toLowerCase().includes(q) &&
             !u.buildingName.toLowerCase().includes(q) &&
@@ -263,7 +264,7 @@ export function UnitsList({
     });
   }, [
     units,
-    search,
+    deferredSearch,
     clientFilter,
     buildingFilter,
     statusFilter,
@@ -572,7 +573,7 @@ export function UnitsList({
               key={unit.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             >
               {selectMode ? (
                 <button
