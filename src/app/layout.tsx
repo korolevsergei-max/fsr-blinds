@@ -5,6 +5,7 @@ import { SupabaseCookiePurgeScript } from "@/components/supabase/supabase-cookie
 import { SupabaseAuthRecovery } from "@/components/supabase/supabase-auth-recovery";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { ServiceWorkerRegistrar } from "@/components/service-worker-registrar";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -49,6 +50,7 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
