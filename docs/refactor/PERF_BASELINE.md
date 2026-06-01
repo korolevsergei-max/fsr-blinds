@@ -51,3 +51,21 @@ All main routes (`/login`, `/management`, `/cutter`, `/installer`, `/assembler`,
 Run `npm run build` and compare the shared bundle total and overall chunk sizes. For a proper per-route diff, run `npm run analyze` (requires `ANALYZE=true next build`) and compare the Webpack bundle treemap.
 
 When Turbopack adds bundle size reporting, update this methodology.
+
+---
+
+## React Compiler enablement (PR: `perf/react-compiler`)
+
+Enabled the React Compiler (`reactCompiler: true` in `next.config.ts`, `babel-plugin-react-compiler@1.0.0` devDep). The compiler auto-memoizes components/hooks at build time to cut runtime re-renders — it does **not** shrink the bundle; it adds a small memoization-cache layer per component, so JS size grows slightly. The win is fewer re-renders when the shared dataset store is patched by Supabase Realtime, not a smaller download.
+
+Apples-to-apples, **same commit**, `.next/static/chunks` (raw / gzip level 6):
+
+| Build | Chunks | Raw | Gzip |
+|---|---|---|---|
+| Compiler **off** | 108 | 5,287.4 kB | 1,533.7 kB |
+| Compiler **on** | 110 | 5,598.0 kB | 1,684.2 kB |
+| **Delta** | +2 | **+310.6 kB (+5.9%)** | **+150.5 kB (+9.8%)** |
+
+(Note: the original baseline table above, 1,498 kB gzip, predates several feature commits, so the compiler-off number here is the correct reference point for this delta.)
+
+Verification at enablement: `npm run build` ✓, `npm run typecheck` ✓, `npm run test` ✓ (79/79). `npm run lint` has one **pre-existing** error (`react-hooks/set-state-in-effect` in `manufacturing-role-queue.tsx:148`) and pre-existing unused-var warnings — present on `main`, not introduced by the compiler. Compiler transform confirmed on real components (e.g. `accounts-manager.tsx` → 7 memo caches, `button.tsx`/`cutter-queue.tsx` → 1 each, all importing `react/compiler-runtime`). `/management` and `/cutter` smoke-tested via dev server: normal 307→`/login` auth redirects, no runtime errors.
