@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 import { removeUnitStageMediaItem } from "@/lib/use-unit-supplemental";
@@ -120,7 +120,7 @@ export function WindowForm({
   milestones,
   routeBasePath = "/installer/units",
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "rooms" | "units" | "windows">;
   activityLog: UnitActivityLog[];
   mediaItems?: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
@@ -129,8 +129,9 @@ export function WindowForm({
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["rooms", "units", "windows"]);
+  const datasetActions = useDatasetActionsMaybe();
+  const datasetData = data ?? contextData ?? undefined;
   const editId = searchParams.get("edit");
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
 
@@ -304,7 +305,7 @@ export function WindowForm({
       if (result.ok) {
         setPhotoPreview(null);
         setPhotoFile(null);
-        datasetCtx?.patchData((prev) =>
+        datasetActions?.patchData((prev) =>
           reconcileUnitDerivedState(
             {
               ...prev,
@@ -380,7 +381,7 @@ export function WindowForm({
 
       // Optimistically update in-memory dataset so the room page shows the
       // change immediately without waiting for a server re-render.
-      if (datasetCtx && result.windowId) {
+      if (datasetActions && result.windowId) {
         const wId = result.windowId;
         const wRoomId = result.roomId ?? roomId;
         const newPhotoUrl = result.photoUrl ?? null;
@@ -391,7 +392,7 @@ export function WindowForm({
           ? parseFloat(fabricAdjustmentInches) || null
           : null;
 
-        datasetCtx.patchData((prev) => {
+        datasetActions.patchData((prev) => {
           const windowData = {
             id: wId,
             roomId: wRoomId,
@@ -834,7 +835,7 @@ export function WindowForm({
                           const result = await deleteWindowStagePhoto(photo.id, unit.id);
                           if (result.ok) {
                             removeUnitStageMediaItem(unit.id, photo.id);
-                            datasetCtx?.patchData((prev) =>
+                            datasetActions?.patchData((prev) =>
                               reconcileUnitDerivedState(prev, unit.id, { photoDelta: -1 })
                             );
                           }
@@ -926,7 +927,7 @@ export function WindowForm({
                   try {
                     const result = await undoWindowStage(existingWindow.id, "measured");
                     if (result.ok) {
-                      datasetCtx?.patchData((prev) =>
+                      datasetActions?.patchData((prev) =>
                         reconcileUnitDerivedState(
                           {
                             ...prev,
@@ -967,7 +968,7 @@ export function WindowForm({
                 if (!confirmed) return;
                 const result = await deleteWindow(existingWindow.id, id);
                 if (result.ok) {
-                  datasetCtx?.patchData((prev) =>
+                  datasetActions?.patchData((prev) =>
                     reconcileUnitDerivedState(
                       {
                         ...prev,

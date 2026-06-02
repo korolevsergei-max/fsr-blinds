@@ -1,100 +1,21 @@
 "use client";
 
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSyncExternalStoreWithSelector } from "use-sync-external-store/shim/with-selector";
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+  createDatasetStore,
+  type DatasetActions,
+  type DatasetContextValue,
+  type DatasetSnapshot,
+  type DatasetStore,
+} from "./dataset-store";
 import type { AppDataset } from "./app-dataset";
 import type { AppUser } from "./auth";
 
-type DatasetContextValue = {
-  data: AppDataset;
-  user: AppUser;
-  /** Linked entity ID for the current portal (e.g. installerId, schedulerId). */
-  linkedEntityId: string | null;
-  /** True while a deferred portal is still waiting on its first non-empty dataset refresh. */
-  isHydratingInitialData: boolean;
-  /** Optimistically patch the in-memory dataset. */
-  patchData: (updater: (prev: AppDataset) => AppDataset) => void;
-  /** Replace the entire dataset (used after full refetch). */
-  setData: (next: AppDataset) => void;
-  /** Timestamp of last data update (ms). */
-  lastUpdated: number;
-};
-
-type DatasetSnapshot = Omit<DatasetContextValue, "patchData" | "setData">;
-
-type DatasetStore = {
-  getSnapshot: () => DatasetSnapshot;
-  subscribe: (listener: () => void) => () => void;
-  patchData: (updater: (prev: AppDataset) => AppDataset) => void;
-  setData: (next: AppDataset) => void;
-  syncMeta: (user: AppUser, linkedEntityId: string | null) => void;
-};
+export type { DatasetContextValue, DatasetActions, DatasetSnapshot } from "./dataset-store";
 
 const DatasetContext = createContext<DatasetStore | null>(null);
 const EMPTY_SUBSCRIBE = () => () => {};
-
-function createDatasetStore(initialSnapshot: DatasetSnapshot): DatasetStore {
-  let snapshot = initialSnapshot;
-  const listeners = new Set<() => void>();
-
-  const emit = () => {
-    listeners.forEach((listener) => listener());
-  };
-
-  return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    patchData: (updater) => {
-      const nextData = updater(snapshot.data);
-      if (Object.is(nextData, snapshot.data)) return;
-      snapshot = {
-        ...snapshot,
-        data: nextData,
-        isHydratingInitialData: false,
-        lastUpdated: Date.now(),
-      };
-      emit();
-    },
-    setData: (nextData) => {
-      if (Object.is(nextData, snapshot.data)) return;
-      snapshot = {
-        ...snapshot,
-        data: nextData,
-        isHydratingInitialData: false,
-        lastUpdated: Date.now(),
-      };
-      emit();
-    },
-    syncMeta: (nextUser, nextLinkedEntityId) => {
-      if (
-        snapshot.user.id === nextUser.id &&
-        snapshot.user.email === nextUser.email &&
-        snapshot.user.role === nextUser.role &&
-        snapshot.user.displayName === nextUser.displayName &&
-        snapshot.linkedEntityId === nextLinkedEntityId
-      ) {
-        return;
-      }
-
-      snapshot = {
-        ...snapshot,
-        user: nextUser,
-        linkedEntityId: nextLinkedEntityId,
-      };
-      emit();
-    },
-  };
-}
 
 export function AppDatasetProvider({
   initialData,
@@ -136,69 +57,140 @@ export function AppDatasetProvider({
   );
 }
 
-function useDatasetStoreValue<T>(
-  store: DatasetStore,
-  selector: (value: DatasetContextValue) => T
-): T {
-  const snapshot = useSyncExternalStore(
-    store.subscribe,
-    store.getSnapshot,
-    store.getSnapshot
-  );
-
-  const value = useMemo<DatasetContextValue>(
-    () => ({
-      ...snapshot,
-      patchData: store.patchData,
-      setData: store.setData,
-    }),
-    [snapshot, store]
-  );
-
-  return useMemo(() => selector(value), [selector, value]);
+/** Builds the value passed to selectors: the data-only snapshot plus the store's stable actions. */
+function toContextValue(snapshot: DatasetSnapshot, store: DatasetStore): DatasetContextValue {
+  return { ...snapshot, patchData: store.patchData, setData: store.setData };
 }
 
-function useOptionalDatasetStoreValue<T>(
-  store: DatasetStore | null,
-  selector: (value: DatasetContextValue) => T
-): T | null {
-  const snapshot = useSyncExternalStore(
-    store?.subscribe ?? EMPTY_SUBSCRIBE,
-    () => (store ? store.getSnapshot() : null),
-    () => (store ? store.getSnapshot() : null)
-  );
-
-  const value = useMemo<DatasetContextValue | null>(
-    () =>
-      store && snapshot
-        ? {
-            ...snapshot,
-            patchData: store.patchData,
-            setData: store.setData,
-          }
-        : null,
-    [snapshot, store]
-  );
-
-  return useMemo(() => (value ? selector(value) : null), [selector, value]);
-}
-
+/**
+ * Subscribe to a slice of the dataset with a TRUE per-slice bailout: the component re-renders
+ * only when `equalityFn` reports the selected value changed. `useSyncExternalStoreWithSelector`
+ * first compares the raw snapshot by reference (skipping the selector on unrelated renders), then
+ * compares the selected value against the last committed value. Unchanged slices keep their
+ * reference across patches, so e.g. a `windows`-only patch won't re-render a `clients` selector.
+ */
 export function useDatasetSelector<T>(
-  selector: (value: DatasetContextValue) => T
+  selector: (value: DatasetContextValue) => T,
+  equalityFn: (a: T, b: T) => boolean = Object.is
 ): T {
   const store = useContext(DatasetContext);
   if (!store) {
     throw new Error("useDatasetSelector must be used within an AppDatasetProvider");
   }
-  return useDatasetStoreValue(store, selector);
+  return useSyncExternalStoreWithSelector(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot,
+    (snapshot) => selector(toContextValue(snapshot, store)),
+    equalityFn
+  );
 }
 
+/** Optional — selects `null` instead of throwing when used outside the provider. */
+export function useDatasetSelectorMaybe<T>(
+  selector: (value: DatasetContextValue) => T,
+  equalityFn: (a: T | null, b: T | null) => boolean = Object.is
+): T | null {
+  const store = useContext(DatasetContext);
+  const getSnapshot = useMemo(
+    () => () => (store ? store.getSnapshot() : null),
+    [store]
+  );
+  return useSyncExternalStoreWithSelector<DatasetSnapshot | null, T | null>(
+    store?.subscribe ?? EMPTY_SUBSCRIBE,
+    getSnapshot,
+    getSnapshot,
+    (snapshot) =>
+      store && snapshot ? selector(toContextValue(snapshot, store)) : null,
+    equalityFn
+  );
+}
+
+/**
+ * Returns the store's stable action handlers WITHOUT subscribing to data changes — mutation-only
+ * consumers never re-render on patches. Throws outside the provider.
+ */
+export function useDatasetActions(): DatasetActions {
+  const store = useContext(DatasetContext);
+  if (!store) {
+    throw new Error("useDatasetActions must be used within an AppDatasetProvider");
+  }
+  return useMemo(
+    () => ({ patchData: store.patchData, setData: store.setData }),
+    [store]
+  );
+}
+
+/** Optional — returns `null` instead of throwing when used outside the provider. */
+export function useDatasetActionsMaybe(): DatasetActions | null {
+  const store = useContext(DatasetContext);
+  return useMemo(
+    () => (store ? { patchData: store.patchData, setData: store.setData } : null),
+    [store]
+  );
+}
+
+/** One-level shallow equality for selectors that return a composed object/array of slices. */
+export function shallowEqual<T>(a: T, b: T): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) {
+    return false;
+  }
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (
+      !Object.prototype.hasOwnProperty.call(bRecord, key) ||
+      !Object.is(aRecord[key], bRecord[key])
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Selects a `Pick` of the named dataset slices with a shallow-equality bailout: the component
+ * re-renders only when one of the selected slice references changes. Ergonomic wrapper for the
+ * common "forward a narrowed `data` object to a child" pattern.
+ */
+export function useDatasetSlices<K extends keyof AppDataset>(
+  keys: readonly K[]
+): Pick<AppDataset, K> {
+  return useDatasetSelector((value) => {
+    const out = {} as Pick<AppDataset, K>;
+    for (const key of keys) {
+      out[key] = value.data[key];
+    }
+    return out;
+  }, shallowEqual);
+}
+
+/** Optional variant of {@link useDatasetSlices} — returns `null` when outside the provider. */
+export function useDatasetSlicesMaybe<K extends keyof AppDataset>(
+  keys: readonly K[]
+): Pick<AppDataset, K> | null {
+  return useDatasetSelectorMaybe((value) => {
+    const out = {} as Pick<AppDataset, K>;
+    for (const key of keys) {
+      out[key] = value.data[key];
+    }
+    return out;
+  }, shallowEqual);
+}
+
+/**
+ * Back-compat: returns the whole dataset value. Re-renders on every patch (same as before the
+ * selector migration). Prefer `useDatasetSelector` / `useDatasetActions` for new code.
+ */
 export function useAppDataset(): DatasetContextValue {
   return useDatasetSelector((value) => value);
 }
 
 /** Optional — returns null instead of throwing when outside the provider. */
 export function useAppDatasetMaybe(): DatasetContextValue | null {
-  const store = useContext(DatasetContext);
-  return useOptionalDatasetStoreValue(store, (value) => value);
+  return useDatasetSelectorMaybe((value) => value);
 }

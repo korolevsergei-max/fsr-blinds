@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CalendarBlank, Factory } from "@phosphor-icons/react";
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSelector, shallowEqual } from "@/lib/dataset-context";
+import type { ScheduleViewData } from "@/components/schedule/installation-schedule-view";
 import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { SCHEDULE_SCOPE_LABELS, type ScheduleScope } from "@/lib/schedule-ui";
 import { OwnerSchedule } from "./owner-schedule";
@@ -17,7 +18,17 @@ export function ScheduleScreen({
   assemblerSchedule: ManufacturingRoleSchedule;
   qcSchedule: ManufacturingRoleSchedule;
 }) {
-  const { data } = useAppDataset();
+  const data = useDatasetSelector<ScheduleViewData>(
+    (value) => ({
+      units: value.data.units,
+      installers: value.data.installers,
+      schedule: value.data.schedule,
+      clients: value.data.clients,
+      buildings: value.data.buildings,
+      manufacturingEscalations: value.data.manufacturingEscalations,
+    }),
+    shallowEqual
+  );
   const [tab, setTab] = useState<"installer" | "manufacturing">("installer");
   const [scope, setScope] = useState<ScheduleScope>("week");
   const headerRef = useRef<HTMLDivElement | null>(null);

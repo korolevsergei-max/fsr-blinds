@@ -27,22 +27,22 @@ export type AppDataset = {
 };
 
 export function getUnitsByInstaller(
-  data: AppDataset,
+  data: Pick<AppDataset, "units">,
   installerId: string
 ): Unit[] {
   return data.units.filter((u) => u.assignedInstallerId === installerId);
 }
 
-export function getRoomsByUnit(data: AppDataset, unitId: string): Room[] {
+export function getRoomsByUnit(data: Pick<AppDataset, "rooms">, unitId: string): Room[] {
   return data.rooms.filter((r) => r.unitId === unitId);
 }
 
-export function getWindowsByRoom(data: AppDataset, roomId: string): Window[] {
+export function getWindowsByRoom(data: Pick<AppDataset, "windows">, roomId: string): Window[] {
   return data.windows.filter((w) => w.roomId === roomId);
 }
 
 export function getScheduleByInstaller(
-  data: AppDataset,
+  data: Pick<AppDataset, "units" | "schedule">,
   installerId: string
 ): ScheduleEntry[] {
   const installerUnits = new Set(
@@ -54,21 +54,21 @@ export function getScheduleByInstaller(
 }
 
 export function getBuildingsByClient(
-  data: AppDataset,
+  data: Pick<AppDataset, "buildings">,
   clientId: string
 ): Building[] {
   return data.buildings.filter((b) => b.clientId === clientId);
 }
 
 export function getUnitsByBuilding(
-  data: AppDataset,
+  data: Pick<AppDataset, "units">,
   buildingId: string
 ): Unit[] {
   return data.units.filter((u) => u.buildingId === buildingId);
 }
 
 export function getScheduleByBuilding(
-  data: AppDataset,
+  data: Pick<AppDataset, "units" | "schedule">,
   buildingId: string
 ): ScheduleEntry[] {
   const buildingUnits = new Set(
@@ -77,7 +77,9 @@ export function getScheduleByBuilding(
   return data.schedule.filter((s) => buildingUnits.has(s.unitId));
 }
 
-export function getUnitIdsWithWindowEscalations(data: AppDataset): Set<string> {
+export function getUnitIdsWithWindowEscalations(
+  data: Pick<AppDataset, "rooms" | "windows" | "manufacturingEscalations">
+): Set<string> {
   const roomToUnit = new Map<string, string>();
   for (const room of data.rooms) {
     roomToUnit.set(room.id, room.unitId);

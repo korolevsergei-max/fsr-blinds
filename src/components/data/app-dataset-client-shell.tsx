@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { AppDatasetProvider, useAppDataset } from "@/lib/dataset-context";
+import { AppDatasetProvider, useDatasetSelector, useDatasetActions } from "@/lib/dataset-context";
 import { useRealtimeSync } from "@/lib/use-realtime-sync";
 import { getCachedData, setCachedData } from "@/lib/offline-cache";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -58,7 +58,10 @@ function RealtimeBridge({
   cacheKey: string;
   eagerRefreshOnMount: boolean;
 }) {
-  const { data, patchData, setData } = useAppDataset();
+  // RealtimeBridge must react to every data change (it persists the full dataset to IDB),
+  // so it subscribes to the whole `data` slice intentionally.
+  const data = useDatasetSelector((value) => value.data);
+  const { patchData, setData } = useDatasetActions();
   const cacheWriteTimerRef = useRef<number | null>(null);
   const eagerRefreshStartedRef = useRef(false);
   const canUseOfflineCache = loaderKind !== "full";

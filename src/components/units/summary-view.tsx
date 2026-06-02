@@ -20,7 +20,7 @@ export function SummaryView({
   data,
   routeBasePath,
 }: {
-  data: AppDataset;
+  data: Pick<AppDataset, "units" | "rooms" | "windows">;
   routeBasePath: "/installer/units" | "/scheduler/units" | "/management/units";
 }) {
   const { id } = useParams<{ id: string }>();

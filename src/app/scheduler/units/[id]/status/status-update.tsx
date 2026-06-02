@@ -12,19 +12,19 @@ import { PageHeader } from "@/components/ui/page-header";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { MetricTile } from "@/components/ui/metric-tile";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import { getOpenPostInstallIssueTargets } from "@/lib/window-issues";
 
 export function StatusUpdate({
   data,
   milestones,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "units" | "rooms" | "windows" | "postInstallIssues">;
   milestones: UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["units", "rooms", "windows", "postInstallIssues"]);
+  const datasetData = data ?? contextData ?? undefined;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices } from "@/lib/dataset-context";
 import { AssignUnit } from "./assign-unit";
 
 export default function AssignPage() {
-  const { data } = useAppDataset();
+  const data = useDatasetSlices(["units", "installers"]);
   return <AssignUnit data={data} />;
 }

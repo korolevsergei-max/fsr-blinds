@@ -53,7 +53,7 @@ export function BuildingUnits({
   data,
   installerId = "inst-1",
 }: {
-  data: AppDataset;
+  data: Pick<AppDataset, "buildings" | "units">;
   installerId?: string;
 }) {
   const { buildingId } = useParams<{ buildingId: string }>();

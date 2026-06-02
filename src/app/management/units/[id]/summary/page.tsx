@@ -1,9 +1,9 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices } from "@/lib/dataset-context";
 import { SummaryView } from "@/components/units/summary-view";
 
 export default function ManagementSummaryPage() {
-  const { data } = useAppDataset();
+  const data = useDatasetSlices(["units", "rooms", "windows"]);
   return <SummaryView data={data} routeBasePath="/management/units" />;
 }

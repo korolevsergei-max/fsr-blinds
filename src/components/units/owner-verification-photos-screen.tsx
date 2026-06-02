@@ -8,7 +8,7 @@ import {
   saveOwnerVerificationPhotoNotes,
   uploadOwnerVerificationPhotos,
 } from "@/app/actions/owner-verification-actions";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import {
   MAX_OWNER_VERIFICATION_NOTE_LENGTH,
   MAX_OWNER_VERIFICATION_PHOTOS,
@@ -71,8 +71,8 @@ export function OwnerVerificationPhotosScreen({
   unitId,
   initialPhotos,
 }: OwnerVerificationPhotosScreenProps) {
-  const datasetCtx = useAppDatasetMaybe();
-  const unit = datasetCtx?.data.units.find((item) => item.id === unitId);
+  const units = useDatasetSelectorMaybe((value) => value.data.units);
+  const unit = units?.find((item) => item.id === unitId);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [photos, setPhotos] = useState(() => sortNewestFirst(initialPhotos));
   const [notesById, setNotesById] = useState<Record<string, string>>(() =>

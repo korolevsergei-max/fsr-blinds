@@ -5,7 +5,7 @@ import { CheckCircle } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { bulkMarkUnitWindowsInstalled } from "@/app/actions/fsr-data";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetActionsMaybe } from "@/lib/dataset-context";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 
 type RoomSummary = {
@@ -27,7 +27,7 @@ export function BulkInstallButton({
   allGreenRiskFlags: boolean;
   milestones: UnitMilestoneCoverage;
 }) {
-  const datasetCtx = useAppDatasetMaybe();
+  const datasetActions = useDatasetActionsMaybe();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
@@ -51,7 +51,7 @@ export function BulkInstallButton({
       }
       setConfirmOpen(false);
       const windowIdSet = new Set(windowIds);
-      datasetCtx?.patchData((prev) => {
+      datasetActions?.patchData((prev) => {
         const updated = {
           ...prev,
           windows: prev.windows.map((w) =>

@@ -1,9 +1,8 @@
 "use client";
 
-import type { AppDataset } from "@/lib/app-dataset";
-import { InstallationScheduleView } from "@/components/schedule/installation-schedule-view";
+import { InstallationScheduleView, type ScheduleViewData } from "@/components/schedule/installation-schedule-view";
 
-export function SchedulerScheduleView({ data }: { data: AppDataset }) {
+export function SchedulerScheduleView({ data }: { data: ScheduleViewData }) {
   return (
     <InstallationScheduleView
       data={data}

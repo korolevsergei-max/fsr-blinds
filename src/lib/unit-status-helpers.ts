@@ -32,7 +32,7 @@ export function deriveUnitStatusFromCounts({
 }
 
 export function getUnitCoverageFromDataset(
-  data: AppDataset,
+  data: Pick<AppDataset, "rooms" | "windows">,
   unitId: string
 ): UnitCoverageCounts {
   const roomIds = new Set(

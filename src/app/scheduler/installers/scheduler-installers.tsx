@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { RefreshButton } from "@/components/ui/refresh-button";
 
-export function SchedulerInstallers({ data }: { data: AppDataset }) {
+export function SchedulerInstallers({ data }: { data: Pick<AppDataset, "installers" | "units"> }) {
   const [showForm, setShowForm] = useState(false);
 
   return (

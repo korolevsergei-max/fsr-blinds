@@ -113,7 +113,7 @@ function parseCSV(text: string): ParsedRow[] {
   });
 }
 
-export function ImportUnits({ data }: { data: AppDataset }) {
+export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "clients" | "installers" | "schedulers"> }) {
   const { id: buildingId } = useParams<{ id: string }>();
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);

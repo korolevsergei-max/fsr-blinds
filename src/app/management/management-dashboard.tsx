@@ -43,7 +43,17 @@ export function ManagementDashboard({
   data,
   userName,
 }: {
-  data: AppDataset;
+  data: Pick<
+    AppDataset,
+    | "units"
+    | "clients"
+    | "buildings"
+    | "installers"
+    | "schedulers"
+    | "rooms"
+    | "windows"
+    | "manufacturingEscalations"
+  >;
   userName?: string;
 }) {
   const router = useRouter();

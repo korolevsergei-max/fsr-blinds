@@ -1,9 +1,10 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices, useDatasetSelector } from "@/lib/dataset-context";
 import { BuildingUnits } from "./building-units";
 
 export default function BuildingUnitsPage() {
-  const { data, linkedEntityId } = useAppDataset();
-  return <BuildingUnits data={data} installerId={linkedEntityId ?? "inst-1"} />;
+  const data = useDatasetSlices(["buildings", "units"]);
+  const installerId = useDatasetSelector((value) => value.linkedEntityId);
+  return <BuildingUnits data={data} installerId={installerId ?? "inst-1"} />;
 }

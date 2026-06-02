@@ -36,7 +36,13 @@ function FlagBadge({ flag }: { flag: UnitFlag }) {
   );
 }
 
-export function SchedulerUnitsList({ data }: { data: AppDataset }) {
+/** Dataset slices the scheduler units list reads. */
+export type SchedulerUnitsListData = Pick<
+  AppDataset,
+  "units" | "buildings" | "installers" | "rooms" | "windows" | "manufacturingEscalations"
+>;
+
+export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
   const { units, buildings, installers } = data;
   const today = new Date().toISOString().split("T")[0];
 

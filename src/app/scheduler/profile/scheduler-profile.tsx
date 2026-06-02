@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth-actions";
 
 type SchedulerProfileProps = {
-  data: AppDataset;
+  data: Pick<AppDataset, "installers" | "schedule" | "units">;
   schedulerId: string | null;
   userName: string;
   userEmail: string;

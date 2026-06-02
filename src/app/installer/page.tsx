@@ -1,9 +1,10 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices, useDatasetSelector } from "@/lib/dataset-context";
 import { InstallerHome } from "./installer-home";
 
 export default function InstallerPage() {
-  const { data, linkedEntityId } = useAppDataset();
-  return <InstallerHome data={data} installerId={linkedEntityId ?? "inst-1"} />;
+  const data = useDatasetSlices(["installers", "units"]);
+  const installerId = useDatasetSelector((value) => value.linkedEntityId);
+  return <InstallerHome data={data} installerId={installerId ?? "inst-1"} />;
 }

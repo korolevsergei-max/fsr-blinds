@@ -9,11 +9,11 @@ import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import { getOpenPostInstallIssueTargets } from "@/lib/window-issues";
 
 type UnitStatusEditorProps = {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "units" | "rooms" | "windows" | "postInstallIssues">;
   mediaItems?: unknown;
   milestones: UnitMilestoneCoverage;
   unitsBasePath: "/management/units" | "/scheduler/units";
@@ -25,8 +25,8 @@ export function UnitStatusEditor({
   unitsBasePath,
 }: UnitStatusEditorProps) {
   const { id } = useParams<{ id: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["units", "rooms", "windows", "postInstallIssues"]);
+  const datasetData = data ?? contextData ?? undefined;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
 

@@ -1,14 +1,16 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices, useDatasetSelector } from "@/lib/dataset-context";
 import { BuildingDetail } from "./building-detail";
 
 export default function BuildingDetailPage() {
-  const { data, user, isHydratingInitialData } = useAppDataset();
+  const data = useDatasetSlices(["buildings", "clients", "units"]);
+  const userRole = useDatasetSelector((value) => value.user.role);
+  const isHydratingInitialData = useDatasetSelector((value) => value.isHydratingInitialData);
   return (
     <BuildingDetail
       data={data}
-      userRole={user.role}
+      userRole={userRole}
       isHydratingInitialData={isHydratingInitialData}
     />
   );
