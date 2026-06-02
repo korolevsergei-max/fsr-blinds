@@ -2,18 +2,22 @@
 
 import { useTransition } from "react";
 import { SignOut } from "@phosphor-icons/react";
-import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { signOut } from "@/app/actions/auth-actions";
-import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
 
-export function ManufacturingRoleDashboard({
+/**
+ * Static chrome for a manufacturing role dashboard (greeting, headline, sign-out).
+ * The data-heavy pipeline is passed as `children` so the page can wrap it in a
+ * <Suspense> boundary — the header paints immediately while the persisted
+ * schedule streams in behind a skeleton.
+ */
+export function ManufacturingRoleShell({
   role,
-  schedule,
   userName,
+  children,
 }: {
   role: "cutter" | "assembler" | "qc";
-  schedule: ManufacturingRoleSchedule;
   userName?: string;
+  children: React.ReactNode;
 }) {
   const [signingOut, startSignOut] = useTransition();
 
@@ -46,11 +50,7 @@ export function ManufacturingRoleDashboard({
         </button>
       </div>
 
-      <ManufacturingRolePipelineDashboard
-        role={role}
-        schedule={schedule}
-        unitHrefBase={`/${role}/units`}
-      />
+      {children}
     </div>
   );
 }

@@ -101,6 +101,14 @@ function sortFlatItems(
   });
 }
 
+function flattenScheduleWindows(
+  schedule: ManufacturingRoleSchedule
+): ManufacturingWindowItem[] {
+  return schedule.buckets.flatMap((b) =>
+    b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))
+  );
+}
+
 function removeWindow(
   items: ManufacturingWindowItem[],
   windowId: string
@@ -130,7 +138,7 @@ export function ManufacturingRoleQueue({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [localItems, setLocalItems] = useState<ManufacturingWindowItem[]>(() =>
-    schedule.buckets.flatMap((b) => b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows)))
+    flattenScheduleWindows(schedule)
   );
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
@@ -144,9 +152,14 @@ export function ManufacturingRoleQueue({
     direction: PushbackDirection;
   } | null>(null);
 
-  useEffect(() => {
-    setLocalItems(schedule.buckets.flatMap((b) => b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))));
-  }, [schedule]);
+  // Re-sync to the server truth when a fresh schedule arrives (e.g. after
+  // router.refresh()), discarding any optimistic local edits. Done during render
+  // rather than in an effect to avoid a cascading re-render.
+  const [syncedSchedule, setSyncedSchedule] = useState(schedule);
+  if (syncedSchedule !== schedule) {
+    setSyncedSchedule(schedule);
+    setLocalItems(flattenScheduleWindows(schedule));
+  }
 
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
