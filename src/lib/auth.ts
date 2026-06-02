@@ -1,6 +1,7 @@
 import { cache } from "react";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
 export type UserRole = "owner" | "installer" | "cutter" | "client" | "scheduler" | "assembler" | "qc";
@@ -62,8 +63,10 @@ async function inferRoleForAuthenticatedUser(
   supabase: SupabaseClient,
   user: User
 ): Promise<UserRole> {
-  const metadataRole = normalizeUserRole(user.user_metadata?.role);
-  if (metadataRole) return metadataRole;
+  // Prefer the secure, service-role-only `app_metadata` claim; never trust the
+  // user-writable `user_metadata` for an authorization decision.
+  const claimRole = normalizeUserRole(user.app_metadata?.role);
+  if (claimRole) return claimRole;
 
   const linkedRole = await inferRoleFromLinkedAccount(supabase, user.id);
   if (linkedRole) return linkedRole;
@@ -108,6 +111,21 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   // Profile exists — happy path
   if (profile) {
+    // Organic backfill: keep the secure `app_metadata.role` claim in sync with the
+    // DB so middleware can authorize from the token alone (no per-navigation DB read).
+    // Best-effort and only when stale/missing, so steady-state cost is zero. Runs in
+    // RSC/layouts (never middleware), so using the admin client here is safe.
+    if (profile.role && user.app_metadata?.role !== profile.role) {
+      try {
+        const admin = createAdminClient();
+        await admin.auth.admin.updateUserById(user.id, {
+          app_metadata: { role: profile.role },
+        });
+      } catch {
+        /* non-fatal: middleware DB fallback still covers this user */
+      }
+    }
+
     return {
       id: user.id,
       email: profile.email,
