@@ -7,17 +7,13 @@ import { motion } from "framer-motion";
 import {
   Camera,
   CheckCircle,
-  ClockCounterClockwise,
-  Plus,
   Trash,
   UploadSimple,
-  User,
 } from "@phosphor-icons/react";
 import {
   createWindowWithPhoto,
   deleteWindow,
   deleteWindowMeasurementPhoto,
-  deleteWindowStagePhoto,
   undoWindowStage,
   updateWindowWithOptionalPhoto,
 } from "@/app/actions/fsr-data";
@@ -43,75 +39,8 @@ import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload"
 import { useDatasetSlicesMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
-import { removeUnitStageMediaItem } from "@/lib/use-unit-supplemental";
-
-const MAX_MEASURED_PHOTOS = 3;
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function formatActivityDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-CA", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function buildWindowActivityDescription(log: UnitActivityLog): string {
-  const details = log.details ?? {};
-  if (log.action === "window_created") {
-    const w = details.width != null ? details.width : null;
-    const h = details.height != null ? details.height : null;
-    const d = details.depth != null ? details.depth : null;
-    const measurementParts = [
-      w != null ? `W: ${w}"` : null,
-      h != null ? `H: ${h}"` : null,
-      d != null ? `D: ${d}"` : null,
-    ].filter(Boolean);
-    const measurementStr = measurementParts.length > 0
-      ? `Measurements set (${measurementParts.join(", ")}).`
-      : "Window created.";
-    const photoStr = details.hasPhoto ? " Photo uploaded." : " No photo uploaded.";
-    return measurementStr + photoStr;
-  }
-  if (log.action === "window_updated") {
-    return details.replacedPhoto
-      ? "Window details updated and photo replaced."
-      : "Window details updated.";
-  }
-  if (log.action === "post_bracketing_photo_added") {
-    return "Post-bracketing photo uploaded.";
-  }
-  if (log.action === "installed_photo_added") {
-    return "Installed photo uploaded.";
-  }
-  if (log.action === "post_install_issue_opened") {
-    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
-    return `Post-install issue opened.${note}`;
-  }
-  if (log.action === "post_install_issue_note_added") {
-    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
-    return `Post-install issue note added.${note}`;
-  }
-  if (log.action === "post_install_issue_resolved") {
-    const note = typeof details.note === "string" && details.note.trim() ? ` ${details.note}` : "";
-    return `Post-install issue resolved.${note}`;
-  }
-  return "Window activity recorded.";
-}
+import { MeasuredPhotosGrid } from "@/components/windows/measured-photos-grid";
+import { WindowHistoryTimeline } from "@/components/windows/window-history-timeline";
 
 export function WindowForm({
   data,
@@ -201,7 +130,6 @@ export function WindowForm({
   const [pending, startTransition] = useTransition();
   const [optimizingPhoto, setOptimizingPhoto] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
   const saveErrorRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -777,98 +705,15 @@ export function WindowForm({
         </motion.div>
 
         {/* Additional measured photos — edit mode only */}
-        {existingWindow && unit && (() => {
-          const additionalPhotos = mediaItems
-            .filter(
-              (item) =>
-                item.windowId === existingWindow.id &&
-                item.stage === "scheduled_bracketing" &&
-                item.uploadKind === "window_measure"
-            )
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-          if (additionalPhotos.length === 0) return null;
-
-          return (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.20, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-1 flex items-center justify-between">
-                <span>All Measured Photos</span>
-                <span className="font-normal normal-case text-zinc-400">
-                  {additionalPhotos.length}/{MAX_MEASURED_PHOTOS}
-                </span>
-              </h2>
-              <div className="grid grid-cols-2 gap-2.5 mt-3">
-                {additionalPhotos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-zinc-100"
-                  >
-                    <Image
-                      src={photo.publicUrl}
-                      alt={photo.label ?? "Photo"}
-                      fill
-                      sizes="(max-width: 640px) 50vw, 280px"
-                      className="object-cover"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">
-                      <p className="flex items-center gap-1 text-[10px] font-medium text-white/90 leading-tight">
-                        <User size={10} />
-                        {photo.uploadedByName ?? "Unknown"}
-                        {photo.uploadedByRole && (
-                          <span className="capitalize opacity-70">· {photo.uploadedByRole}</span>
-                        )}
-                      </p>
-                      <p className="text-[10px] text-white/60 mt-0.5">
-                        {formatRelativeTime(photo.createdAt)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={deletingMediaId === photo.id}
-                      onClick={async () => {
-                        setDeletingMediaId(photo.id);
-                        try {
-                          const result = await deleteWindowStagePhoto(photo.id, unit.id);
-                          if (result.ok) {
-                            removeUnitStageMediaItem(unit.id, photo.id);
-                            datasetActions?.patchData((prev) =>
-                              reconcileUnitDerivedState(prev, unit.id, { photoDelta: -1 })
-                            );
-                          }
-                        } finally {
-                          setDeletingMediaId(null);
-                        }
-                      }}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm hover:bg-black/70 disabled:opacity-40"
-                    >
-                      {deletingMediaId === photo.id ? (
-                        <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                      ) : (
-                        <Trash size={13} weight="bold" />
-                      )}
-                    </button>
-                  </div>
-                ))}
-                {additionalPhotos.length < MAX_MEASURED_PHOTOS && !photoFile && (
-                  <button
-                    type="button"
-                    onClick={() => setPhotoPickerOpen(true)}
-                    className="flex aspect-square flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-200 bg-zinc-50 transition-all active:scale-[0.97] hover:bg-zinc-100/60"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white border border-zinc-200 shadow-sm">
-                      <Plus size={20} className="text-zinc-500" />
-                    </div>
-                    <span className="text-[11px] font-semibold text-zinc-500">Add Photo</span>
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          );
-        })()}
+        {existingWindow && unit && (
+          <MeasuredPhotosGrid
+            existingWindowId={existingWindow.id}
+            unitId={unit.id}
+            mediaItems={mediaItems}
+            photoFile={photoFile}
+            onAddPhoto={() => setPhotoPickerOpen(true)}
+          />
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -1017,44 +862,7 @@ export function WindowForm({
             />
           )}
 
-          {existingWindow && (
-            <div className="mt-4 rounded-2xl border border-border bg-white p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <ClockCounterClockwise size={16} className="text-zinc-500" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                  Window History
-                </h3>
-              </div>
-              {windowHistory.length === 0 ? (
-                <p className="text-xs text-zinc-500">
-                  No changes logged yet for this window.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {windowHistory.map((log) => (
-                    <div
-                      key={log.id}
-                      className="rounded-xl border border-border bg-surface px-3 py-2.5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">
-                            {buildWindowActivityDescription(log)}
-                          </p>
-                          <p className="text-[11px] text-zinc-500 mt-0.5">
-                            {log.actorName}
-                          </p>
-                        </div>
-                        <span className="text-[10px] text-zinc-500 whitespace-nowrap">
-                          {formatActivityDate(log.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {existingWindow && <WindowHistoryTimeline history={windowHistory} />}
         </div>
       </form>
     </div>
