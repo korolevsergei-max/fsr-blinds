@@ -1,6 +1,7 @@
 "use client";
 
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -39,12 +40,18 @@ import { getFloor } from "@/lib/app-dataset";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { Scheduler } from "@/lib/types";
 
+/** Dataset slices the management units list reads. */
+export type UnitsListData = Pick<
+  AppDataset,
+  "units" | "clients" | "buildings" | "installers" | "rooms" | "windows" | "manufacturingEscalations"
+>;
+
 export function UnitsList({
   data,
   schedulers = [],
   userRole,
 }: {
-  data: AppDataset;
+  data: UnitsListData;
   schedulers?: Scheduler[];
   userRole?: string;
 }) {
@@ -354,6 +361,14 @@ export function UnitsList({
     setSelectedIds(new Set());
   }
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: sortedFiltered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 120,
+    overscan: 5,
+  });
+
   const clientOptions = [
     { value: "all", label: "All clients" },
     ...clients.map((c) => ({ value: c.id, label: c.name })),
@@ -560,20 +575,29 @@ export function UnitsList({
       />
 
       {/* Unit cards */}
-      <div className="flex-1 overflow-y-auto px-4 flex flex-col gap-2 mt-2 pb-32">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 mt-2 pb-32">
         {sortedFiltered.length === 0 && (
           <div className="py-12 text-center text-muted text-sm">No units match your filters</div>
         )}
-        {sortedFiltered.map((unit, i) => {
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const unit = sortedFiltered[virtualItem.index]!;
           const isSelected = selectedIds.has(unit.id);
           const schedulerId = unit.assignedSchedulerId;
           const schedulerName = unit.assignedSchedulerName || (schedulerId ? schedulers.find((s) => s.id === schedulerId)?.name : null);
           return (
-            <motion.div
+            <div
               key={unit.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              ref={virtualizer.measureElement}
+              data-index={virtualItem.index}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${virtualItem.start}px)`,
+                paddingBottom: "8px",
+              }}
             >
               {selectMode ? (
                 <button
@@ -675,9 +699,10 @@ export function UnitsList({
                   </div>
                 </Link>
               )}
-            </motion.div>
+            </div>
           );
-        })}
+          })}
+        </div>
       </div>
 
       {/* Floating bulk action bar */}
