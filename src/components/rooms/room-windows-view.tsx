@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Camera,
   CaretLeft,
@@ -15,9 +15,7 @@ import {
   Images,
   Ruler,
   Trash,
-  User,
   WarningCircle,
-  X,
 } from "@phosphor-icons/react";
 import { getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -34,20 +32,10 @@ import {
 } from "@/app/actions/post-install-issue-actions";
 import { refreshDataset } from "@/app/actions/dataset-queries";
 import { useDatasetSelectorMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
-
-type WindowStageKey = "pre" | "bracketed" | "installed";
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+import { DeleteWindowModal } from "@/components/rooms/delete-window-modal";
+import { FlagIssueModal } from "@/components/rooms/flag-issue-modal";
+import { GalleryModal } from "@/components/rooms/gallery-modal";
+import { STAGE_META, type GalleryItem, type WindowStageKey } from "@/components/rooms/gallery-shared";
 
 function formatIssueTime(iso: string): string {
   const date = new Date(iso);
@@ -65,16 +53,6 @@ function roleLabel(role: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 type ImageOrientation = "portrait" | "landscape" | "square";
-type GalleryItem = {
-  key: string;
-  stage: WindowStageKey;
-  stageLabel: string;
-  url: string;
-  title: string;
-  createdAt: string | null;
-  uploadedByName: string | null;
-  uploadedByRole: string | null;
-};
 
 interface RoomWindowsViewProps {
   data: Pick<AppDataset, "windows" | "rooms" | "units" | "postInstallIssues">;
@@ -98,15 +76,6 @@ interface RoomWindowsViewProps {
   /** Window IDs that have been individually QC-approved. Takes precedence over isManufacturedComplete for per-window Built status. */
   manufacturedWindowIds?: string[];
 }
-
-const STAGE_META: Record<
-  WindowStageKey,
-  { itemStage: UnitStageMediaItem["stage"]; label: string }
-> = {
-  pre: { itemStage: "scheduled_bracketing", label: "Pre-bracketed" },
-  bracketed: { itemStage: "bracketed_measured", label: "Bracketed" },
-  installed: { itemStage: "installed_pending_approval", label: "Installed" },
-};
 
 export function RoomWindowsView({
   data,
@@ -149,6 +118,23 @@ export function RoomWindowsView({
       if (freshData) datasetActions?.setData(freshData);
       router.refresh();
     });
+
+  const handleConfirmDelete = () => {
+    if (!onDeleteWindow || !confirmDeleteWindowId) return;
+    const idToDelete = confirmDeleteWindowId;
+    setConfirmDeleteWindowId(null);
+    startDeleteTransition(async () => {
+      try {
+        await onDeleteWindow(idToDelete);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to delete the window.";
+        window.alert(message);
+      }
+    });
+  };
 
   const issueWindow = issueWindowId
     ? windowsList.find((windowItem) => windowItem.id === issueWindowId) ?? null
@@ -801,264 +787,33 @@ export function RoomWindowsView({
         })}
       </div>
 
-      <AnimatePresence>
-        {confirmDeleteWindowId && (
-          <>
-            <motion.div
-              className="fixed inset-0 z-40 bg-zinc-950/45"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setConfirmDeleteWindowId(null)}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-4 bottom-1/3 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
-            >
-              <div className="p-5">
-                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-500">
-                  <Trash size={22} />
-                </div>
-                <p className="text-sm font-bold text-foreground">Delete window?</p>
-                <p className="mt-1 text-xs text-muted">
-                  This will permanently delete the window and all its photos. This cannot be undone.
-                </p>
-              </div>
-              <div className="flex border-t border-border">
-                <button
-                  type="button"
-                  className="flex-1 py-3.5 text-sm font-semibold text-muted"
-                  onClick={() => setConfirmDeleteWindowId(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isPendingDelete}
-                  className="flex-1 border-l border-border py-3.5 text-sm font-semibold text-red-600 disabled:opacity-50"
-                  onClick={() => {
-                    if (!onDeleteWindow || !confirmDeleteWindowId) return;
-                    const idToDelete = confirmDeleteWindowId;
-                    setConfirmDeleteWindowId(null);
-                    startDeleteTransition(async () => {
-                      try {
-                        await onDeleteWindow(idToDelete);
-                      } catch (error) {
-                        const message =
-                          error instanceof Error
-                            ? error.message
-                            : "Failed to delete the window.";
-                        window.alert(message);
-                      }
-                    });
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <DeleteWindowModal
+        open={Boolean(confirmDeleteWindowId)}
+        pending={isPendingDelete}
+        onCancel={() => setConfirmDeleteWindowId(null)}
+        onConfirm={handleConfirmDelete}
+      />
 
-      <AnimatePresence>
-        {issueWindow && unit && room && (
-          <>
-            <motion.button
-              type="button"
-              aria-label="Close post-install issue dialog"
-              className="fixed inset-0 z-40 bg-zinc-950/45"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIssueWindowId(null)}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-4 bottom-1/4 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
-            >
-              <div className="border-b border-border px-5 py-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-                    <WarningCircle size={22} weight="fill" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-foreground">Flag Post-Install Issue</p>
-                    <p className="mt-0.5 text-xs text-muted">
-                      Window: {issueWindow.label} · {room.name} · Unit {unit.unitNumber}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="px-5 py-4">
-                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                  Note
-                </label>
-                <textarea
-                  value={issueNote}
-                  onChange={(event) => {
-                    setIssueNote(event.target.value);
-                    setIssueError(null);
-                  }}
-                  required
-                  rows={4}
-                  className="w-full resize-none rounded-2xl border border-border bg-white px-3 py-2 text-sm text-foreground outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
-                />
-                {issueError && (
-                  <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                    {issueError}
-                  </p>
-                )}
-              </div>
-              <div className="flex border-t border-border">
-                <button
-                  type="button"
-                  className="flex-1 py-3.5 text-sm font-semibold text-muted"
-                  onClick={() => setIssueWindowId(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isPendingIssueAction || !issueNote.trim()}
-                  className="flex-1 border-l border-border py-3.5 text-sm font-semibold text-red-600 disabled:opacity-50"
-                  onClick={handleOpenIssue}
-                >
-                  Open issue
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <FlagIssueModal
+        issueWindow={issueWindow}
+        unit={unit ?? null}
+        room={room ?? null}
+        note={issueNote}
+        error={issueError}
+        pending={isPendingIssueAction}
+        onNoteChange={(value) => {
+          setIssueNote(value);
+          setIssueError(null);
+        }}
+        onCancel={() => setIssueWindowId(null)}
+        onSubmit={handleOpenIssue}
+      />
 
-      <AnimatePresence>
-        {galleryWindow && (
-          <>
-            <motion.button
-              type="button"
-              aria-label="Close window image gallery"
-              className="fixed inset-0 z-40 bg-zinc-950/45"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setGalleryWindowId(null)}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 16, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col overflow-hidden rounded-t-[2rem] border border-border bg-white shadow-2xl sm:inset-6 sm:mx-auto sm:max-w-5xl sm:rounded-[2rem]"
-            >
-              <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/8 text-accent">
-                  <Images size={22} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold tracking-tight text-foreground">
-                    {galleryWindow.label} Images
-                  </p>
-                  <p className="text-xs text-muted">
-                    Review every saved photo for this window across all stages.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close window image gallery"
-                  onClick={() => setGalleryWindowId(null)}
-                  className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white text-zinc-500 transition-colors hover:text-foreground"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-5 py-5">
-                {galleryItems.length === 0 ? (
-                  <div className="flex min-h-full flex-col items-center justify-center gap-3 rounded-[1.75rem] border border-dashed border-border bg-surface px-6 py-12 text-center">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
-                      <Camera size={28} />
-                    </div>
-                    <p className="text-sm font-semibold text-foreground">No images saved yet</p>
-                    <p className="max-w-sm text-sm leading-relaxed text-muted">
-                      When bracketing, measured, or installed photos are uploaded for this window,
-                      they will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-5 pb-3">
-                    {(["pre", "bracketed", "installed"] as WindowStageKey[]).map((stage) => {
-                      const stageItems = galleryItems.filter((item) => item.stage === stage);
-                      if (stageItems.length === 0) return null;
-
-                      return (
-                        <section
-                          key={stage}
-                          className="overflow-hidden rounded-[1.75rem] border border-border bg-white"
-                        >
-                          <div className="border-b border-border bg-surface px-4 py-3.5">
-                            <p className="text-sm font-bold text-foreground">
-                              {STAGE_META[stage].label}
-                            </p>
-                            <p className="mt-1 text-xs text-muted">
-                              {stageItems.length} image{stageItems.length !== 1 ? "s" : ""} saved
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 px-4 py-4 sm:grid-cols-3">
-                            {stageItems.map((item) => (
-                              <a
-                                key={item.key}
-                                href={item.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="group overflow-hidden rounded-2xl border border-border bg-surface transition-colors hover:border-zinc-300"
-                              >
-                                <div className="relative aspect-square overflow-hidden bg-zinc-100">
-                                  <Image
-                                    src={item.url}
-                                    alt={item.title}
-                                    fill
-                                    sizes="(max-width: 640px) 50vw, 240px"
-                                    unoptimized={item.url.startsWith("blob:")}
-                                    className="object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-                                  />
-                                  {/* Uploader overlay */}
-                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">
-                                    <p className="flex items-center gap-1 text-[10px] font-medium text-white/90 leading-tight">
-                                      <User size={10} />
-                                      {item.uploadedByName ?? "Unknown"}
-                                      {item.uploadedByRole && (
-                                        <span className="capitalize opacity-70">
-                                          · {item.uploadedByRole}
-                                        </span>
-                                      )}
-                                    </p>
-                                    <p className="text-[10px] text-white/60 mt-0.5">
-                                      {item.createdAt
-                                        ? formatRelativeTime(item.createdAt)
-                                        : "Existing photo"}
-                                    </p>
-                                  </div>
-                                </div>
-                              </a>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <GalleryModal
+        galleryWindow={galleryWindow}
+        items={galleryItems}
+        onClose={() => setGalleryWindowId(null)}
+      />
     </>
   );
 }
