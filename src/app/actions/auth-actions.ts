@@ -113,6 +113,16 @@ async function upsertUserProfile(
     email: email.trim(),
   });
 
+  // Write the authorization claim. app_metadata is service-role-only writable
+  // (unlike user_metadata, which the user can edit), so middleware can trust it
+  // as the role source without a per-navigation user_profiles query. Best-effort:
+  // if this fails, middleware falls back to the DB and getCurrentUser self-heals.
+  try {
+    await admin.auth.admin.updateUserById(authUserId, { app_metadata: { role } });
+  } catch {
+    /* non-fatal: middleware DB fallback + getCurrentUser self-heal cover this */
+  }
+
   return error?.message ?? null;
 }
 

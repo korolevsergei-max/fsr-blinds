@@ -8,10 +8,29 @@ import {
 } from "@/lib/supabase/auth-errors";
 import { homePathForRole } from "@/lib/role-routes";
 
-function roleFromAuthMetadata(user: { user_metadata?: { role?: unknown } } | null): string | null {
-  const role = user?.user_metadata?.role;
+/**
+ * Trust model for per-navigation authorization:
+ * - Role is read from `app_metadata.role`, which ONLY the service-role key can
+ *   write (set at account creation / profile upsert, see auth-actions.ts). This
+ *   lets middleware authorize from the token alone — no per-navigation DB query.
+ * - `user_metadata` is user-writable (supabase.auth.updateUser) and MUST NEVER
+ *   drive an authorization decision.
+ * - When the claim is absent (a legacy user not yet backfilled), fall back to a
+ *   single `user_profiles` read; getCurrentUser self-heals the claim afterwards.
+ */
+function roleFromAuthClaim(user: { app_metadata?: Record<string, unknown> | null } | null): string | null {
+  const role = user?.app_metadata?.role;
   return typeof role === "string" ? role : null;
 }
+
+/** Portal path prefix → the role required to access it. */
+const PORTAL_REQUIRED_ROLE: Record<string, string> = {
+  "/management": "owner",
+  "/installer": "installer",
+  "/scheduler": "scheduler",
+  "/cutter": "cutter",
+  "/assembler": "assembler",
+};
 
 function supabaseAuthCookieNames(request: NextRequest): string[] {
   return request.cookies.getAll().map((c) => c.name).filter(isSupabaseBrowserCookieName);
@@ -141,298 +160,59 @@ export async function updateSession(request: NextRequest) {
     return finish(supabaseResponse, authInvalidated);
   }
 
+  const redirectTo = (path: string) =>
+    finish(
+      applyAuthCookieDeletions(
+        NextResponse.redirect(new URL(path, request.url)),
+        deletedAuthCookieNames ?? []
+      ),
+      authInvalidated
+    );
+
+  /**
+   * Resolve the signed-in user's role from the trusted `app_metadata` claim,
+   * falling back to a single `user_profiles` read only when the claim is missing
+   * (legacy user not yet backfilled — getCurrentUser self-heals it afterwards).
+   * Never reads the user-writable `user_metadata`.
+   */
+  const resolveRole = async (): Promise<string | null> => {
+    const claim = roleFromAuthClaim(user);
+    if (claim) return claim;
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user!.id)
+      .maybeSingle();
+    return profile?.role ?? null;
+  };
+
   if (pathname === "/") {
     if (user) {
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const role = profile?.role ?? roleFromAuthMetadata(user);
-
-      if (role === "owner")
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/management", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      if (role === "cutter")
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/cutter", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      if (role === "assembler")
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/assembler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      if (role === "installer")
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/installer", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      if (role === "scheduler")
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/scheduler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
+      const home = homePathForRole(await resolveRole());
+      if (home !== "/") return redirectTo(home);
     }
-    return finish(
-      applyAuthCookieDeletions(
-        NextResponse.redirect(new URL("/login", request.url)),
-        deletedAuthCookieNames ?? []
-      ),
-      authInvalidated
-    );
+    return redirectTo("/login");
   }
 
-  if (
-    !user &&
-    (pathname.startsWith("/management") ||
-      pathname.startsWith("/installer") ||
-      pathname.startsWith("/scheduler") ||
-      pathname.startsWith("/cutter") ||
-      pathname.startsWith("/assembler"))
-  ) {
-    return finish(
-      applyAuthCookieDeletions(
-        NextResponse.redirect(new URL("/login", request.url)),
-        deletedAuthCookieNames ?? []
-      ),
-      authInvalidated
-    );
+  const portalPrefix = Object.keys(PORTAL_REQUIRED_ROLE).find((prefix) =>
+    pathname.startsWith(prefix)
+  );
+
+  if (!user && portalPrefix) {
+    return redirectTo("/login");
   }
 
-  if (user && pathname.startsWith("/management")) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.role ?? roleFromAuthMetadata(user);
-
+  if (user && portalPrefix) {
+    const role = await resolveRole();
     /**
-     * Route installers/schedulers to their portals. Allow owner, cutter, or **missing**
-     * profile through — `getCurrentUser` in layouts can repair / infer profile. Previously,
-     * `profile == null` made `profile?.role` undefined, which matched "not owner" and sent
-     * users to `/login` (e.g. flaky RLS/read or row not visible yet on cold navigation).
+     * A known, mismatched role is routed to its own portal — e.g. an installer
+     * hitting /management lands on /installer (homePathForRole). A null/unknown
+     * role is allowed through so the layout's getCurrentUser can repair a missing
+     * profile instead of redirect-looping (previously a flaky RLS read / not-yet-
+     * visible row could bounce a valid user to /login).
      */
-    if (role === "installer") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/installer", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-    if (role === "scheduler") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/scheduler", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-    if (role === "cutter") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/cutter", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-    if (role === "assembler") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/assembler", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-    if (role && role !== "owner") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/login", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-  }
-
-  if (user && pathname.startsWith("/installer")) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.role ?? roleFromAuthMetadata(user);
-
-    if (role !== "installer") {
-      if (role === "owner") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/management", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "cutter") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/cutter", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "scheduler") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/scheduler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "assembler") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/assembler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/login", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-  }
-
-  if (user && pathname.startsWith("/scheduler")) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.role ?? roleFromAuthMetadata(user);
-
-    if (role !== "scheduler") {
-      if (role === "owner") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/management", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "cutter") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/cutter", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "installer") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/installer", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      if (role === "assembler") {
-        return finish(
-          applyAuthCookieDeletions(
-            NextResponse.redirect(new URL("/assembler", request.url)),
-            deletedAuthCookieNames ?? []
-          ),
-          authInvalidated
-        );
-      }
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(new URL("/login", request.url)),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-  }
-
-  if (user && pathname.startsWith("/cutter")) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.role ?? roleFromAuthMetadata(user);
-
-    if (role !== "cutter") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(
-            new URL(homePathForRole(role), request.url)
-          ),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
-    }
-  }
-
-  if (user && pathname.startsWith("/assembler")) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.role ?? roleFromAuthMetadata(user);
-
-    if (role !== "assembler") {
-      return finish(
-        applyAuthCookieDeletions(
-          NextResponse.redirect(
-            new URL(homePathForRole(role), request.url)
-          ),
-          deletedAuthCookieNames ?? []
-        ),
-        authInvalidated
-      );
+    if (role && role !== PORTAL_REQUIRED_ROLE[portalPrefix]) {
+      return redirectTo(homePathForRole(role));
     }
   }
 
