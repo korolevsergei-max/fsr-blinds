@@ -13,6 +13,12 @@
 -- Note: installed >= total short-circuits to 'installed' BEFORE the manufactured
 -- check, so the legacy manufacturedCount nuance in withLiveUnitStatuses never
 -- affects the persisted status and is intentionally omitted here.
+--
+-- Safety: a read-only dry-run of this exact derivation against production on
+-- 2026-06-02 found 0 drift across 447 units (the removed read-path self-heal had
+-- already converged everything), so this runs as a no-op against current data.
+-- It is idempotent (IS DISTINCT FROM) and safe to apply while the app is live:
+-- no DDL, no table rewrite, brief row locks only on rows that actually change.
 
 WITH window_counts AS (
   SELECT
