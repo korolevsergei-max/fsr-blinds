@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -7,13 +8,13 @@ import {
   reflowManufacturingSchedules,
 } from "@/lib/manufacturing-scheduler";
 import { computeAndUpdateManufacturingRisk } from "@/app/actions/production-actions";
-import { ManufacturingRoleDashboard } from "@/components/manufacturing/manufacturing-role-dashboard";
+import { ManufacturingRoleShell } from "@/components/manufacturing/manufacturing-role-dashboard";
+import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
+import { ManufacturingPipelineSkeleton } from "@/components/manufacturing/manufacturing-dashboard-skeleton";
 
 export default async function CutterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-
-  const data = await loadPersistedRoleSchedule("cutter");
 
   after(async () => {
     await computeAndUpdateManufacturingRisk();
@@ -21,5 +22,22 @@ export default async function CutterPage() {
     revalidatePath("/cutter", "layout");
   });
 
-  return <ManufacturingRoleDashboard role="cutter" schedule={data} userName={user.displayName} />;
+  return (
+    <ManufacturingRoleShell role="cutter" userName={user.displayName}>
+      <Suspense fallback={<ManufacturingPipelineSkeleton />}>
+        <CutterPipeline />
+      </Suspense>
+    </ManufacturingRoleShell>
+  );
+}
+
+async function CutterPipeline() {
+  const schedule = await loadPersistedRoleSchedule("cutter");
+  return (
+    <ManufacturingRolePipelineDashboard
+      role="cutter"
+      schedule={schedule}
+      unitHrefBase="/cutter/units"
+    />
+  );
 }

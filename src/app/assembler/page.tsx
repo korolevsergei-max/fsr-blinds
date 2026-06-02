@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -7,13 +8,13 @@ import {
   reflowManufacturingSchedules,
 } from "@/lib/manufacturing-scheduler";
 import { computeAndUpdateManufacturingRisk } from "@/app/actions/production-actions";
-import { ManufacturingRoleDashboard } from "@/components/manufacturing/manufacturing-role-dashboard";
+import { ManufacturingRoleShell } from "@/components/manufacturing/manufacturing-role-dashboard";
+import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
+import { ManufacturingPipelineSkeleton } from "@/components/manufacturing/manufacturing-dashboard-skeleton";
 
 export default async function AssemblerPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-
-  const data = await loadPersistedRoleSchedule("assembler");
 
   after(async () => {
     await computeAndUpdateManufacturingRisk();
@@ -21,5 +22,22 @@ export default async function AssemblerPage() {
     revalidatePath("/assembler", "layout");
   });
 
-  return <ManufacturingRoleDashboard role="assembler" schedule={data} userName={user.displayName} />;
+  return (
+    <ManufacturingRoleShell role="assembler" userName={user.displayName}>
+      <Suspense fallback={<ManufacturingPipelineSkeleton />}>
+        <AssemblerPipeline />
+      </Suspense>
+    </ManufacturingRoleShell>
+  );
+}
+
+async function AssemblerPipeline() {
+  const schedule = await loadPersistedRoleSchedule("assembler");
+  return (
+    <ManufacturingRolePipelineDashboard
+      role="assembler"
+      schedule={schedule}
+      unitHrefBase="/assembler/units"
+    />
+  );
 }
