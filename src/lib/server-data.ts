@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
@@ -310,12 +309,15 @@ async function withPostInstallIssues(dataset: AppDataset): Promise<AppDataset> {
 }
 
 /**
- * Overrides each unit's `status` with a fresh derivation from current window
- * data + QC approvals. Schedules a background write-back so the cached
- * `units.status` self-heals over time.
+ * Overrides each unit's `status` (in memory) with a fresh derivation from current
+ * window data + QC approvals, and computes `currentStage` (which is not persisted).
  *
  * Lets the dashboard show accurate pipeline counts even if some past mutation
- * skipped `recomputeUnitStatus`.
+ * skipped `recomputeUnitStatus`. This is read-only: `units.status` is persisted at
+ * every mutation by `recomputeUnitStatus`, so the formerly here `after()` write-back
+ * was pure self-heal and has been removed (DATA_SCOPING_PLAN.md §3). Any drift between
+ * persisted and derived status is logged so we can confirm no mutation misses
+ * `recomputeUnitStatus`; legacy drift is healed once by the backfill migration.
  */
 async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
   if (dataset.units.length === 0) return dataset;
@@ -397,17 +399,19 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
     return updated;
   });
 
+  // Read-only drift log. `recomputeUnitStatus` persists `units.status` at every
+  // mutation, so a non-empty drift here means a mutation path skipped it (or predates
+  // the backfill). We no longer write back on every read (DATA_SCOPING_PLAN.md §3);
+  // the in-memory override above keeps the dashboard accurate regardless.
   if (drift.length > 0) {
-    after(async () => {
-      const followUp = await createClient();
-      for (const d of drift) {
-        await followUp.from("units").update({ status: d.status }).eq("id", d.id);
-        await followUp
-          .from("schedule_entries")
-          .update({ status: d.status })
-          .eq("unit_id", d.id);
-      }
-    });
+    console.warn(
+      `[unit-status-drift] ${drift.length} unit(s) have persisted status differing ` +
+        `from derived status (recomputeUnitStatus may have been skipped). Sample: ` +
+        drift
+          .slice(0, 10)
+          .map((d) => `${d.id}→${d.status}`)
+          .join(", ")
+    );
   }
 
   return { ...dataset, units };
