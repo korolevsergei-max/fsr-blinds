@@ -24,7 +24,7 @@ export interface InstallationScheduleState {
   availableBuildingIds: string[];
 }
 
-function hasOpenManufacturingIssue(data: AppDataset, unit: Unit) {
+function hasOpenManufacturingIssue(data: Pick<AppDataset, "manufacturingEscalations">, unit: Unit) {
   if (unit.manufacturingRiskFlag && unit.manufacturingRiskFlag !== "green") return true;
   return data.manufacturingEscalations.some(
     (item) => item.unitId === unit.id && item.status === "open"
@@ -32,7 +32,7 @@ function hasOpenManufacturingIssue(data: AppDataset, unit: Unit) {
 }
 
 export function buildInstallationScheduleState(args: {
-  data: AppDataset;
+  data: Pick<AppDataset, "units" | "manufacturingEscalations">;
   baseEntries: ScheduleEntry[];
   today: Date;
   scope: ScheduleScope;

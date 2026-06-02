@@ -78,7 +78,7 @@ export function getEscalationSurfaceClasses(
 }
 
 export function getOpenPostInstallIssueTargets(
-  data: AppDataset,
+  data: Pick<AppDataset, "postInstallIssues" | "rooms" | "windows">,
   unitId: string
 ): OpenPostInstallIssueTarget[] {
   const roomsById = new Map(
@@ -116,7 +116,7 @@ export function getOpenPostInstallIssueTargets(
 }
 
 export function getUnitEscalations(
-  data: AppDataset,
+  data: Pick<AppDataset, "rooms" | "windows" | "manufacturingEscalations">,
   unitId: string
 ): UnitEscalationSummary[] {
   const roomMap = new Map(

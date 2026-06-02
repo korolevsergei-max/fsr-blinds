@@ -30,7 +30,7 @@ import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel"
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe, useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import {
   getEscalationSurfaceClasses,
   getOpenPostInstallIssueTargets,
@@ -185,14 +185,21 @@ export function SchedulerUnitDetail({
   activityLog,
   milestones,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "units" | "rooms" | "windows" | "manufacturingEscalations" | "postInstallIssues">;
   activityLog: UnitActivityLog[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
-  const isHydratingInitialData = datasetCtx?.isHydratingInitialData ?? false;
+  const contextData = useDatasetSlicesMaybe([
+    "units",
+    "rooms",
+    "windows",
+    "manufacturingEscalations",
+    "postInstallIssues",
+  ]);
+  const datasetData = data ?? contextData ?? undefined;
+  const isHydratingInitialData =
+    useDatasetSelectorMaybe((value) => value.isHydratingInitialData) ?? false;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = datasetData ? getRoomsByUnit(datasetData, id) : [];
 

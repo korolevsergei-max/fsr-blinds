@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useAppDatasetMaybe } from "./dataset-context";
+import { useDatasetActionsMaybe } from "./dataset-context";
 import type { AppDataset } from "./app-dataset";
 
 /**
@@ -12,7 +12,7 @@ import type { AppDataset } from "./app-dataset";
  * when outside the provider (e.g., server-component-only pages).
  */
 export function useDatasetMutation() {
-  const ctx = useAppDatasetMaybe();
+  const actions = useDatasetActionsMaybe();
   const router = useRouter();
 
   /**
@@ -20,8 +20,8 @@ export function useDatasetMutation() {
    * If no updater is provided, falls back to router.refresh().
    */
   function afterMutate(updater?: (prev: AppDataset) => AppDataset) {
-    if (ctx && updater) {
-      ctx.patchData(updater);
+    if (actions && updater) {
+      actions.patchData(updater);
     } else {
       router.refresh();
     }

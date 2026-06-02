@@ -30,7 +30,7 @@ export function BuildingDetail({
   userRole,
   isHydratingInitialData = false,
 }: {
-  data: AppDataset;
+  data: Pick<AppDataset, "buildings" | "clients" | "units">;
   userRole?: UserRole;
   isHydratingInitialData?: boolean;
 }) {

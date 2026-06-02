@@ -33,7 +33,7 @@ import {
   resolvePostInstallIssue,
 } from "@/app/actions/post-install-issue-actions";
 import { refreshDataset } from "@/app/actions/dataset-queries";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSelectorMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 
 type WindowStageKey = "pre" | "bracketed" | "installed";
 
@@ -77,7 +77,7 @@ type GalleryItem = {
 };
 
 interface RoomWindowsViewProps {
-  data: AppDataset;
+  data: Pick<AppDataset, "windows" | "rooms" | "units" | "postInstallIssues">;
   mediaItems: UnitStageMediaItem[];
   roomId: string;
   /**
@@ -119,11 +119,11 @@ export function RoomWindowsView({
   manufacturedWindowIds,
 }: RoomWindowsViewProps) {
   const router = useRouter();
-  const datasetCtx = useAppDatasetMaybe();
+  const datasetActions = useDatasetActionsMaybe();
+  const currentRole = useDatasetSelectorMaybe((value) => value.user.role);
   const windowsList = getWindowsByRoom(data, roomId);
   const room = data.rooms.find((item) => item.id === roomId);
   const unit = room ? data.units.find((item) => item.id === room.unitId) : null;
-  const currentRole = datasetCtx?.user.role;
   const canManagePostInstallIssues = currentRole === "owner" || currentRole === "scheduler";
   const issueLoaderKind = currentRole === "scheduler" ? "scheduler" : currentRole === "installer" ? "installer" : "full";
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
@@ -146,7 +146,7 @@ export function RoomWindowsView({
 
   const refreshIssueData = () =>
     refreshDataset(issueLoaderKind).then((freshData) => {
-      if (freshData) datasetCtx?.setData(freshData);
+      if (freshData) datasetActions?.setData(freshData);
       router.refresh();
     });
 

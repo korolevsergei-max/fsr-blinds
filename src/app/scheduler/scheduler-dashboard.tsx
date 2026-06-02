@@ -43,7 +43,10 @@ export function SchedulerDashboard({
   data,
   userName,
 }: {
-  data: AppDataset;
+  data: Pick<
+    AppDataset,
+    "units" | "buildings" | "installers" | "rooms" | "windows" | "manufacturingEscalations"
+  >;
   userName?: string;
 }) {
   const router = useRouter();

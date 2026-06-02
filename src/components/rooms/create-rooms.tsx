@@ -22,7 +22,7 @@ export function CreateRooms({
   patchData,
   routeBasePath,
 }: {
-  data: AppDataset;
+  data: Pick<AppDataset, "units" | "rooms">;
   patchData: (updater: (prev: AppDataset) => AppDataset) => void;
   routeBasePath: "/installer/units" | "/scheduler/units" | "/management/units";
 }) {

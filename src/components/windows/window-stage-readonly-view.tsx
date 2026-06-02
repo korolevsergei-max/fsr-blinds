@@ -9,7 +9,7 @@ import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { WindowStageNav } from "@/components/window-stage-nav";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import { getEscalationSurfaceClasses, getHighestEscalationRiskFlag } from "@/lib/window-issues";
 
 type StageMode = "before" | "bracketed" | "installed";
@@ -17,7 +17,7 @@ type StageMode = "before" | "bracketed" | "installed";
 type StageRouteBasePath = "/management/units" | "/scheduler/units";
 
 type WindowStageReadonlyViewProps = {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "rooms" | "units" | "windows">;
   mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
   mode: StageMode;
@@ -54,8 +54,8 @@ export function WindowStageReadonlyView({
   mode,
   routeBasePath = "/management/units",
 }: WindowStageReadonlyViewProps) {
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["rooms", "units", "windows"]);
+  const datasetData = data ?? contextData ?? undefined;
   const params = useParams<{ id: string; roomId: string; windowId?: string }>();
   const searchParams = useSearchParams();
   const unitId = params.id;

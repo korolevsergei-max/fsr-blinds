@@ -1,9 +1,9 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices } from "@/lib/dataset-context";
 import { SchedulerInstallers } from "./scheduler-installers";
 
 export default function SchedulerInstallersPage() {
-  const { data } = useAppDataset();
+  const data = useDatasetSlices(["installers", "units"]);
   return <SchedulerInstallers data={data} />;
 }

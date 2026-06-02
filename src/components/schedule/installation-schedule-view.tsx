@@ -26,6 +26,12 @@ import { computeUnitFlags } from "@/lib/unit-flags";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** The dataset slices the installation schedule subtree reads (notably NOT `windows`). */
+export type ScheduleViewData = Pick<
+  AppDataset,
+  "units" | "installers" | "schedule" | "clients" | "buildings" | "manufacturingEscalations"
+>;
+
 export function InstallationScheduleView({
   data,
   hrefBase,
@@ -39,7 +45,7 @@ export function InstallationScheduleView({
   showScopeToggle = true,
   hideClient = false,
 }: {
-  data: AppDataset;
+  data: ScheduleViewData;
   hrefBase: string;
   installerId?: string;
   showInstaller?: boolean;

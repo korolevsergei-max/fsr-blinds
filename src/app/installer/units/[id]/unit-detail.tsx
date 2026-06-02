@@ -22,7 +22,7 @@ import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getOpenPostInstallIssueTargets, getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag } from "@/lib/window-issues";
 import { BulkInstallButton } from "@/components/units/bulk-install-button";
 
@@ -220,14 +220,20 @@ export function UnitDetail({
   activityLog,
   milestones,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "units" | "rooms" | "windows" | "manufacturingEscalations" | "postInstallIssues">;
   mediaItems: UnitStageMediaItem[];
   activityLog: UnitActivityLog[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
 }) {
   const { id } = useParams<{ id: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe([
+    "units",
+    "rooms",
+    "windows",
+    "manufacturingEscalations",
+    "postInstallIssues",
+  ]);
+  const datasetData = data ?? contextData ?? undefined;
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
   const unitWindows =

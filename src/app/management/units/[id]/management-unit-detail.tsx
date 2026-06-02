@@ -45,7 +45,7 @@ import {
   getUnitEscalations,
 } from "@/lib/window-issues";
 import { resolveEscalationHref } from "@/lib/escalation-helpers";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe, useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import { BulkInstallButton } from "@/components/units/bulk-install-button";
 
 const ACTION_LABELS: Record<string, string> = {
@@ -248,7 +248,7 @@ export function ManagementUnitDetail({
   milestones,
   userRole,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "units" | "rooms" | "windows" | "manufacturingEscalations" | "postInstallIssues">;
   activityLog: UnitActivityLog[];
   mediaItems: UnitStageMediaItem[];
   milestones: import("@/lib/unit-milestones").UnitMilestoneCoverage;
@@ -256,9 +256,16 @@ export function ManagementUnitDetail({
 }) {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
-  const resolvedUserRole = userRole ?? (datasetCtx?.user.role as UserRole | undefined);
+  const contextData = useDatasetSlicesMaybe([
+    "units",
+    "rooms",
+    "windows",
+    "manufacturingEscalations",
+    "postInstallIssues",
+  ]);
+  const contextUserRole = useDatasetSelectorMaybe((value) => value.user.role);
+  const datasetData = data ?? contextData ?? undefined;
+  const resolvedUserRole = userRole ?? (contextUserRole as UserRole | undefined);
   const unit = datasetData?.units.find((u) => u.id === id);
   const rooms = unit && datasetData ? getRoomsByUnit(datasetData, unit.id) : [];
   const unitWindows =

@@ -19,7 +19,7 @@ import { WindowStageNav } from "@/components/window-stage-nav";
 import { WindowRiskNotesFields } from "@/components/windows/window-risk-notes-fields";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 import {
   removeUnitStageMediaItem,
@@ -46,7 +46,7 @@ export function InstalledPhotoForm({
   milestones,
   routeBasePath = "/installer/units",
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "rooms" | "units" | "windows">;
   mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
   routeBasePath?: "/installer/units" | "/scheduler/units" | "/management/units";
@@ -58,8 +58,9 @@ export function InstalledPhotoForm({
   }>();
   const router = useRouter();
   const [photoPickerOpen, setPhotoPickerOpen] = useState(false);
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["rooms", "units", "windows"]);
+  const datasetActions = useDatasetActionsMaybe();
+  const datasetData = data ?? contextData ?? undefined;
   const initialWindowItem = datasetData?.windows.find(
     (w) => w.id === windowId && w.roomId === roomId
   );
@@ -131,7 +132,7 @@ export function InstalledPhotoForm({
       const result = await deleteWindowStagePhoto(photo.id, unit.id);
       if (result.ok) {
         removeUnitStageMediaItem(unit.id, photo.id);
-        datasetCtx?.patchData((prev) =>
+        datasetActions?.patchData((prev) =>
           reconcileUnitDerivedState(prev, unit.id, { photoDelta: -1 })
         );
       } else {
@@ -204,7 +205,7 @@ export function InstalledPhotoForm({
           return;
         }
 
-        datasetCtx?.patchData((prev) =>
+        datasetActions?.patchData((prev) =>
           reconcileUnitDerivedState(
             {
               ...prev,
@@ -526,7 +527,7 @@ export function InstalledPhotoForm({
                 try {
                   const result = await undoWindowStage(windowItem.id, "installed");
                   if (result.ok) {
-                    datasetCtx?.patchData((prev) =>
+                    datasetActions?.patchData((prev) =>
                       reconcileUnitDerivedState(
                         {
                           ...prev,

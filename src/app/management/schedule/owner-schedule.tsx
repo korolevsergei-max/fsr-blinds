@@ -1,7 +1,6 @@
 "use client";
 
-import type { AppDataset } from "@/lib/app-dataset";
-import { InstallationScheduleView } from "@/components/schedule/installation-schedule-view";
+import { InstallationScheduleView, type ScheduleViewData } from "@/components/schedule/installation-schedule-view";
 import type { ScheduleScope } from "@/lib/schedule-ui";
 
 export function OwnerSchedule({
@@ -9,7 +8,7 @@ export function OwnerSchedule({
   scope,
   onScopeChange,
 }: {
-  data: AppDataset;
+  data: ScheduleViewData;
   scope: ScheduleScope;
   onScopeChange: (scope: ScheduleScope) => void;
 }) {

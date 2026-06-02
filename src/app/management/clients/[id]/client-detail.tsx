@@ -26,7 +26,7 @@ import { createBuilding, updateClient, deleteClient } from "@/app/actions/manage
 import { UserRole } from "@/lib/auth";
 
 interface ClientDetailProps {
-  data: AppDataset;
+  data: Pick<AppDataset, "clients" | "buildings" | "units">;
   userRole?: UserRole;
 }
 

@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/dataset-queries";
 import { getUnitCoverageFromDataset } from "@/lib/unit-status-helpers";
 import { EMPTY_MILESTONES, type UnitMilestoneCoverage } from "@/lib/unit-milestone-types";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import type { AppDataset } from "@/lib/app-dataset";
 
@@ -34,7 +34,7 @@ function upsertMediaItem(
 }
 
 function deriveClientMilestones(
-  data: AppDataset | undefined,
+  data: Pick<AppDataset, "units" | "rooms" | "windows" | "postInstallIssues"> | null | undefined,
   unitId: string
 ): UnitMilestoneCoverage {
   if (!data || !unitId) return EMPTY_MILESTONES;
@@ -70,10 +70,10 @@ function deriveClientMilestones(
 }
 
 export function useUnitMilestones(unitId: string) {
-  const datasetCtx = useAppDatasetMaybe();
+  const supplementalData = useDatasetSlicesMaybe(["units", "rooms", "windows", "postInstallIssues"]);
   const initialMilestones = useMemo(
-    () => deriveClientMilestones(datasetCtx?.data, unitId),
-    [datasetCtx?.data, unitId]
+    () => deriveClientMilestones(supplementalData, unitId),
+    [supplementalData, unitId]
   );
   const [serverMilestones, setServerMilestones] =
     useState<UnitMilestoneCoverage | null>(() => milestonesCache.get(unitId) ?? null);
@@ -107,10 +107,10 @@ export function useUnitMilestones(unitId: string) {
 }
 
 export function useUnitMediaAndMilestones(unitId: string) {
-  const datasetCtx = useAppDatasetMaybe();
+  const supplementalData = useDatasetSlicesMaybe(["units", "rooms", "windows", "postInstallIssues"]);
   const milestones = useMemo(
-    () => deriveClientMilestones(datasetCtx?.data, unitId),
-    [datasetCtx?.data, unitId]
+    () => deriveClientMilestones(supplementalData, unitId),
+    [supplementalData, unitId]
   );
   const [serverData, setServerData] = useState<{
     mediaItems: UnitStageMediaItem[];
@@ -150,10 +150,10 @@ export function useUnitMediaAndMilestones(unitId: string) {
 }
 
 export function useUnitSupplementalData(unitId: string) {
-  const datasetCtx = useAppDatasetMaybe();
+  const supplementalData = useDatasetSlicesMaybe(["units", "rooms", "windows", "postInstallIssues"]);
   const milestones = useMemo(
-    () => deriveClientMilestones(datasetCtx?.data, unitId),
-    [datasetCtx?.data, unitId]
+    () => deriveClientMilestones(supplementalData, unitId),
+    [supplementalData, unitId]
   );
   const [serverData, setServerData] = useState<UnitSupplementalData | null>(
     () => supplementalCache.get(unitId) ?? null

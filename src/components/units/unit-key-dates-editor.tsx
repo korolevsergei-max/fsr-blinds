@@ -7,7 +7,7 @@ import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
 import type { AppDataset } from "@/lib/app-dataset";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateInput } from "@/components/ui/date-input";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 
 type UnitKeyDatesEditorProps = {
-  data: AppDataset;
+  data: Pick<AppDataset, "units">;
   /** Base route segment: `/scheduler/units` or `/management/units` */
   unitsBasePath: "/scheduler/units" | "/management/units";
   /** Only the owner can set the Complete By date — hide entirely for schedulers */
@@ -26,7 +26,7 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { afterMutate } = useDatasetMutation();
-  const datasetCtx = useAppDatasetMaybe();
+  const isHydratingInitialData = useDatasetSelectorMaybe((value) => value.isHydratingInitialData);
   const unit = data.units.find((u) => u.id === id);
 
   const [measurementDate, setMeasurementDate] = useState(unit?.measurementDate ?? "");
@@ -37,7 +37,7 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
   const [saveError, setSaveError] = useState("");
   const [pending, startTransition] = useTransition();
 
-  if (!unit && datasetCtx?.isHydratingInitialData) {
+  if (!unit && isHydratingInitialData) {
     return <div className="p-6 text-center text-muted">Loading unit…</div>;
   }
 

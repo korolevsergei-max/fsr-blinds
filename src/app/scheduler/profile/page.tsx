@@ -1,17 +1,20 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices, useDatasetSelector } from "@/lib/dataset-context";
 import { SchedulerProfile } from "./scheduler-profile";
 
 export default function SchedulerProfilePage() {
-  const { data, user, linkedEntityId } = useAppDataset();
+  const data = useDatasetSlices(["installers", "schedule", "units"]);
+  const userName = useDatasetSelector((value) => value.user.displayName);
+  const userEmail = useDatasetSelector((value) => value.user.email);
+  const schedulerId = useDatasetSelector((value) => value.linkedEntityId);
 
   return (
     <SchedulerProfile
       data={data}
-      userName={user.displayName}
-      userEmail={user.email}
-      schedulerId={linkedEntityId}
+      userName={userName}
+      userEmail={userEmail}
+      schedulerId={schedulerId}
     />
   );
 }

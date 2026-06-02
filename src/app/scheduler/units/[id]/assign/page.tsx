@@ -1,9 +1,9 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices } from "@/lib/dataset-context";
 import { AssignUnitScheduler } from "./assign-unit-scheduler";
 
 export default function SchedulerAssignPage() {
-  const { data } = useAppDataset();
+  const data = useDatasetSlices(["units", "installers"]);
   return <AssignUnitScheduler data={data} />;
 }

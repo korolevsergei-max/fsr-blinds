@@ -17,7 +17,7 @@ export function InstallerProfile({
   data,
   installerId = "inst-1",
 }: {
-  data: AppDataset;
+  data: Pick<AppDataset, "installers" | "units">;
   installerId?: string;
 }) {
   const router = useRouter();

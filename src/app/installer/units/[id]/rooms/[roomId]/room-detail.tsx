@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { deleteWindow } from "@/app/actions/fsr-data";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 import { reconcileUnitDerivedState } from "@/lib/unit-status-helpers";
 
 export function RoomDetail({
@@ -20,13 +20,14 @@ export function RoomDetail({
   mediaItems,
   milestones,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "rooms" | "units" | "windows" | "postInstallIssues">;
   mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["rooms", "units", "windows", "postInstallIssues"]);
+  const datasetActions = useDatasetActionsMaybe();
+  const datasetData = data ?? contextData ?? undefined;
   const unit = datasetData?.units.find((u) => u.id === id);
   const room = datasetData?.rooms.find((r) => r.id === roomId);
   const windowCount = datasetData?.windows.filter((w) => w.roomId === roomId).length ?? 0;
@@ -72,7 +73,7 @@ export function RoomDetail({
             if (!result.ok) {
               throw new Error(result.error ?? "Failed to delete window.");
             }
-            datasetCtx?.patchData((prev) =>
+            datasetActions?.patchData((prev) =>
               reconcileUnitDerivedState(
                 {
                   ...prev,

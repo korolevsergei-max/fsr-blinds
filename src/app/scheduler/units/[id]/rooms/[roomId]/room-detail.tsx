@@ -11,20 +11,20 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { RoomWindowsView } from "@/components/rooms/room-windows-view";
 import { RoomFinishedPhotos } from "@/components/rooms/room-finished-photos";
-import { useAppDatasetMaybe } from "@/lib/dataset-context";
+import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 
 export function RoomDetail({
   data,
   mediaItems,
   milestones,
 }: {
-  data?: AppDataset;
+  data?: Pick<AppDataset, "rooms" | "units" | "windows" | "postInstallIssues">;
   mediaItems: UnitStageMediaItem[];
   milestones: UnitMilestoneCoverage;
 }) {
   const { id, roomId } = useParams<{ id: string; roomId: string }>();
-  const datasetCtx = useAppDatasetMaybe();
-  const datasetData = data ?? datasetCtx?.data;
+  const contextData = useDatasetSlicesMaybe(["rooms", "units", "windows", "postInstallIssues"]);
+  const datasetData = data ?? contextData ?? undefined;
   const unit = datasetData?.units.find((u) => u.id === id);
   const room = datasetData?.rooms.find((r) => r.id === roomId);
   const windowCount = datasetData?.windows.filter((w) => w.roomId === roomId).length ?? 0;

@@ -1,9 +1,9 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices } from "@/lib/dataset-context";
 import { ImportUnits } from "./import-units";
 
 export default function ImportPage() {
-  const { data } = useAppDataset();
+  const data = useDatasetSlices(["buildings", "clients", "installers", "schedulers"]);
   return <ImportUnits data={data} />;
 }

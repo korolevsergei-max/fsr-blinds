@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/ui/status-chip";
 import { SectionLabel } from "@/components/ui/section-label";
 
-export function AssignUnit({ data }: { data: AppDataset }) {
+export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "installers"> }) {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();

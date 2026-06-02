@@ -1,9 +1,10 @@
 "use client";
 
-import { useAppDataset } from "@/lib/dataset-context";
+import { useDatasetSlices, useDatasetActions } from "@/lib/dataset-context";
 import { CreateRooms } from "@/components/rooms/create-rooms";
 
 export default function ManagementRoomsPage() {
-  const { data, patchData } = useAppDataset();
+  const data = useDatasetSlices(["units", "rooms"]);
+  const { patchData } = useDatasetActions();
   return <CreateRooms data={data} patchData={patchData} routeBasePath="/management/units" />;
 }
