@@ -4,9 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
-  MAX_OWNER_VERIFICATION_PHOTOS,
   OWNER_VERIFICATION_BUCKET,
-  getRemainingOwnerVerificationPhotoSlots,
   normalizeOwnerVerificationNote,
   validateOwnerVerificationNote,
   type OwnerVerificationPhoto,
@@ -86,24 +84,6 @@ export async function uploadOwnerVerificationPhotos(
     const supabase = await createClient();
     const unitError = await assertUnitExists(supabase, unitId);
     if (unitError) return unitError;
-
-    const { count, error: countError } = await supabase
-      .from("owner_verification_photos")
-      .select("id", { count: "exact", head: true })
-      .eq("unit_id", unitId);
-
-    if (countError) return { ok: false, error: countError.message };
-
-    const remaining = getRemainingOwnerVerificationPhotoSlots(count ?? 0);
-    if (files.length > remaining) {
-      return {
-        ok: false,
-        error:
-          remaining === 0
-            ? `This unit already has ${MAX_OWNER_VERIFICATION_PHOTOS} verification photos.`
-            : `You can add ${remaining} more verification photo${remaining === 1 ? "" : "s"}.`,
-      };
-    }
 
     const uploadedPaths: string[] = [];
     const insertedRows: OwnerVerificationPhotoRow[] = [];

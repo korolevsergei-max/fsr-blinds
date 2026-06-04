@@ -1,5 +1,4 @@
 export const OWNER_VERIFICATION_BUCKET = "fsr-owner-verification";
-export const MAX_OWNER_VERIFICATION_PHOTOS = 6;
 export const MAX_OWNER_VERIFICATION_NOTE_LENGTH = 1000;
 export const OWNER_VERIFICATION_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
@@ -28,8 +27,4 @@ export function validateOwnerVerificationNote(note: unknown): string | null {
     return `Notes must be ${MAX_OWNER_VERIFICATION_NOTE_LENGTH} characters or less.`;
   }
   return null;
-}
-
-export function getRemainingOwnerVerificationPhotoSlots(currentCount: number): number {
-  return Math.max(0, MAX_OWNER_VERIFICATION_PHOTOS - Math.max(0, currentCount));
 }

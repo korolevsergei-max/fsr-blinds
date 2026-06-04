@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera, CheckCircle, Plus, Spinner, Trash } from "@phosphor-icons/react";
 import {
@@ -11,8 +11,6 @@ import {
 import { useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import {
   MAX_OWNER_VERIFICATION_NOTE_LENGTH,
-  MAX_OWNER_VERIFICATION_PHOTOS,
-  getRemainingOwnerVerificationPhotoSlots,
   type OwnerVerificationPhoto,
 } from "@/lib/owner-verification-photos";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
@@ -124,13 +122,8 @@ export function OwnerVerificationPhotosScreen({
     };
   }, []);
 
-  const remaining = getRemainingOwnerVerificationPhotoSlots(photos.length);
   const hasDirtyNotes = dirtyIds.size > 0;
   const dirtyNoteCount = dirtyIds.size;
-  const countLabel = useMemo(
-    () => `${photos.length}/${MAX_OWNER_VERIFICATION_PHOTOS}`,
-    [photos.length]
-  );
 
   const setPhotoNote = (photoId: string, note: string) => {
     setNotice("");
@@ -144,15 +137,6 @@ export function OwnerVerificationPhotosScreen({
     setNotice("");
     const selected = Array.from(files ?? []);
     if (selected.length === 0) return;
-
-    if (selected.length > remaining) {
-      setError(
-        remaining === 0
-          ? `This unit already has ${MAX_OWNER_VERIFICATION_PHOTOS} verification photos.`
-          : `You can add ${remaining} more verification photo${remaining === 1 ? "" : "s"}.`
-      );
-      return;
-    }
 
     for (const file of selected) {
       const validation = validateUploadImage(file);
@@ -279,7 +263,7 @@ export function OwnerVerificationPhotosScreen({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={remaining === 0 || uploading}
+              disabled={uploading}
               onClick={() => setPickerOpen(true)}
             >
               <Plus size={15} />
@@ -306,16 +290,11 @@ export function OwnerVerificationPhotosScreen({
       />
 
       <main className="flex flex-col gap-5 px-4 py-5 pb-28">
-        <div className="flex items-center justify-between rounded-[1.25rem] border border-border bg-surface px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Owner verification</p>
-            <p className="mt-0.5 text-xs text-muted">
-              Private owner photos and notes for this unit.
-            </p>
-          </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-accent shadow-[0_0_0_1px_rgba(15,118,110,0.12)]">
-            {countLabel}
-          </span>
+        <div className="rounded-[1.25rem] border border-border bg-surface px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Owner verification</p>
+          <p className="mt-0.5 text-xs text-muted">
+            Private owner photos and notes for this unit.
+          </p>
         </div>
 
         {photos.length === 0 && !uploading && (
@@ -452,7 +431,7 @@ export function OwnerVerificationPhotosScreen({
               type="button"
               variant="secondary"
               size="lg"
-              disabled={remaining === 0 || uploading}
+              disabled={uploading}
               onClick={() => setPickerOpen(true)}
             >
               <Plus size={16} />
