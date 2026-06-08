@@ -161,6 +161,7 @@ export function WindowStageReadonlyView({
                     alt={`${windowItem.label} ${modeTitle} photo`}
                     fill
                     sizes="(max-width: 640px) 100vw, 560px"
+                    unoptimized={photo.publicUrl.startsWith("blob:")}
                     className="select-none object-cover [-webkit-touch-callout:none]"
                     draggable={false}
                   />

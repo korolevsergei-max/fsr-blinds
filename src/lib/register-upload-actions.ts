@@ -1,15 +1,14 @@
 "use client";
 
 /**
- * Pre-registers all queued upload server actions at module load time.
+ * Pre-registers queued upload handlers at module load time.
  * This ensures the action registry is populated even after a page reload,
  * before any form component has mounted. Import this in the root layout.
  */
 import { registerUploadAction } from "@/lib/upload-queue";
 import {
-  uploadWindowPostBracketingPhoto,
-  uploadWindowInstalledPhoto,
-} from "@/app/actions/fsr-data";
+  WINDOW_PHOTO_UPLOAD_ACTION,
+  runWindowPhotoUpload,
+} from "@/lib/window-photo-queue";
 
-registerUploadAction("uploadWindowPostBracketingPhoto", uploadWindowPostBracketingPhoto);
-registerUploadAction("uploadWindowInstalledPhoto", uploadWindowInstalledPhoto);
+registerUploadAction(WINDOW_PHOTO_UPLOAD_ACTION, runWindowPhotoUpload);

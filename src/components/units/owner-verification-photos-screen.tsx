@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Camera, CheckCircle, Plus, Spinner, Trash } from "@phosphor-icons/react";
 import {
+  createOwnerVerificationUploadUrls,
   deleteOwnerVerificationPhoto,
   saveOwnerVerificationPhotoNotes,
   uploadOwnerVerificationPhotos,
@@ -14,6 +15,7 @@ import {
   type OwnerVerificationPhoto,
 } from "@/lib/owner-verification-photos";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
+import { mapWithConcurrency, uploadViaSignedUrl, UPLOAD_CONCURRENCY } from "@/lib/direct-upload";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
@@ -148,11 +150,31 @@ export function OwnerVerificationPhotosScreen({
 
     setUploading(true);
     try {
+      const compressed = await Promise.all(selected.map((file) => compressImageForUpload(file)));
+
       const fd = new FormData();
       fd.set("unitId", unitId);
-      for (const file of selected) {
-        const compressed = await compressImageForUpload(file);
-        fd.append("photos", compressed, compressed.name);
+
+      // Try uploading the bytes straight to the private bucket; fall back to sending the
+      // Files through the server action if the direct upload can't be started/completed.
+      let storagePaths: string[] | null = null;
+      const mint = await createOwnerVerificationUploadUrls({
+        unitId,
+        files: compressed.map((f) => ({ contentType: f.type, fileName: f.name, size: f.size })),
+      });
+      if (mint.ok && mint.uploads.length === compressed.length) {
+        const uploads = await mapWithConcurrency(mint.uploads, UPLOAD_CONCURRENCY, (target, i) =>
+          uploadViaSignedUrl(mint.bucket, target, compressed[i])
+        );
+        if (uploads.every((result) => result.ok)) {
+          storagePaths = mint.uploads.map((u) => u.path);
+        }
+      }
+
+      if (storagePaths) {
+        for (const p of storagePaths) fd.append("storagePaths", p);
+      } else {
+        for (const f of compressed) fd.append("photos", f, f.name);
       }
 
       const result = await uploadOwnerVerificationPhotos(fd);

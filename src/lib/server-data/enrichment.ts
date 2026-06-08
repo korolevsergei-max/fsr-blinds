@@ -273,7 +273,13 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
 }
 
 export async function finalizeDataset(dataset: AppDataset): Promise<AppDataset> {
-  const withIssues = await withPostInstallIssues(dataset);
+  // withLiveUnitStatuses reads `unit.hasOpenPostInstallIssue` (set by withPostInstallIssues)
+  // to derive `currentStage`, so it cannot run in parallel with withPostInstallIssues —
+  // but withManufacturingEscalations only needs the base unit IDs and is independent of both.
+  const [withIssues, withEscalations] = await Promise.all([
+    withPostInstallIssues(dataset),
+    withManufacturingEscalations(dataset),
+  ]);
   const withLiveStatuses = await withLiveUnitStatuses(withIssues);
-  return withManufacturingEscalations(withLiveStatuses);
+  return { ...withLiveStatuses, manufacturingEscalations: withEscalations.manufacturingEscalations };
 }

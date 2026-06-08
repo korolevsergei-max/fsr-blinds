@@ -4,9 +4,14 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, CheckCircle, Images, Plus, Spinner, X } from "@phosphor-icons/react";
-import { uploadRoomFinishedPhotos, deleteRoomFinishedPhoto } from "@/app/actions/fsr-data";
+import {
+  uploadRoomFinishedPhotos,
+  createRoomFinishedUploadUrls,
+  deleteRoomFinishedPhoto,
+} from "@/app/actions/fsr-data";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { compressImageForUpload, validateUploadImage } from "@/lib/image-upload";
+import { mapWithConcurrency, uploadViaSignedUrl, UPLOAD_CONCURRENCY } from "@/lib/direct-upload";
 import { PhotoSourcePicker } from "@/components/ui/photo-source-picker";
 
 const MAX_PHOTOS = 3;
@@ -56,15 +61,34 @@ export function RoomFinishedPhotos({
     setUploading(true);
     startTransition(async () => {
       try {
+        const compressed = await Promise.all(toUpload.map((file) => compressImageForUpload(file)));
+        const previews = toUpload.map((file) => URL.createObjectURL(file));
+
         const fd = new FormData();
         fd.set("unitId", unitId);
         fd.set("roomId", roomId);
 
-        const previews: string[] = [];
-        for (const file of toUpload) {
-          const compressed = await compressImageForUpload(file);
-          fd.append("photos", compressed, compressed.name);
-          previews.push(URL.createObjectURL(file));
+        // Try uploading the bytes straight to storage; fall back to sending the Files
+        // through the server action if the direct upload can't be started/completed.
+        let storagePaths: string[] | null = null;
+        const mint = await createRoomFinishedUploadUrls({
+          unitId,
+          roomId,
+          files: compressed.map((f) => ({ contentType: f.type, fileName: f.name, size: f.size })),
+        });
+        if (mint.ok && mint.uploads.length === compressed.length) {
+          const uploads = await mapWithConcurrency(mint.uploads, UPLOAD_CONCURRENCY, (target, i) =>
+            uploadViaSignedUrl(mint.bucket, target, compressed[i])
+          );
+          if (uploads.every((result) => result.ok)) {
+            storagePaths = mint.uploads.map((u) => u.path);
+          }
+        }
+
+        if (storagePaths) {
+          for (const p of storagePaths) fd.append("storagePaths", p);
+        } else {
+          for (const f of compressed) fd.append("photos", f, f.name);
         }
 
         const result = await uploadRoomFinishedPhotos(fd);

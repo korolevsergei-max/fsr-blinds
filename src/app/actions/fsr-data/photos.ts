@@ -6,7 +6,120 @@ import { getCurrentUser } from "@/lib/auth";
 import { UNIT_PHOTO_STAGES, type RiskFlag, type UnitPhotoStage, type UnitStatus } from "@/lib/types";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
-import { BUCKET, MAX_PHOTOS_PER_STAGE, type ActionResult, type UnitMutationResult, normalizeStorageError, validateIncomingImageFile, revalidateUnit, getPhaseForStage, countWindowStagePhotos, formatStagePhotoLabel, emitUnitProgressNotification, refreshUnitAggregates, finalizeUnitMutation, logUnitActivity, resolveFieldActor, getSchedulerForUnit } from "./_shared";
+import { BUCKET, MAX_PHOTOS_PER_STAGE, type ActionResult, type UnitMutationResult, normalizeStorageError, validateIncomingImageFile, validateDeclaredImageUpload, buildWindowPhotoPath, isWithinWindowPhotoNamespace, buildRoomFinishedPath, isWithinRoomFinishedNamespace, extFromUpload, revalidateUnit, getPhaseForStage, countWindowStagePhotos, formatStagePhotoLabel, emitUnitProgressNotification, refreshUnitAggregates, finalizeUnitMutation, logUnitActivity, resolveFieldActor, getSchedulerForUnit } from "./_shared";
+
+type WindowPhotoStage = "bracketed_measured" | "installed_pending_approval";
+
+type DeclaredFile = { contentType: string; fileName?: string; size: number };
+
+/**
+ * Mints a signed upload URL for a single window stage photo (post-bracketing / installed).
+ * The server authenticates the caller, validates the unit→room→window relationship and the
+ * declared file, then builds the storage path itself and returns a token the client uses to
+ * upload the bytes directly to Supabase Storage. The client never chooses the path.
+ */
+export async function createWindowPhotoUploadUrl(input: {
+  unitId: string;
+  roomId: string;
+  windowId: string;
+  stage: WindowPhotoStage;
+  contentType: string;
+  fileName?: string;
+  size: number;
+}): Promise<
+  { ok: true; bucket: string; path: string; token: string } | { ok: false; error: string }
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+
+    const { unitId, roomId, windowId, stage } = input;
+    if (!unitId || !roomId || !windowId) {
+      return { ok: false, error: "Missing unit, room, or window." };
+    }
+    if (stage !== "bracketed_measured" && stage !== "installed_pending_approval") {
+      return { ok: false, error: "Invalid photo stage." };
+    }
+    const declaredError = validateDeclaredImageUpload(
+      { contentType: input.contentType, size: input.size },
+      { fieldLabel: "Photo" }
+    );
+    if (declaredError) return declaredError;
+
+    const supabase = await createClient();
+    const [roomResult, windowResult] = await Promise.all([
+      supabase.from("rooms").select("unit_id").eq("id", roomId).single(),
+      supabase.from("windows").select("id, room_id").eq("id", windowId).single(),
+    ]);
+    if (roomResult.error || !roomResult.data || roomResult.data.unit_id !== unitId) {
+      return { ok: false, error: "Room does not belong to this unit." };
+    }
+    if (windowResult.error || !windowResult.data || windowResult.data.room_id !== roomId) {
+      return { ok: false, error: "Window not found." };
+    }
+
+    const ext = extFromUpload(input.contentType, input.fileName);
+    const path = buildWindowPhotoPath(unitId, roomId, stage, ext);
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
+    if (error || !data) {
+      return { ok: false, error: normalizeStorageError(error?.message ?? "Could not start upload.") };
+    }
+    return { ok: true, bucket: BUCKET, path, token: data.token };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Mints signed upload URLs for up to 3 room "finished" photos in a single round-trip.
+ * Server builds each path; the client uploads the bytes directly and then records the rows.
+ */
+export async function createRoomFinishedUploadUrls(input: {
+  unitId: string;
+  roomId: string;
+  files: DeclaredFile[];
+}): Promise<
+  { ok: true; bucket: string; uploads: { path: string; token: string }[] } | { ok: false; error: string }
+> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+
+    const { unitId, roomId, files } = input;
+    if (!unitId || !roomId) return { ok: false, error: "Missing unit or room" };
+    if (!files || files.length === 0) return { ok: false, error: "Add at least one photo" };
+    if (files.length > 3) return { ok: false, error: "Maximum 3 photos allowed" };
+    for (const file of files) {
+      const declaredError = validateDeclaredImageUpload(file, { fieldLabel: "Photo" });
+      if (declaredError) return declaredError;
+    }
+
+    const supabase = await createClient();
+    const { data: room, error: roomError } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("id", roomId)
+      .eq("unit_id", unitId)
+      .single();
+    if (roomError || !room) return { ok: false, error: "Room not found" };
+
+    const uploads: { path: string; token: string }[] = [];
+    for (const file of files) {
+      const ext = extFromUpload(file.contentType, file.fileName);
+      const path = buildRoomFinishedPath(unitId, roomId, ext);
+      const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
+      if (error || !data) {
+        return { ok: false, error: normalizeStorageError(error?.message ?? "Could not start upload.") };
+      }
+      uploads.push({ path, token: data.token });
+    }
+    return { ok: true, bucket: BUCKET, uploads };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
 
 export async function uploadUnitStagePhotos(
   formData: FormData
@@ -130,18 +243,21 @@ export async function uploadWindowPostBracketingPhoto(
     const notes = String(formData.get("notes") ?? "");
     const riskFlag = String(formData.get("riskFlag") ?? "green") as RiskFlag;
     const photo = formData.get("photo");
+    const storagePath = String(formData.get("storagePath") ?? "");
 
     if (!unitId || !roomId || !windowId) {
       return { ok: false, error: "Missing unit, room, or window." };
     }
     const isGreen = riskFlag === "green";
-    const hasPhoto = photo instanceof File && photo.size > 0;
+    const hasPhotoFile = photo instanceof File && photo.size > 0;
+    const hasDirectUpload = storagePath.length > 0;
+    const hasPhoto = hasPhotoFile || hasDirectUpload;
 
     if (!isGreen && !hasPhoto) {
       return { ok: false, error: "Post-bracketing photo is required for yellow or red risk." };
     }
 
-    if (hasPhoto) {
+    if (hasPhotoFile) {
       const photoValidation = validateIncomingImageFile(photo as File, {
         fieldLabel: "Post-bracketing photo",
       });
@@ -191,24 +307,34 @@ export async function uploadWindowPostBracketingPhoto(
 
     let mediaId: string | undefined;
     let photoUrl: string | null = null;
-    if (hasPhoto && photo instanceof File) {
+    if (hasPhoto) {
       const existingCount = await countWindowStagePhotos(supabase, windowId, "bracketed_measured");
       if (existingCount >= MAX_PHOTOS_PER_STAGE) {
         return { ok: false, error: `Maximum of ${MAX_PHOTOS_PER_STAGE} photos per stage allowed.` };
       }
 
-      const ext =
-        (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const path = `${unitId}/${roomId}/post-bracketing/${crypto.randomUUID()}.${ext}`;
-      const buf = new Uint8Array(await photo.arrayBuffer());
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, buf, {
-          contentType: photo.type || "image/jpeg",
-          upsert: false,
-        });
-      if (uploadError) {
-        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      let path: string;
+      if (hasDirectUpload) {
+        // Bytes were uploaded directly to storage via a server-minted signed URL.
+        if (!isWithinWindowPhotoNamespace(storagePath, unitId, roomId, "bracketed_measured")) {
+          return { ok: false, error: "Invalid upload path." };
+        }
+        path = storagePath;
+      } else {
+        // Legacy fallback: read the bytes off the request and upload them server-side.
+        const file = photo as File;
+        const ext = extFromUpload(file.type, file.name);
+        path = buildWindowPhotoPath(unitId, roomId, "bracketed_measured", ext);
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, buf, {
+            contentType: file.type || "image/jpeg",
+            upsert: false,
+          });
+        if (uploadError) {
+          return { ok: false, error: normalizeStorageError(uploadError.message) };
+        }
       }
 
       const {
@@ -284,19 +410,22 @@ export async function uploadWindowInstalledPhoto(
     const notes = String(formData.get("notes") ?? "");
     const riskFlag = String(formData.get("riskFlag") ?? "green") as RiskFlag;
     const photo = formData.get("photo");
+    const storagePath = String(formData.get("storagePath") ?? "");
     const overrideBracketing = formData.get("overrideBracketing") === "true";
 
     if (!unitId || !roomId || !windowId) {
       return { ok: false, error: "Missing unit, room, or window." };
     }
     const isGreen = riskFlag === "green";
-    const hasPhoto = photo instanceof File && photo.size > 0;
+    const hasPhotoFile = photo instanceof File && photo.size > 0;
+    const hasDirectUpload = storagePath.length > 0;
+    const hasPhoto = hasPhotoFile || hasDirectUpload;
 
     if (!isGreen && !hasPhoto) {
       return { ok: false, error: "Installed photo is required for yellow or red risk." };
     }
 
-    if (hasPhoto) {
+    if (hasPhotoFile) {
       const photoValidation = validateIncomingImageFile(photo as File, {
         fieldLabel: "Installed photo",
       });
@@ -359,24 +488,34 @@ export async function uploadWindowInstalledPhoto(
 
     let mediaId: string | undefined;
     let photoUrl: string | null = null;
-    if (hasPhoto && photo instanceof File) {
+    if (hasPhoto) {
       const existingCount = await countWindowStagePhotos(supabase, windowId, "installed_pending_approval");
       if (existingCount >= MAX_PHOTOS_PER_STAGE) {
         return { ok: false, error: `Maximum of ${MAX_PHOTOS_PER_STAGE} photos per stage allowed.` };
       }
 
-      const ext =
-        (photo.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const path = `${unitId}/${roomId}/installed/${crypto.randomUUID()}.${ext}`;
-      const buf = new Uint8Array(await photo.arrayBuffer());
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, buf, {
-          contentType: photo.type || "image/jpeg",
-          upsert: false,
-        });
-      if (uploadError) {
-        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      let path: string;
+      if (hasDirectUpload) {
+        // Bytes were uploaded directly to storage via a server-minted signed URL.
+        if (!isWithinWindowPhotoNamespace(storagePath, unitId, roomId, "installed_pending_approval")) {
+          return { ok: false, error: "Invalid upload path." };
+        }
+        path = storagePath;
+      } else {
+        // Legacy fallback: read the bytes off the request and upload them server-side.
+        const file = photo as File;
+        const ext = extFromUpload(file.type, file.name);
+        path = buildWindowPhotoPath(unitId, roomId, "installed_pending_approval", ext);
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, buf, {
+            contentType: file.type || "image/jpeg",
+            upsert: false,
+          });
+        if (uploadError) {
+          return { ok: false, error: normalizeStorageError(uploadError.message) };
+        }
       }
 
       const {
@@ -499,19 +638,25 @@ export async function uploadRoomFinishedPhotos(
     const files = formData
       .getAll("photos")
       .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+    // Direct-to-storage paths (bytes already uploaded via server-minted signed URLs).
+    const directPaths = formData.getAll("storagePaths").map(String).filter(Boolean);
+    const directMode = directPaths.length > 0;
 
     if (!unitId || !roomId) {
       return { ok: false, error: "Missing unit or room" };
     }
-    if (files.length === 0) {
+    const count = directMode ? directPaths.length : files.length;
+    if (count === 0) {
       return { ok: false, error: "Add at least one photo" };
     }
-    if (files.length > 3) {
+    if (count > 3) {
       return { ok: false, error: "Maximum 3 photos allowed" };
     }
-    for (const file of files) {
-      const validation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
-      if (validation) return validation;
+    if (!directMode) {
+      for (const file of files) {
+        const validation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+        if (validation) return validation;
+      }
     }
 
     const supabase = await createClient();
@@ -530,23 +675,36 @@ export async function uploadRoomFinishedPhotos(
     const uploadedPaths: string[] = [];
     const mediaIds: string[] = [];
 
-    for (const [index, file] of files.entries()) {
-      const ext =
-        (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-      const path = `${unitId}/rooms/${roomId}/finished/${crypto.randomUUID()}.${ext}`;
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, buf, { contentType: file.type || "image/jpeg", upsert: false });
+    const rollback = async () => {
+      if (mediaIds.length > 0) {
+        await supabase.from("media_uploads").delete().in("id", mediaIds);
+      }
+      if (uploadedPaths.length > 0) {
+        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+      }
+    };
 
-      if (uploadError) {
-        if (mediaIds.length > 0) {
-          await supabase.from("media_uploads").delete().in("id", mediaIds);
+    for (let index = 0; index < count; index++) {
+      let path: string;
+      if (directMode) {
+        const candidate = directPaths[index];
+        if (!isWithinRoomFinishedNamespace(candidate, unitId, roomId)) {
+          await rollback();
+          return { ok: false, error: "Invalid upload path." };
         }
-        if (uploadedPaths.length > 0) {
-          await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        path = candidate;
+      } else {
+        const file = files[index];
+        const ext = extFromUpload(file.type, file.name);
+        path = buildRoomFinishedPath(unitId, roomId, ext);
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const { error: uploadError } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, buf, { contentType: file.type || "image/jpeg", upsert: false });
+        if (uploadError) {
+          await rollback();
+          return { ok: false, error: normalizeStorageError(uploadError.message) };
         }
-        return { ok: false, error: normalizeStorageError(uploadError.message) };
       }
 
       uploadedPaths.push(path);
@@ -557,9 +715,7 @@ export async function uploadRoomFinishedPhotos(
 
       const mediaId = `med-${crypto.randomUUID()}`;
       const label =
-        files.length === 1
-          ? "Finished room"
-          : `Finished room (${index + 1}/${files.length})`;
+        count === 1 ? "Finished room" : `Finished room (${index + 1}/${count})`;
       const { error: mediaInsertError } = await supabase.from("media_uploads").insert({
         id: mediaId,
         storage_path: path,
@@ -573,10 +729,7 @@ export async function uploadRoomFinishedPhotos(
       });
 
       if (mediaInsertError) {
-        if (mediaIds.length > 0) {
-          await supabase.from("media_uploads").delete().in("id", mediaIds);
-        }
-        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        await rollback();
         return { ok: false, error: mediaInsertError.message };
       }
 

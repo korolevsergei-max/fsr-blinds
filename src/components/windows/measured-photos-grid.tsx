@@ -74,6 +74,7 @@ export function MeasuredPhotosGrid({
               alt={photo.label ?? "Photo"}
               fill
               sizes="(max-width: 640px) 50vw, 280px"
+              unoptimized={photo.publicUrl.startsWith("blob:")}
               className="object-cover"
             />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6 pointer-events-none">

@@ -4,6 +4,34 @@ const DB_NAME = "fsr-upload-queue";
 const DB_VERSION = 1;
 const STORE_NAME = "pending-uploads";
 
+/** Result returned by a record action, used to reconcile the optimistic UI on success. */
+export type QueuedUploadResult = {
+  mediaId?: string;
+  photoUrl?: string | null;
+  unitStatus?: string;
+};
+
+/** Contract every registered upload handler returns. */
+export type UploadHandlerResult = { ok: boolean; error?: string; result?: QueuedUploadResult };
+
+/**
+ * Metadata carried alongside a queued upload so the store-level reconciler can roll back the
+ * optimistic patch if the upload permanently fails. The background handler itself reconciles the
+ * media gallery from the queued FormData; this snapshot is only for the dataset-store revert.
+ */
+export type QueuedUploadReconcile = {
+  tempMediaId: string;
+  unitId: string;
+  windowId: string;
+  stage: string;
+  /** What this submission optimistically flipped, so we revert exactly that on failure. */
+  prev: {
+    flippedBracketed: boolean;
+    flippedInstalled: boolean;
+    photoAdded: boolean;
+  };
+};
+
 export type QueuedUpload = {
   id: string;
   formDataEntries: [string, string][];
@@ -15,11 +43,21 @@ export type QueuedUpload = {
   retries: number;
   createdAt: number;
   errorMessage?: string;
+  reconcile?: QueuedUploadReconcile;
+};
+
+/** Emitted once when a queued upload reaches a terminal outcome (recorded, or failed after retries). */
+export type UploadResolution = {
+  item: QueuedUpload;
+  outcome: "success" | "failed";
+  result?: QueuedUploadResult;
 };
 
 type UploadQueueListener = (items: QueuedUpload[]) => void;
+type ResolutionListener = (resolution: UploadResolution) => void;
 
 const listeners = new Set<UploadQueueListener>();
+const resolutionListeners = new Set<ResolutionListener>();
 let processingActive = false;
 
 function openDB(): Promise<IDBDatabase> {
@@ -81,9 +119,23 @@ export function subscribeToQueue(fn: UploadQueueListener): () => void {
   return () => listeners.delete(fn);
 }
 
+/**
+ * Subscribe to terminal upload outcomes. Used by the in-provider reconciler to confirm unit status
+ * on success and roll back the optimistic patch on permanent failure. Fires once per item.
+ */
+export function subscribeToResolutions(fn: ResolutionListener): () => void {
+  resolutionListeners.add(fn);
+  return () => resolutionListeners.delete(fn);
+}
+
+function emitResolution(resolution: UploadResolution) {
+  resolutionListeners.forEach((fn) => fn(resolution));
+}
+
 export async function enqueueUpload(
   actionName: string,
-  formData: FormData
+  formData: FormData,
+  reconcile?: QueuedUploadReconcile
 ): Promise<string> {
   const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const entries: [string, string][] = [];
@@ -111,6 +163,7 @@ export async function enqueueUpload(
     status: "queued",
     retries: 0,
     createdAt: Date.now(),
+    reconcile,
   };
 
   await putItem(item);
@@ -147,12 +200,12 @@ export async function retryFailed(): Promise<void> {
   processQueue();
 }
 
-// Action registry — server actions registered here so they survive page reloads
-const actionRegistry = new Map<string, (fd: FormData) => Promise<{ ok: boolean; error?: string }>>();
+// Action registry — handlers registered here so they survive page reloads
+const actionRegistry = new Map<string, (fd: FormData) => Promise<UploadHandlerResult>>();
 
 export function registerUploadAction(
   name: string,
-  action: (fd: FormData) => Promise<{ ok: boolean; error?: string }>
+  action: (fd: FormData) => Promise<UploadHandlerResult>
 ) {
   actionRegistry.set(name, action);
 }
@@ -163,7 +216,7 @@ const ACTION_WAIT_MS = 8000;
 // Hard timeout on each upload attempt so a hung network request doesn't block forever
 const UPLOAD_TIMEOUT_MS = 60000;
 
-function waitForAction(name: string): Promise<((fd: FormData) => Promise<{ ok: boolean; error?: string }>) | null> {
+function waitForAction(name: string): Promise<((fd: FormData) => Promise<UploadHandlerResult>) | null> {
   return new Promise((resolve) => {
     const action = actionRegistry.get(name);
     if (action) { resolve(action); return; }
@@ -204,12 +257,15 @@ async function processQueue(): Promise<void> {
         if (next.retries >= MAX_RETRIES) {
           next.status = "failed";
           next.errorMessage = "Upload action unavailable — please retry manually";
+          await putItem(next);
+          notifyListeners();
+          emitResolution({ item: next, outcome: "failed" });
         } else {
           next.status = "queued";
           next.errorMessage = "Action not ready, will retry";
+          await putItem(next);
+          notifyListeners();
         }
-        await putItem(next);
-        notifyListeners();
         continue;
       }
 
@@ -232,31 +288,38 @@ async function processQueue(): Promise<void> {
         if (result.ok) {
           await deleteItem(next.id);
           notifyListeners();
+          emitResolution({ item: next, outcome: "success", result: result.result });
         } else {
           next.retries += 1;
           if (next.retries >= MAX_RETRIES) {
             next.status = "failed";
             next.errorMessage = result.error ?? "Upload failed after retries";
+            await putItem(next);
+            notifyListeners();
+            emitResolution({ item: next, outcome: "failed" });
           } else {
             next.status = "queued";
             next.errorMessage = result.error;
+            await putItem(next);
+            notifyListeners();
+            await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
           }
-          await putItem(next);
-          notifyListeners();
-          await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
         }
       } catch {
         next.retries += 1;
         if (next.retries >= MAX_RETRIES) {
           next.status = "failed";
           next.errorMessage = "Network error — please retry";
+          await putItem(next);
+          notifyListeners();
+          emitResolution({ item: next, outcome: "failed" });
         } else {
           next.status = "queued";
           next.errorMessage = "Network error, retrying";
+          await putItem(next);
+          notifyListeners();
+          await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
         }
-        await putItem(next);
-        notifyListeners();
-        await new Promise((r) => setTimeout(r, Math.min(3000 * next.retries, 15000)));
       }
     }
   } finally {

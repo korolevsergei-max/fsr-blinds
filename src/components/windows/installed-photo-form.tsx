@@ -5,10 +5,11 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, CheckCircle, Plus, Trash, UploadSimple, User } from "@phosphor-icons/react";
 import {
-  uploadWindowInstalledPhoto,
   deleteWindowStagePhoto,
   undoWindowStage,
 } from "@/app/actions/fsr-data";
+import { enqueueUpload } from "@/lib/upload-queue";
+import { WINDOW_PHOTO_UPLOAD_ACTION } from "@/lib/window-photo-queue";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -190,21 +191,15 @@ export function InstalledPhotoForm({
             setOptimizingPhoto(false);
           }
         }
-        const fd = new FormData();
-        fd.set("unitId", unit.id);
-        fd.set("roomId", room.id);
-        fd.set("windowId", windowItem.id);
-        if (compressedPhoto) fd.set("photo", compressedPhoto, compressedPhoto.name);
-        fd.set("riskFlag", riskFlag);
-        fd.set("notes", notes);
-        if (overrideBracketing) fd.set("overrideBracketing", "true");
 
-        const result = await uploadWindowInstalledPhoto(fd);
-        if (!result.ok) {
-          setError(result.error ?? "Failed to save. Please try again.");
-          return;
-        }
+        const hasPhoto = compressedPhoto != null;
+        // Only the flags this submission actually flips are eligible for rollback on failure.
+        const flippedInstalled = !windowItem.installed;
+        const flippedBracketed = overrideBracketing && !windowItem.bracketed;
+        const tempMediaId = hasPhoto ? `temp-${crypto.randomUUID()}` : "";
+        const mediaLabel = `${windowItem.label} — Installed`;
 
+        // Optimistic patch: flip the stage flags + recompute status, and show the photo now.
         datasetActions?.patchData((prev) =>
           reconcileUnitDerivedState(
             {
@@ -222,18 +217,15 @@ export function InstalledPhotoForm({
               ),
             },
             unit.id,
-            {
-              unitStatus: result.unitStatus,
-              photoDelta: result.photoCountDelta ?? 0,
-            }
+            { photoDelta: hasPhoto ? 1 : 0 }
           )
         );
 
-        if (result.mediaId && result.photoUrl) {
+        if (hasPhoto && compressedPhoto) {
           upsertUnitStageMediaItem(unit.id, {
-            id: result.mediaId,
-            publicUrl: result.photoUrl,
-            label: `${windowItem.label} — Installed`,
+            id: tempMediaId,
+            publicUrl: URL.createObjectURL(compressedPhoto),
+            label: mediaLabel,
             unitId: unit.id,
             roomId: room.id,
             roomName: room.name,
@@ -247,6 +239,29 @@ export function InstalledPhotoForm({
             uploadedByRole: null,
           });
         }
+
+        // Enqueue the mint→upload→record flow to run in the background queue (with retry).
+        const fd = new FormData();
+        fd.set("unitId", unit.id);
+        fd.set("roomId", room.id);
+        fd.set("windowId", windowItem.id);
+        fd.set("stage", "installed_pending_approval");
+        fd.set("riskFlag", riskFlag);
+        fd.set("notes", notes);
+        if (overrideBracketing) fd.set("overrideBracketing", "true");
+        fd.set("tempMediaId", tempMediaId);
+        fd.set("roomName", room.name ?? "");
+        fd.set("windowLabel", windowItem.label ?? "");
+        fd.set("mediaLabel", mediaLabel);
+        if (compressedPhoto) fd.set("photo", compressedPhoto, compressedPhoto.name);
+
+        await enqueueUpload(WINDOW_PHOTO_UPLOAD_ACTION, fd, {
+          tempMediaId,
+          unitId: unit.id,
+          windowId: windowItem.id,
+          stage: "installed_pending_approval",
+          prev: { flippedBracketed, flippedInstalled, photoAdded: hasPhoto },
+        });
 
         router.push(`${routeBasePath}/${id}/rooms/${roomId}`);
       } catch {
@@ -348,7 +363,9 @@ export function InstalledPhotoForm({
 
           <div className="grid grid-cols-2 gap-2.5">
             {/* Existing saved photos */}
-            {existingPhotos.map((photo) => (
+            {existingPhotos.map((photo) => {
+              const isPending = photo.id.startsWith("temp-");
+              return (
               <div
                 key={photo.id}
                 className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-zinc-100"
@@ -358,6 +375,7 @@ export function InstalledPhotoForm({
                   alt={photo.label ?? "Photo"}
                   fill
                   sizes="(max-width: 640px) 50vw, 280px"
+                  unoptimized={photo.publicUrl.startsWith("blob:")}
                   className="object-cover"
                 />
                 {/* Uploader overlay */}
@@ -373,21 +391,29 @@ export function InstalledPhotoForm({
                     {formatRelativeTime(photo.createdAt)}
                   </p>
                 </div>
-                {/* Delete button */}
-                <button
-                  type="button"
-                  disabled={deletingId === photo.id}
-                  onClick={() => onDeleteExisting(photo)}
-                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:bg-black/70 disabled:opacity-40"
-                >
-                  {deletingId === photo.id ? (
+                {/* Pending (still uploading) badge — or delete for saved photos */}
+                {isPending ? (
+                  <div className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
                     <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                  ) : (
-                    <Trash size={13} weight="bold" />
-                  )}
-                </button>
+                    Uploading…
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={deletingId === photo.id}
+                    onClick={() => onDeleteExisting(photo)}
+                    className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-opacity hover:bg-black/70 disabled:opacity-40"
+                  >
+                    {deletingId === photo.id ? (
+                      <span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                    ) : (
+                      <Trash size={13} weight="bold" />
+                    )}
+                  </button>
+                )}
               </div>
-            ))}
+              );
+            })}
 
             {/* Staged (new) photo preview */}
             {stagedFile && stagedPreview && (

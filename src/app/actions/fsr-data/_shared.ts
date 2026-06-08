@@ -83,6 +83,98 @@ export function getStageForWindowUpload(): UnitPhotoStage {
   return "scheduled_bracketing";
 }
 
+// --- Direct-to-storage upload helpers (signed upload URLs) ---
+// The SERVER owns the storage path namespace; the client never chooses a path.
+
+/** Storage subfolder for a window stage photo. */
+export function windowPhotoStageDir(
+  stage: "bracketed_measured" | "installed_pending_approval"
+): string {
+  return stage === "installed_pending_approval" ? "installed" : "post-bracketing";
+}
+
+/** Derives a safe file extension from the declared contentType (falling back to the file name). */
+export function extFromUpload(
+  contentType?: string | null,
+  fileName?: string | null
+): string {
+  switch (contentType) {
+    case "image/jpeg":
+    case "image/jpg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/heic":
+      return "heic";
+  }
+  const fromName = (fileName?.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return fromName || "jpg";
+}
+
+/** Server-built storage path for a window stage photo. */
+export function buildWindowPhotoPath(
+  unitId: string,
+  roomId: string,
+  stage: "bracketed_measured" | "installed_pending_approval",
+  ext: string
+): string {
+  return `${unitId}/${roomId}/${windowPhotoStageDir(stage)}/${crypto.randomUUID()}.${ext}`;
+}
+
+/** Validates a client-supplied storage path stays within the unit/room/stage namespace. */
+export function isWithinWindowPhotoNamespace(
+  path: string,
+  unitId: string,
+  roomId: string,
+  stage: "bracketed_measured" | "installed_pending_approval"
+): boolean {
+  const prefix = `${unitId}/${roomId}/${windowPhotoStageDir(stage)}/`;
+  return path.startsWith(prefix) && !path.includes("..");
+}
+
+/** Server-built storage path for a room "finished" photo. */
+export function buildRoomFinishedPath(unitId: string, roomId: string, ext: string): string {
+  return `${unitId}/rooms/${roomId}/finished/${crypto.randomUUID()}.${ext}`;
+}
+
+export function isWithinRoomFinishedNamespace(
+  path: string,
+  unitId: string,
+  roomId: string
+): boolean {
+  const prefix = `${unitId}/rooms/${roomId}/finished/`;
+  return path.startsWith(prefix) && !path.includes("..");
+}
+
+/**
+ * Validates declared file metadata for a direct-to-storage upload. The bytes are NOT on the
+ * server when a signed upload URL is minted, so we validate the declared contentType + size,
+ * mirroring validateIncomingImageFile's semantics.
+ */
+export function validateDeclaredImageUpload(
+  { contentType, size }: { contentType?: string | null; size?: number | null },
+  {
+    fieldLabel = "Image",
+    maxBytes = MAX_IMAGE_UPLOAD_BYTES,
+  }: { fieldLabel?: string; maxBytes?: number } = {}
+): { ok: false; error: string } | null {
+  if (!size || size <= 0) {
+    return { ok: false, error: `${fieldLabel} is required.` };
+  }
+  if (!contentType || !contentType.startsWith("image/")) {
+    return { ok: false, error: `${fieldLabel} must be an image file.` };
+  }
+  if (size > maxBytes) {
+    return {
+      ok: false,
+      error: `${fieldLabel} is too large. Please upload an image under ${Math.round(maxBytes / (1024 * 1024))}MB.`,
+    };
+  }
+  return null;
+}
+
 export const MAX_PHOTOS_PER_STAGE = 3;
 
 export async function countWindowStagePhotos(
