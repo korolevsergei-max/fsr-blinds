@@ -1,0 +1,71 @@
+name: Backup (DB + Storage) to Google Drive
+
+# Nightly off-site backup of the FSR Blinds database and Storage photos to Google
+# Drive. This is independent of Supabase's own backups, so a lost/compromised
+# Supabase account or a bad migration cannot take the backup with it.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL   Direct/session Postgres connection string incl. password
+#                     (Supabase Dashboard -> Settings -> Database -> Connection string -> URI).
+#   RCLONE_CONF_B64   base64 of an rclone.conf defining two remotes:
+#                       [gdrive] type=drive  (Google Drive OAuth token)
+#                       [supa]   type=s3     (Supabase S3-compatible Storage endpoint)
+#                     See docs/BACKUP_RUNBOOK.md for how to generate it.
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC daily (~3-4am US Eastern)
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgresql-client-17 and rclone
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          pg_dump --version && rclone version | head -1
+
+      - name: Write rclone config from secret
+        run: |
+          mkdir -p ~/.config/rclone
+          echo "${{ secrets.RCLONE_CONF_B64 }}" | base64 -d > ~/.config/rclone/rclone.conf
+          chmod 600 ~/.config/rclone/rclone.conf
+          # Sanity check: both remotes must exist (does not print secrets).
+          rclone listremotes | sort | tee /tmp/remotes
+          grep -qx "gdrive:" /tmp/remotes
+          grep -qx "supa:"   /tmp/remotes
+
+      - name: Run backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DRIVE_ROOT: FSR-Blinds-Backups
+          RETENTION_DAYS: "30"
+        run: bash scripts/backup-run.sh "${RUNNER_TEMP}/backup-out"
+
+      - name: Upload DB dump as workflow artifact (secondary 14-day copy)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fsr-blinds-db-dump
+          path: ${{ runner.temp }}/backup-out/*.sql.gz
+          retention-days: 14
+          if-no-files-found: warn
