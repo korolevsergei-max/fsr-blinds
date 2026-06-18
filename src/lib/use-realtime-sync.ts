@@ -155,23 +155,23 @@ export function useRealtimeSync(
       }, 120);
     }
 
-    function sub<Row>(
+    // Single channel with multiple postgres_changes listeners — one WebSocket connection
+    // instead of one per table.
+    let ch = supabase.channel(`realtime-${loaderKind}`);
+
+    function on<Row>(
       table: string,
       handler: (payload: PgPayload<Row>) => void
     ) {
-      const ch = supabase
-        .channel(`realtime-${table}`)
-        .on(
-          "postgres_changes" as "system",
-          { event: "*", schema: "public", table } as unknown as { event: "system" },
-          handler as unknown as (payload: { [key: string]: unknown }) => void
-        )
-        .subscribe();
-      channels.push(ch);
+      ch = ch.on(
+        "postgres_changes" as "system",
+        { event: "*", schema: "public", table } as unknown as { event: "system" },
+        handler as unknown as (payload: { [key: string]: unknown }) => void
+      );
     }
 
     if (shouldTrackMetaTables) {
-      sub<ClientRow>("clients", (p) => {
+      on<ClientRow>("clients", (p) => {
         patchRef.current((prev) => {
           const id = p.old.id;
           if (p.eventType === "DELETE" && id) {
@@ -181,7 +181,7 @@ export function useRealtimeSync(
         });
       });
 
-      sub<BuildingRow>("buildings", (p) => {
+      on<BuildingRow>("buildings", (p) => {
         patchRef.current((prev) => {
           const id = p.old.id;
           if (p.eventType === "DELETE" && id) {
@@ -192,7 +192,7 @@ export function useRealtimeSync(
       });
     }
 
-    sub<UnitRow>("units", (p) => {
+    on<UnitRow>("units", (p) => {
       patchRef.current((prev) => {
         const id = p.old.id;
         if (p.eventType === "DELETE" && id) {
@@ -204,7 +204,7 @@ export function useRealtimeSync(
       });
     });
 
-    sub<RoomRow>("rooms", (p) => {
+    on<RoomRow>("rooms", (p) => {
       patchRef.current((prev) => {
         const id = p.old.id;
         if (p.eventType === "DELETE" && id) return { ...prev, rooms: remove(prev.rooms, id) };
@@ -212,7 +212,7 @@ export function useRealtimeSync(
       });
     });
 
-    sub<WindowRow>("windows", (p) => {
+    on<WindowRow>("windows", (p) => {
       patchRef.current((prev) => {
         const id = p.old.id;
         if (p.eventType === "DELETE" && id) return { ...prev, windows: remove(prev.windows, id) };
@@ -221,7 +221,7 @@ export function useRealtimeSync(
     });
 
     if (shouldTrackStaffLists) {
-      sub<InstallerRow>("installers", (p) => {
+      on<InstallerRow>("installers", (p) => {
         patchRef.current((prev) => {
           const id = p.old.id;
           if (p.eventType === "DELETE" && id) {
@@ -233,7 +233,7 @@ export function useRealtimeSync(
       });
     }
 
-    sub<ScheduleRow>("schedule_entries", (p) => {
+    on<ScheduleRow>("schedule_entries", (p) => {
       patchRef.current((prev) => {
         const id = p.old.id;
         if (p.eventType === "DELETE" && id) {
@@ -245,16 +245,16 @@ export function useRealtimeSync(
       });
     });
 
-    sub("window_post_install_issues", () => {
+    on("window_post_install_issues", () => {
       scheduleDatasetRefresh();
     });
 
-    sub("window_post_install_issue_notes", () => {
+    on("window_post_install_issue_notes", () => {
       scheduleDatasetRefresh();
     });
 
     if (shouldTrackManufacturingLists) {
-      sub<CutterRow>("cutters", (p) => {
+      on<CutterRow>("cutters", (p) => {
         patchRef.current((prev) => {
           const id = p.old.id;
           if (p.eventType === "DELETE" && id) {
@@ -266,7 +266,7 @@ export function useRealtimeSync(
     }
 
     if (shouldTrackStaffLists) {
-      sub<SchedulerRow>("schedulers", (p) => {
+      on<SchedulerRow>("schedulers", (p) => {
         patchRef.current((prev) => {
           const id = p.old.id;
           if (p.eventType === "DELETE" && id) {
@@ -276,7 +276,7 @@ export function useRealtimeSync(
         });
       });
 
-      sub<SchedulerAssignmentRow>("scheduler_unit_assignments", (p) => {
+      on<SchedulerAssignmentRow>("scheduler_unit_assignments", (p) => {
         patchRef.current((prev) => {
           if (p.eventType === "DELETE") {
             return applySchedulerAssignment(prev, p.old.unit_id, null);
@@ -290,6 +290,9 @@ export function useRealtimeSync(
         scheduleScopedRefresh();
       });
     }
+
+    ch.subscribe();
+    channels.push(ch);
 
     // Re-fetch full dataset when tab returns to foreground after being hidden > 60s
     let hiddenAt = 0;

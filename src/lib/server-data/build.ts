@@ -1,4 +1,5 @@
 import type { AppDataset } from "@/lib/app-dataset";
+import type { Installer, Scheduler } from "@/lib/types";
 import {
   mapClient,
   mapBuilding,
@@ -58,19 +59,7 @@ export function buildDatasetFromRaw(raw: {
 
   const installers = (raw.installers ?? []).map(mapInstaller);
   const schedulers = schedulersData.map(mapScheduler);
-
-  // Allow Schedulers to act as Installers
-  const combinedInstallers = [
-    ...installers,
-    ...schedulers.map((sch) => ({
-      id: `sch-${sch.id}`,
-      name: `SC: ${sch.name}`,
-      email: sch.email,
-      phone: sch.phone,
-      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
-      authUserId: sch.authUserId,
-    })),
-  ];
+  const combinedInstallers = combineInstallersWithSchedulers(installers, schedulers);
 
   return {
     clients: (raw.clients ?? []).map(mapClient),
@@ -85,6 +74,28 @@ export function buildDatasetFromRaw(raw: {
     manufacturingEscalations: [],
     postInstallIssues: [],
   };
+}
+
+/**
+ * Builds the assignment pick-list: real installers plus a synthetic `sch-<id>` row per scheduler
+ * (so owners can assign a unit to a scheduler acting as an installer). Shared by `buildDatasetFromRaw`
+ * and `loadUnitDetail` so the list is byte-identical across the full and scoped loaders.
+ */
+export function combineInstallersWithSchedulers(
+  installers: Installer[],
+  schedulers: Scheduler[]
+): Installer[] {
+  return [
+    ...installers,
+    ...schedulers.map((sch) => ({
+      id: `sch-${sch.id}`,
+      name: `SC: ${sch.name}`,
+      email: sch.email,
+      phone: sch.phone,
+      avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
+      authUserId: sch.authUserId,
+    })),
+  ];
 }
 
 export function emptyDataset(): AppDataset {

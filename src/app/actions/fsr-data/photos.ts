@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { UNIT_PHOTO_STAGES, type RiskFlag, type UnitPhotoStage, type UnitStatus } from "@/lib/types";
+import type { UnitStageMediaItem } from "@/lib/server-data";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { canUploadInstallationPhotos } from "@/lib/unit-install-guard";
 import { BUCKET, MAX_PHOTOS_PER_STAGE, type ActionResult, type UnitMutationResult, normalizeStorageError, validateIncomingImageFile, revalidateUnit, getPhaseForStage, countWindowStagePhotos, formatStagePhotoLabel, emitUnitProgressNotification, refreshUnitAggregates, finalizeUnitMutation, logUnitActivity, resolveFieldActor, getSchedulerForUnit } from "./_shared";
@@ -584,6 +585,151 @@ export async function uploadRoomFinishedPhotos(
     }
 
     return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}
+
+export type RoomQuickPhotosResult =
+  | { ok: true; photos: UnitStageMediaItem[] }
+  | { ok: false; error: string };
+
+/**
+ * Upload one or more room-level "quick" photos. These are a fast photo pile for the
+ * field (installers/schedulers) that attach to a room — never a specific window — and
+ * deliberately do NOT touch window status (measured/bracketed/installed). They are kept
+ * isolated under the `room_quick_photo` kind with `window_id = null`, so they are ignored
+ * by the unit evidence viewer/summary (see src/lib/unit-media.ts) and surface only in the
+ * unit "View / Add Photos" popup. Uncapped.
+ */
+export async function uploadRoomQuickPhotos(
+  formData: FormData
+): Promise<RoomQuickPhotosResult> {
+  try {
+    const unitId = String(formData.get("unitId") ?? "");
+    const roomId = String(formData.get("roomId") ?? "");
+    const files = formData
+      .getAll("photos")
+      .filter((entry): entry is File => entry instanceof File && entry.size > 0);
+
+    if (!unitId || !roomId) {
+      return { ok: false, error: "Missing unit or room" };
+    }
+    if (files.length === 0) {
+      return { ok: false, error: "Add at least one photo" };
+    }
+    for (const file of files) {
+      const validation = validateIncomingImageFile(file, { fieldLabel: "Photo" });
+      if (validation) return validation;
+    }
+
+    const supabase = await createClient();
+
+    const [roomResult, unitResult] = await Promise.all([
+      supabase
+        .from("rooms")
+        .select("id, name")
+        .eq("id", roomId)
+        .eq("unit_id", unitId)
+        .single(),
+      supabase
+        .from("units")
+        .select("assigned_installer_name")
+        .eq("id", unitId)
+        .single(),
+    ]);
+
+    if (roomResult.error || !roomResult.data) {
+      return { ok: false, error: "Room not found" };
+    }
+    const roomName = roomResult.data.name ?? null;
+
+    const { actorRole, actorName, actorUserId } = await resolveFieldActor(
+      unitResult.data?.assigned_installer_name
+    );
+
+    const uploadedPaths: string[] = [];
+    const mediaIds: string[] = [];
+    const photos: UnitStageMediaItem[] = [];
+
+    for (const [index, file] of files.entries()) {
+      const ext =
+        (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const path = `${unitId}/rooms/${roomId}/quick/${crypto.randomUUID()}.${ext}`;
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, buf, { contentType: file.type || "image/jpeg", upsert: false });
+
+      if (uploadError) {
+        if (mediaIds.length > 0) {
+          await supabase.from("media_uploads").delete().in("id", mediaIds);
+        }
+        if (uploadedPaths.length > 0) {
+          await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        }
+        return { ok: false, error: normalizeStorageError(uploadError.message) };
+      }
+
+      uploadedPaths.push(path);
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+      const mediaId = `med-${crypto.randomUUID()}`;
+      const label =
+        files.length === 1 ? "Room photo" : `Room photo (${index + 1}/${files.length})`;
+      const createdAt = new Date().toISOString();
+      const { error: mediaInsertError } = await supabase.from("media_uploads").insert({
+        id: mediaId,
+        storage_path: path,
+        public_url: publicUrl,
+        upload_kind: "room_quick_photo",
+        unit_id: unitId,
+        room_id: roomId,
+        window_id: null,
+        label,
+        stage: null,
+        phase: null,
+        created_at: createdAt,
+        uploaded_by_user_id: actorUserId,
+        uploaded_by_name: actorName,
+        uploaded_by_role: actorRole,
+      });
+
+      if (mediaInsertError) {
+        if (mediaIds.length > 0) {
+          await supabase.from("media_uploads").delete().in("id", mediaIds);
+        }
+        await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        return { ok: false, error: mediaInsertError.message };
+      }
+
+      mediaIds.push(mediaId);
+      photos.push({
+        id: mediaId,
+        publicUrl,
+        label,
+        unitId,
+        roomId,
+        roomName,
+        windowId: null,
+        windowLabel: null,
+        uploadKind: "room_quick_photo",
+        // Stage is inert for quick photos (filtered by uploadKind); use the value
+        // loadUnitStageMedia would normalize a null stage to, so a refetch matches.
+        stage: "bracketed_measured",
+        createdAt,
+        uploadedByUserId: actorUserId,
+        uploadedByName: actorName,
+        uploadedByRole: actorRole,
+      });
+    }
+
+    revalidateUnit(unitId);
+    return { ok: true, photos };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return { ok: false, error: msg };

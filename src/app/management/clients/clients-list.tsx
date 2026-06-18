@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ArrowRight, Plus, Envelope, Phone } from "@phosphor-icons/react";
 import type { Building, Client, Unit } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -50,11 +49,10 @@ export function ClientsList({
           );
 
           return (
-            <motion.div
+            <div
               key={client.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="animate-fade-up"
+              style={{ '--anim-delay': `${i * 0.06}s` } as React.CSSProperties}
             >
               <Link href={`/management/clients/${client.id}`}>
                 <div className="surface-card group p-4 hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
@@ -100,7 +98,7 @@ export function ClientsList({
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           );
         })}
       </div>

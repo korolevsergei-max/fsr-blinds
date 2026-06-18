@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Buildings, CheckCircle, Envelope, Phone, UserCircle } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { Button } from "@/components/ui/button";
@@ -115,11 +114,10 @@ export function InstallersList({
         const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
 
         return (
-          <motion.div
+          <div
             key={installer.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="animate-fade-up"
+            style={{ '--anim-delay': `${index * 0.06}s` } as React.CSSProperties}
           >
             <InstallerCard
               installer={installer}
@@ -130,7 +128,7 @@ export function InstallersList({
               onDelete={onDelete}
               showChangePassword={showChangePassword}
             />
-          </motion.div>
+          </div>
         );
       })}
 
@@ -146,15 +144,10 @@ export function InstallersList({
             const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
 
             return (
-              <motion.div
+              <div
                 key={installer.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: (linkedInstallers.length + index) * 0.06,
-                  duration: 0.3,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
+                className="animate-fade-up"
+                style={{ '--anim-delay': `${(linkedInstallers.length + index) * 0.06}s` } as React.CSSProperties}
               >
                 <InstallerCard
                   installer={installer}
@@ -164,7 +157,7 @@ export function InstallersList({
                   deletePending={deletePending}
                   onDelete={onDelete}
                 />
-              </motion.div>
+              </div>
             );
           })}
         </>

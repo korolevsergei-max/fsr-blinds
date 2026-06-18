@@ -7,9 +7,6 @@ import { motion } from "framer-motion";
 import {
   UserCircle,
   CalendarBlank,
-  Door,
-  Ruler,
-  Camera,
   ClockCounterClockwise,
   Wrench,
   Buildings,
@@ -37,7 +34,6 @@ import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
-import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import {
   getEscalationSurfaceClasses,
   getOpenPostInstallIssueTargets,
@@ -47,6 +43,8 @@ import {
 import { resolveEscalationHref } from "@/lib/escalation-helpers";
 import { useDatasetSlicesMaybe, useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import { BulkInstallButton } from "@/components/units/bulk-install-button";
+import { BulkBracketButton } from "@/components/units/bulk-bracket-button";
+import { UnitQuickPhotos } from "@/components/units/unit-quick-photos";
 
 const ACTION_LABELS: Record<string, string> = {
   unit_created: "Unit added to the database",
@@ -355,10 +353,6 @@ export function ManagementUnitDetail({
     return <div className="p-6 text-center text-muted">Unit not found</div>;
   }
 
-  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems, {
-    rooms,
-    windows: unitWindows,
-  });
   const escalations = datasetData ? getUnitEscalations(datasetData, unit.id) : [];
   const openPostInstallIssueTargets = datasetData
     ? getOpenPostInstallIssueTargets(datasetData, unit.id)
@@ -425,28 +419,28 @@ export function ManagementUnitDetail({
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col gap-3"
         >
-          <div className="surface-card divide-y divide-border-subtle overflow-hidden" style={{ padding: 0 }}>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <UserCircle size={17} className="text-tertiary" />
-              <div>
+          <div className="surface-card grid grid-cols-2 overflow-hidden" style={{ padding: 0 }}>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
+              <UserCircle size={17} className="text-tertiary shrink-0" />
+              <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Assigned installer</p>
-                <p className="text-[13px] font-medium text-foreground">
+                <p className="text-[13px] font-medium text-foreground truncate">
                   {unit.assignedInstallerName || "Unassigned"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <UserCircle size={17} className="text-tertiary" />
-              <div>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
+              <UserCircle size={17} className="text-tertiary shrink-0" />
+              <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Assigned scheduler</p>
-                <p className="text-[13px] font-medium text-foreground">
+                <p className="text-[13px] font-medium text-foreground truncate">
                   {unit.assignedSchedulerName || "Unassigned"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarBlank size={17} className="text-tertiary" />
-              <div>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
+              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+              <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Measurement date</p>
                 <DateInput
                   value={unit.measurementDate || ""}
@@ -457,9 +451,9 @@ export function ManagementUnitDetail({
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarBlank size={17} className="text-tertiary" />
-              <div>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
+              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+              <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Bracketing date</p>
                 <DateInput
                   value={unit.bracketingDate || ""}
@@ -470,9 +464,9 @@ export function ManagementUnitDetail({
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarBlank size={17} className="text-tertiary" />
-              <div>
+            <div className="flex items-center gap-3 px-4 py-3 border-r border-border-subtle">
+              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+              <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Installation date</p>
                 <DateInput
                   value={unit.installationDate || ""}
@@ -483,6 +477,7 @@ export function ManagementUnitDetail({
                 />
               </div>
             </div>
+            <div className="px-4 py-3" />
           </div>
         </motion.div>
 
@@ -511,31 +506,6 @@ export function ManagementUnitDetail({
               />
             }
           />
-        </motion.div>
-
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 gap-3"
-        >
-          {[
-            { label: "Rooms", value: unit.roomCount, Icon: Door },
-            { label: "Windows", value: unit.windowCount, Icon: Ruler },
-            { label: "Photos", value: displayPhotoCount, Icon: Camera },
-          ].map(({ label, value, Icon }) => (
-            <div
-              key={label}
-              className="surface-card p-3.5 flex items-center gap-3"
-            >
-              <Icon size={15} className="text-tertiary" />
-              <div>
-                <p className="text-[1rem] font-semibold text-foreground font-mono">{value}</p>
-                <p className="text-[11px] text-tertiary">{label}</p>
-              </div>
-            </div>
-          ))}
         </motion.div>
 
         <motion.div
@@ -604,6 +574,7 @@ export function ManagementUnitDetail({
               Manage rooms
             </Button>
           </Link>
+          <UnitQuickPhotos unitId={unit.id} rooms={rooms} canUpload />
           {resolvedUserRole === "owner" && (
             <Link href={`/management/units/${unit.id}/verification-photos`}>
               <Button
@@ -621,6 +592,12 @@ export function ManagementUnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkBracketButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            milestones={milestones}
+          />
           <BulkInstallButton
             unitId={unit.id}
             rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}

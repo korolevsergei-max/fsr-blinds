@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local agent config & db backups (never commit)
+.claude/
+backup/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

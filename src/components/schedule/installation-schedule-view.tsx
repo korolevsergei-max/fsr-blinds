@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { CaretLeft, CaretRight, FunnelSimple, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { getInstallerColor, getInitials, getScheduleByInstaller } from "@/lib/app-dataset";
@@ -249,12 +248,10 @@ export function InstallationScheduleView({
               const dateKey = formatDateKey(day);
               const entries = state.entriesByDate.get(dateKey) ?? [];
               return (
-                <motion.div
+                <div
                   key={dateKey}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.04, duration: 0.25 }}
-                  className="relative"
+                  className="animate-fade-left relative"
+                  style={{ '--anim-delay': `${index * 0.04}s` } as React.CSSProperties}
                 >
                   <StickyDayRail
                     dayLabel={DAY_LABELS[index % 7]}
@@ -284,7 +281,7 @@ export function InstallationScheduleView({
                       </div>
                     )}
                   </div>
-                </motion.div>
+                </div>
               );
             })}
           </div>

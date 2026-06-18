@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Image from "next/image";
 import { Envelope, Phone, Buildings, CheckCircle, Plus } from "@phosphor-icons/react";
 import type { Installer, Unit } from "@/lib/types";
@@ -43,11 +42,10 @@ export function InstallersList({
           );
 
           return (
-            <motion.div
+            <div
               key={inst.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="animate-fade-up"
+              style={{ '--anim-delay': `${i * 0.08}s` } as React.CSSProperties}
             >
               <div className="surface-card p-4">
                 <div className="flex items-center gap-3 mb-3">
@@ -101,7 +99,7 @@ export function InstallersList({
                   </span>
                 </div>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>

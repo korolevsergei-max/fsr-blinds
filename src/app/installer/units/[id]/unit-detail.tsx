@@ -12,19 +12,19 @@ import type { UnitStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { StatusChip } from "@/components/ui/status-chip";
-import { MetricTile } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
 import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
-import { countDisplayableUnitPhotos } from "@/lib/unit-media";
 import { getOpenPostInstallIssueTargets, getUnitEscalations } from "@/lib/window-issues";
 import { formatStoredDateForDisplay, parseStoredDate } from "@/lib/created-date";
 import { SectionLabel } from "@/components/ui/section-label";
 import { useDatasetSlicesMaybe } from "@/lib/dataset-context";
 import { getEscalationSurfaceClasses, getRoomEscalationRiskFlag } from "@/lib/window-issues";
 import { BulkInstallButton } from "@/components/units/bulk-install-button";
+import { BulkBracketButton } from "@/components/units/bulk-bracket-button";
+import { UnitQuickPhotos } from "@/components/units/unit-quick-photos";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -242,7 +242,6 @@ export function UnitDetail({
       : [];
   const allGreenRiskFlags = unitWindows.every((w) => w.riskFlag === "green");
   const escalations = unit && datasetData ? getUnitEscalations(datasetData, unit.id) : [];
-  const escalationCount = escalations.length;
   const openPostInstallIssueTargets =
     unit && datasetData ? getOpenPostInstallIssueTargets(datasetData, unit.id) : [];
   const openPostInstallIssueWindowIds = new Set(
@@ -283,10 +282,6 @@ export function UnitDetail({
       ? "measured"
       : "not_started";
 
-  const displayPhotoCount = countDisplayableUnitPhotos(mediaItems, {
-    rooms,
-    windows: unitWindows,
-  });
   const today = new Date();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -410,19 +405,6 @@ export function UnitDetail({
           </motion.div>
         )}
 
-        {/* Stats Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 gap-2"
-        >
-          <MetricTile value={unit.roomCount} label="Rooms" compact />
-          <MetricTile value={unit.windowCount} label="Windows" compact />
-          <MetricTile value={displayPhotoCount} label="Photos" compact />
-          <MetricTile value={escalationCount} label="Escalations" compact />
-        </motion.div>
-
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -491,6 +473,7 @@ export function UnitDetail({
               Manage rooms
             </Button>
           </Link>
+          <UnitQuickPhotos unitId={unit.id} rooms={rooms} canUpload />
           <Link href={`/installer/units/${unit.id}/status`}>
             <Button variant="secondary" fullWidth size="lg">
               View Progress
@@ -501,6 +484,12 @@ export function UnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkBracketButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            milestones={milestones}
+          />
           <BulkInstallButton
             unitId={unit.id}
             rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}

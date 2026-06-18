@@ -39,6 +39,8 @@ import {
 } from "@/lib/window-issues";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { BulkInstallButton } from "@/components/units/bulk-install-button";
+import { BulkBracketButton } from "@/components/units/bulk-bracket-button";
+import { UnitQuickPhotos } from "@/components/units/unit-quick-photos";
 
 const ACTOR_ICONS: Record<string, React.ReactNode> = {
   owner: <UserGear size={14} className="text-indigo-500" />,
@@ -463,6 +465,7 @@ export function SchedulerUnitDetail({
               Manage rooms
             </Button>
           </Link>
+          <UnitQuickPhotos unitId={unit.id} rooms={rooms} canUpload />
           <Link href={`/scheduler/units/${unit.id}/status`}>
             <Button variant="secondary" fullWidth size="lg">
               View Progress
@@ -473,6 +476,12 @@ export function SchedulerUnitDetail({
               View Summary
             </Button>
           </Link>
+          <BulkBracketButton
+            unitId={unit.id}
+            rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}
+            windowIds={unitWindows.map((w) => w.id)}
+            milestones={milestones}
+          />
           <BulkInstallButton
             unitId={unit.id}
             rooms={rooms.map((r) => ({ id: r.id, name: r.name, windowCount: r.windowCount }))}

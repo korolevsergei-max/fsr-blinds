@@ -1,6 +1,6 @@
 "use server";
 
-import { loadFullDataset, loadSchedulerDataset, loadInstallerDataset, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
+import { loadFullDataset, loadSchedulerDataset, loadInstallerDataset, loadUnitDetail, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
 import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { getUnitMilestoneCoverage, type UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -23,6 +23,18 @@ export async function refreshDataset(
     return loadInstallerDataset(installerId ?? "");
   }
   return loadFullDataset();
+}
+
+/**
+ * Scoped refetch for the management unit-detail subtree (DATA_SCOPING_PLAN Phase 1).
+ * Owner-gated: the management portal is owner-only. Returns `null` on unauthorized so the
+ * scoped realtime bridge skips `setData` instead of wiping the view. The scheduler/installer
+ * unit routes (a follow-up) would need their own scope check before reusing this.
+ */
+export async function refreshUnitDetail(unitId: string): Promise<AppDataset | null> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "owner") return null;
+  return loadUnitDetail(unitId);
 }
 
 export type UnitSupplementalData = {

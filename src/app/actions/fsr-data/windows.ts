@@ -701,3 +701,78 @@ export async function bulkMarkUnitWindowsInstalled(
     return { ok: false, error: msg };
   }
 }
+
+/**
+ * Marks every not-yet-bracketed window in a unit as bracketed in one action.
+ *
+ * Unlike bulk install, there are no QC/manufacturing or risk-flag gates:
+ * a window can be bracketed whether or not it is measured. Only `bracketed`
+ * is set — `measured` and `installed` are left untouched.
+ */
+export async function bulkMarkUnitWindowsBracketed(
+  unitId: string
+): Promise<{ ok: boolean; error?: string; unitStatus?: UnitStatus }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: "Not authenticated." };
+    if (!unitId) return { ok: false, error: "Missing unit ID." };
+
+    const supabase = await createClient();
+
+    const { data: unitRow, error: unitErr } = await supabase
+      .from("units")
+      .select("id, status, assigned_installer_name")
+      .eq("id", unitId)
+      .single();
+    if (unitErr || !unitRow) return { ok: false, error: "Unit not found." };
+
+    const { data: rooms, error: roomsErr } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("unit_id", unitId);
+    if (roomsErr || !rooms?.length) return { ok: false, error: "No rooms found for unit." };
+
+    const roomIds = (rooms as Array<{ id: string }>).map((r) => r.id);
+
+    const { data: windows, error: windowsErr } = await supabase
+      .from("windows")
+      .select("id, room_id, bracketed")
+      .in("room_id", roomIds);
+    if (windowsErr || !windows?.length) return { ok: false, error: "No windows found for unit." };
+
+    const unbracketedIds = (windows as Array<{ id: string; bracketed: boolean }>)
+      .filter((w) => !w.bracketed)
+      .map((w) => w.id);
+
+    if (unbracketedIds.length > 0) {
+      const { error: updateErr } = await supabase
+        .from("windows")
+        .update({ bracketed: true })
+        .in("id", unbracketedIds);
+      if (updateErr) return { ok: false, error: updateErr.message };
+    }
+
+    const { actorRole, actorName } = await resolveFieldActor(unitRow.assigned_installer_name);
+    const prevStatus = (unitRow.status as UnitStatus | undefined) ?? "not_started";
+    const unitStatus = await finalizeUnitMutation(supabase, unitId, roomIds);
+
+    after(async () => {
+      const db = createAdminClient();
+      await logUnitActivity(db, unitId, actorRole, actorName, "bracketing_completed", {
+        bulk: true,
+        windowCount: unbracketedIds.length,
+      });
+      if (unitStatus !== prevStatus) {
+        const schedulerId = await getSchedulerForUnit(db, unitId);
+        if (schedulerId) {
+          await emitUnitProgressNotification(db, schedulerId, unitId, unitStatus);
+        }
+      }
+    });
+
+    return { ok: true, unitStatus };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    return { ok: false, error: msg };
+  }
+}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -50,11 +49,7 @@ export function UnitStatusEditor({
       />
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        >
+        <div className="animate-fade-up">
           <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
             Current Status
           </h2>
@@ -64,13 +59,11 @@ export function UnitStatusEditor({
               {UNIT_STATUS_LABELS[unit.status as UnitStatus] ?? unit.status}
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div
+          className="animate-fade-up surface-card p-4"
+          style={{ '--anim-delay': '0.06s' } as React.CSSProperties}
         >
           <p className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-3">
             Window progress
@@ -88,13 +81,11 @@ export function UnitStatusEditor({
               {measuredWindows}/{totalWindows} measured
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div
+          className="animate-fade-up surface-card p-4"
+          style={{ '--anim-delay': '0.12s' } as React.CSSProperties}
         >
           <UnitProgressMilestonesPanel
             unit={unit}
@@ -106,16 +97,14 @@ export function UnitStatusEditor({
               href: `${unitsBasePath}/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
             }))}
           />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-2xl border border-border bg-surface px-4 py-3.5 text-[12px] text-secondary leading-relaxed"
+        <div
+          className="animate-fade-up rounded-2xl border border-border bg-surface px-4 py-3.5 text-[12px] text-secondary leading-relaxed"
+          style={{ '--anim-delay': '0.18s' } as React.CSSProperties}
         >
           Status is derived from installer activity. Measurements and bracketing can finish in any order; both must be done before installation photos count toward completion.
-        </motion.div>
+        </div>
       </div>
     </div>
   );
