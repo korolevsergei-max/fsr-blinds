@@ -119,6 +119,7 @@ export async function loadSchedulerDataset(
       : preloadedSchedulerId;
   if (!schedulerId) return emptyDataset();
 
+  const startedAt = performance.now();
   const supabase = await createClient();
 
   // scopedUnitIds, assignments, and the scheduler row all derive from schedulerId only —
@@ -248,6 +249,10 @@ export async function loadSchedulerDataset(
     schedulerScheduleRows.map(mapSchedule)
   );
 
+  console.log(
+    `[scoped-load] scheduler=${schedulerId} units=${units.length} rooms=${rooms.length} windows=${windows.length} ${(performance.now() - startedAt).toFixed(0)}ms`
+  );
+
   return finalizeDataset({
     clients,
     buildings,
@@ -271,6 +276,7 @@ export async function loadSchedulerDataset(
 export async function loadInstallerDataset(installerId: string): Promise<AppDataset> {
   if (!installerId) return emptyDataset();
 
+  const startedAt = performance.now();
   const supabase = await createClient();
 
   const { data: unitData, error: unitError } = await supabase
@@ -336,6 +342,10 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
   const schedule = normalizeScheduleEntries(
     units,
     scheduleRows.map(mapSchedule)
+  );
+
+  console.log(
+    `[scoped-load] installer=${installerId} units=${units.length} rooms=${rooms.length} windows=${windowRows.length} ${(performance.now() - startedAt).toFixed(0)}ms`
   );
 
   return finalizeDataset({

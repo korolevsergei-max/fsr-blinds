@@ -11,10 +11,19 @@ export async function selectInChunks<Row>(
   fetchChunk: (chunk: string[]) => PromiseLike<{ data: Row[] | null; error: unknown }>
 ): Promise<Row[]> {
   if (ids.length === 0) return [];
-  const out: Row[] = [];
+
+  // Fire every chunk in parallel rather than awaiting them one at a time: the
+  // chunks are independent reads, so total latency is one round-trip instead of
+  // N. This matters most for scope-sized lists (windows by room, rooms by unit)
+  // where a busy scheduler/installer can span many chunks. Chunk order is
+  // preserved so callers see the same ordering as the old serial loop.
+  const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += SUPABASE_IN_CHUNK) {
-    const chunk = ids.slice(i, i + SUPABASE_IN_CHUNK) as string[];
-    const { data } = await fetchChunk(chunk);
+    chunks.push(ids.slice(i, i + SUPABASE_IN_CHUNK) as string[]);
+  }
+  const results = await Promise.all(chunks.map((chunk) => fetchChunk(chunk)));
+  const out: Row[] = [];
+  for (const { data } of results) {
     if (data) out.push(...data);
   }
   return out;
