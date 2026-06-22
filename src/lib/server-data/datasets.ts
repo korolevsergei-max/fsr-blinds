@@ -28,12 +28,13 @@ import { buildDatasetFromRaw, emptyDataset } from "./build";
 import { finalizeDataset } from "./enrichment";
 
 export const loadFullDataset = cache(async (): Promise<AppDataset> => {
+  const startedAt = performance.now();
   const supabase = await createClient();
 
   // Fast path: single RPC call (requires migration 20260408110000)
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_full_dataset");
   if (!rpcError && rpcData) {
-    return finalizeDataset(buildDatasetFromRaw(rpcData as {
+    const raw = rpcData as {
       clients: ClientRow[];
       buildings: BuildingRow[];
       units: UnitRow[];
@@ -44,7 +45,13 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       cutters: CutterRow[];
       schedulers: SchedulerRow[];
       scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
-    }));
+    };
+    // Whole-DB load for management: log payload size + timing so we can see
+    // when it crosses into "slow" territory and decide if scoping is needed.
+    console.log(
+      `[full-load] management units=${raw.units?.length ?? 0} rooms=${raw.rooms?.length ?? 0} windows=${raw.windows?.length ?? 0} schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
+    );
+    return finalizeDataset(buildDatasetFromRaw(raw));
   }
 
   // Fallback: multiple parallel queries (works before RPC migration is applied)
