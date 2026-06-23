@@ -109,12 +109,13 @@ export function BuildingDetail({
         actions={
           <div className="flex items-center gap-2">
             <RefreshButton />
-            <Link href={`/management/buildings/${building.id}/import`}>
-              <Button size="sm">
-                <Plus size={14} weight="bold" />
-                Units
-              </Button>
-            </Link>
+            <Button
+              size="sm"
+              onClick={() => router.push(`/management/buildings/${building.id}/import`)}
+            >
+              <Plus size={14} weight="bold" />
+              Units
+            </Button>
             {userRole === "owner" && (
               <>
                 <Button
