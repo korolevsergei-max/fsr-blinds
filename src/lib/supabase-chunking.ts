@@ -6,24 +6,42 @@
 
 const SUPABASE_IN_CHUNK = 100;
 
+// Max chunk requests in flight per call. Chunks run concurrently (much faster
+// than the old one-at-a-time loop) but capped so a large scope — or many users
+// loading at once — can't open enough simultaneous connections to exhaust the
+// Supabase pooler. An unbounded Promise.all here took prod down via
+// MIDDLEWARE_INVOCATION_TIMEOUT when auth queries couldn't get a connection.
+const SUPABASE_IN_CONCURRENCY = 4;
+
 export async function selectInChunks<Row>(
   ids: readonly string[],
   fetchChunk: (chunk: string[]) => PromiseLike<{ data: Row[] | null; error: unknown }>
 ): Promise<Row[]> {
   if (ids.length === 0) return [];
 
-  // Fire every chunk in parallel rather than awaiting them one at a time: the
-  // chunks are independent reads, so total latency is one round-trip instead of
-  // N. This matters most for scope-sized lists (windows by room, rooms by unit)
-  // where a busy scheduler/installer can span many chunks. Chunk order is
-  // preserved so callers see the same ordering as the old serial loop.
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += SUPABASE_IN_CHUNK) {
     chunks.push(ids.slice(i, i + SUPABASE_IN_CHUNK) as string[]);
   }
-  const results = await Promise.all(chunks.map((chunk) => fetchChunk(chunk)));
+
+  // Bounded worker pool: SUPABASE_IN_CONCURRENCY workers pull from a shared
+  // index, so at most that many requests are in flight at once. Results are
+  // written back by index to preserve chunk order.
+  const results: (Row[] | null)[] = new Array(chunks.length).fill(null);
+  let next = 0;
+  async function worker() {
+    while (next < chunks.length) {
+      const i = next++;
+      const { data } = await fetchChunk(chunks[i]);
+      results[i] = data;
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(SUPABASE_IN_CONCURRENCY, chunks.length) }, worker)
+  );
+
   const out: Row[] = [];
-  for (const { data } of results) {
+  for (const data of results) {
     if (data) out.push(...data);
   }
   return out;
