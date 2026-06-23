@@ -272,8 +272,20 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
   return { ...dataset, units };
 }
 
-export async function finalizeDataset(dataset: AppDataset): Promise<AppDataset> {
+export async function finalizeDataset(
+  dataset: AppDataset,
+  opts: { deriveStatusFromWindows?: boolean } = {}
+): Promise<AppDataset> {
+  // `deriveStatusFromWindows` re-derives each unit's `status` + `currentStage` from the
+  // loaded windows/rooms (`withLiveUnitStatuses`). The owner global load passes `false`:
+  // it ships no windows/rooms, no global owner screen reads `currentStage`, and
+  // `units.status` is persisted at every mutation by `recomputeUnitStatus` (drift confirmed
+  // 0), so re-deriving is redundant. Scoped routes (unit detail, scheduler, installer) keep
+  // the default `true` because they display `currentStage` and load their own windows.
+  const { deriveStatusFromWindows = true } = opts;
   const withIssues = await withPostInstallIssues(dataset);
-  const withLiveStatuses = await withLiveUnitStatuses(withIssues);
+  const withLiveStatuses = deriveStatusFromWindows
+    ? await withLiveUnitStatuses(withIssues)
+    : withIssues;
   return withManufacturingEscalations(withLiveStatuses);
 }

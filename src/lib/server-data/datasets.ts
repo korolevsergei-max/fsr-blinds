@@ -46,29 +46,32 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       schedulers: SchedulerRow[];
       scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
     };
-    // Whole-DB load for management: log payload size + timing so we can see
-    // when it crosses into "slow" territory and decide if scoping is needed.
+    // Owner global views (units list, dashboard, schedule, building/client pages) read only
+    // unit-level data (persisted status, denormalized room/window counts) + the spine. Raw
+    // rooms/windows — the two largest tables — are read only by the already-scoped
+    // unit-detail routes, which load their own via loadUnitDetail. Drop them from the client
+    // payload and trust persisted units.status (drift confirmed 0). See DATA_SCOPING_PLAN.md.
     console.log(
-      `[full-load] management units=${raw.units?.length ?? 0} rooms=${raw.rooms?.length ?? 0} windows=${raw.windows?.length ?? 0} schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
+      `[full-load] management units=${raw.units?.length ?? 0} rooms=${raw.rooms?.length ?? 0}→0 windows=${raw.windows?.length ?? 0}→0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
     );
-    return finalizeDataset(buildDatasetFromRaw(raw));
+    return finalizeDataset(buildDatasetFromRaw({ ...raw, rooms: [], windows: [] }), {
+      deriveStatusFromWindows: false,
+    });
   }
 
-  // Fallback: multiple parallel queries (works before RPC migration is applied)
+  // Fallback: multiple parallel queries (works before RPC migration is applied).
+  // Owner global views don't need raw rooms/windows (see RPC path above), so skip those
+  // two queries entirely.
   const [
     clientsRes,
     buildingsRes,
     unitsRes,
-    roomsRes,
-    windowsRes,
     installersRes,
     scheduleRes,
   ] = await Promise.all([
     supabase.from("clients").select("*").order("name"),
     supabase.from("buildings").select("*").order("name"),
     supabase.from("units").select("*").order("unit_number"),
-    supabase.from("rooms").select("*").order("name"),
-    supabase.from("windows").select("*").order("label"),
     supabase.from("installers").select("*").order("name"),
     supabase.from("schedule_entries").select("*").order("task_date"),
   ]);
@@ -79,7 +82,7 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     supabase.from("scheduler_unit_assignments").select("unit_id, scheduler_id, assigned_at"),
   ]);
 
-  const coreResponses = [clientsRes, buildingsRes, unitsRes, roomsRes, windowsRes, installersRes, scheduleRes];
+  const coreResponses = [clientsRes, buildingsRes, unitsRes, installersRes, scheduleRes];
   const firstError = coreResponses.find((r) => r.error)?.error;
   if (firstError) {
     const baseMessage = `Supabase: ${firstError.message}.`;
@@ -93,18 +96,21 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     );
   }
 
-  return finalizeDataset(buildDatasetFromRaw({
-    clients: (clientsRes.data as ClientRow[]) ?? [],
-    buildings: (buildingsRes.data as BuildingRow[]) ?? [],
-    units: (unitsRes.data as UnitRow[]) ?? [],
-    rooms: (roomsRes.data as RoomRow[]) ?? [],
-    windows: (windowsRes.data as WindowRow[]) ?? [],
-    installers: (installersRes.data as InstallerRow[]) ?? [],
-    schedule_entries: (scheduleRes.data as ScheduleRow[]) ?? [],
-    cutters: cuttersRes.error ? [] : (cuttersRes.data as CutterRow[]) ?? [],
-    schedulers: schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[]) ?? [],
-    scheduler_unit_assignments: (assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? [],
-  }));
+  return finalizeDataset(
+    buildDatasetFromRaw({
+      clients: (clientsRes.data as ClientRow[]) ?? [],
+      buildings: (buildingsRes.data as BuildingRow[]) ?? [],
+      units: (unitsRes.data as UnitRow[]) ?? [],
+      rooms: [],
+      windows: [],
+      installers: (installersRes.data as InstallerRow[]) ?? [],
+      schedule_entries: (scheduleRes.data as ScheduleRow[]) ?? [],
+      cutters: cuttersRes.error ? [] : (cuttersRes.data as CutterRow[]) ?? [],
+      schedulers: schedulersRes.error ? [] : (schedulersRes.data as SchedulerRow[]) ?? [],
+      scheduler_unit_assignments: (assignmentsRes.data as { unit_id: string; scheduler_id: string; assigned_at: string }[]) ?? [],
+    }),
+    { deriveStatusFromWindows: false }
+  );
 });
 
 /**
