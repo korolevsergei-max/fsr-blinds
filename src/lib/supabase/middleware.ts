@@ -17,9 +17,18 @@ import { homePathForRole } from "@/lib/role-routes";
  *   drive an authorization decision.
  * - When the claim is absent (a legacy user not yet backfilled), fall back to a
  *   single `user_profiles` read; getCurrentUser self-heals the claim afterwards.
+ *
+ * Auth is resolved via `getClaims()` rather than `getUser()`: getClaims verifies
+ * the signed JWT locally (no Auth-server round-trip when the project uses
+ * asymmetric signing keys) and only falls back to a network getUser() for legacy
+ * symmetric (HS256) tokens — so per-navigation auth cost drops from a guaranteed
+ * round-trip to (usually) a local verify. getClaims still refreshes the session
+ * through getSession(), so the cookie-refresh responsibility is preserved.
  */
-function roleFromAuthClaim(user: { app_metadata?: Record<string, unknown> | null } | null): string | null {
-  const role = user?.app_metadata?.role;
+function roleFromAuthClaim(
+  claims: { app_metadata?: Record<string, unknown> | null } | null
+): string | null {
+  const role = claims?.app_metadata?.role;
   return typeof role === "string" ? role : null;
 }
 
@@ -123,11 +132,12 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"] | null = null;
+  type AuthClaims = NonNullable<Awaited<ReturnType<typeof supabase.auth.getClaims>>["data"]>["claims"];
+  let claims: AuthClaims | null = null;
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getClaims();
     if (error) throw error;
-    user = data.user;
+    claims = data?.claims ?? null;
   } catch (error) {
     if (isInvalidRefreshTokenError(error)) {
       authInvalidated = true;
@@ -151,7 +161,7 @@ export async function updateSession(request: NextRequest) {
         supabaseResponse.cookies.set(name, "", { path: "/", maxAge: 0 });
       }
     }
-    user = null;
+    claims = null;
   }
 
   // Login page: token cleanup ran above (clears stale cookies so LoginPage's
@@ -176,18 +186,18 @@ export async function updateSession(request: NextRequest) {
    * Never reads the user-writable `user_metadata`.
    */
   const resolveRole = async (): Promise<string | null> => {
-    const claim = roleFromAuthClaim(user);
+    const claim = roleFromAuthClaim(claims);
     if (claim) return claim;
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("role")
-      .eq("id", user!.id)
+      .eq("id", claims!.sub)
       .maybeSingle();
     return profile?.role ?? null;
   };
 
   if (pathname === "/") {
-    if (user) {
+    if (claims) {
       const home = homePathForRole(await resolveRole());
       if (home !== "/") return redirectTo(home);
     }
@@ -198,11 +208,11 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith(prefix)
   );
 
-  if (!user && portalPrefix) {
+  if (!claims && portalPrefix) {
     return redirectTo("/login");
   }
 
-  if (user && portalPrefix) {
+  if (claims && portalPrefix) {
     const role = await resolveRole();
     /**
      * A known, mismatched role is routed to its own portal — e.g. an installer

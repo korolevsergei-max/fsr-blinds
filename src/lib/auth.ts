@@ -1,5 +1,5 @@
 import { cache } from "react";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
@@ -29,8 +29,8 @@ function normalizeUserRole(role: unknown): UserRole | null {
     : null;
 }
 
-function getDisplayNameFromAuthUser(user: User): string {
-  return user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "User";
+function deriveDisplayName(displayName: unknown, email: string): string {
+  return (typeof displayName === "string" && displayName) || email.split("@")[0] || "User";
 }
 
 async function inferRoleFromLinkedAccount(
@@ -61,14 +61,15 @@ async function inferRoleFromLinkedAccount(
 
 async function inferRoleForAuthenticatedUser(
   supabase: SupabaseClient,
-  user: User
+  userId: string,
+  appMetadataRole: unknown
 ): Promise<UserRole> {
   // Prefer the secure, service-role-only `app_metadata` claim; never trust the
   // user-writable `user_metadata` for an authorization decision.
-  const claimRole = normalizeUserRole(user.app_metadata?.role);
+  const claimRole = normalizeUserRole(appMetadataRole);
   if (claimRole) return claimRole;
 
-  const linkedRole = await inferRoleFromLinkedAccount(supabase, user.id);
+  const linkedRole = await inferRoleFromLinkedAccount(supabase, userId);
   if (linkedRole) return linkedRole;
 
   const { count: ownerCount } = await supabase
@@ -81,32 +82,40 @@ async function inferRoleForAuthenticatedUser(
 
 export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   const supabase = await createClient();
-  
-  let user = null;
+
+  // Resolve identity via getClaims() — a local JWT verify for asymmetric signing
+  // keys (no Auth-server round-trip), falling back to a network getUser() only for
+  // legacy symmetric tokens. The claims carry everything we need: id (sub), email,
+  // the trusted app_metadata.role, and user_metadata for the display-name fallback.
+  let claims: NonNullable<
+    Awaited<ReturnType<typeof supabase.auth.getClaims>>["data"]
+  >["claims"] | null = null;
   try {
-    const { data, error } = await supabase.auth.getUser();
-    if (error && isInvalidRefreshTokenError(error)) {
+    const { data, error } = await supabase.auth.getClaims();
+    if (error) {
+      if (isInvalidRefreshTokenError(error)) return null;
+      console.error("Auth error in getCurrentUser:", error);
       return null;
     }
-    user = data.user ?? null;
-    if (!user && error) {
-      const { data: sessionData } = await supabase.auth.getSession();
-      user = sessionData.session?.user ?? null;
-    }
+    claims = data?.claims ?? null;
   } catch (error: unknown) {
     if (isInvalidRefreshTokenError(error)) return null;
     console.error("Auth error in getCurrentUser:", error);
     return null;
   }
 
-  if (!user) return null;
+  if (!claims) return null;
 
-  const fallbackDisplayName = getDisplayNameFromAuthUser(user);
+  const userId = claims.sub;
+  const userEmail = claims.email ?? "";
+  const appMetadataRole = (claims.app_metadata as Record<string, unknown> | undefined)?.role;
+  const userMetadataName = (claims.user_metadata as Record<string, unknown> | undefined)?.display_name;
+  const fallbackDisplayName = deriveDisplayName(userMetadataName, userEmail);
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
     .select("role, display_name, email")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single();
 
   // Profile exists — happy path
@@ -115,10 +124,10 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
     // DB so middleware can authorize from the token alone (no per-navigation DB read).
     // Best-effort and only when stale/missing, so steady-state cost is zero. Runs in
     // RSC/layouts (never middleware), so using the admin client here is safe.
-    if (profile.role && user.app_metadata?.role !== profile.role) {
+    if (profile.role && appMetadataRole !== profile.role) {
       try {
         const admin = createAdminClient();
-        await admin.auth.admin.updateUserById(user.id, {
+        await admin.auth.admin.updateUserById(userId, {
           app_metadata: { role: profile.role },
         });
       } catch {
@@ -127,7 +136,7 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
     }
 
     return {
-      id: user.id,
+      id: userId,
       email: profile.email,
       role: profile.role as UserRole,
       displayName: profile.display_name,
@@ -138,8 +147,8 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   // user as owner so they can access the portal and apply the migration.
   if (profileError?.code === "42P01") {
     return {
-      id: user.id,
-      email: user.email ?? "",
+      id: userId,
+      email: userEmail,
       role: "owner",
       displayName: fallbackDisplayName,
     };
@@ -149,18 +158,18 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   // reliable role source we have: auth metadata, linked app tables, then
   // owner/installer bootstrap fallback.
   if (profileError?.code === "PGRST116") {
-    const role = await inferRoleForAuthenticatedUser(supabase, user);
+    const role = await inferRoleForAuthenticatedUser(supabase, userId, appMetadataRole);
 
     await supabase.from("user_profiles").upsert({
-      id: user.id,
+      id: userId,
       role,
       display_name: fallbackDisplayName,
-      email: user.email ?? "",
+      email: userEmail,
     });
 
     return {
-      id: user.id,
-      email: user.email ?? "",
+      id: userId,
+      email: userEmail,
       role,
       displayName: fallbackDisplayName,
     };
@@ -168,10 +177,10 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   // Unexpected profile lookup error — prefer inferred role over hard-coding
   // owner so schedulers/cutters/assemblers don't get misrouted.
-  const inferredRole = await inferRoleForAuthenticatedUser(supabase, user);
+  const inferredRole = await inferRoleForAuthenticatedUser(supabase, userId, appMetadataRole);
   return {
-    id: user.id,
-    email: user.email ?? "",
+    id: userId,
+    email: userEmail,
     role: inferredRole,
     displayName: fallbackDisplayName,
   };
