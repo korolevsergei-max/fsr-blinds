@@ -1,10 +1,9 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
-import { getUnitCurrentStage } from "@/lib/current-stage";
-import { computeIssueCounts } from "@/lib/dashboard-issues";
 import {
   EMPTY_OWNER_DASHBOARD_COUNTS,
+  computeOwnerDashboardCounts,
   type OwnerDashboardCounts,
 } from "@/lib/owner-dashboard-counts";
 import { loadFullDataset } from "./datasets";
@@ -55,24 +54,7 @@ async function computeDashboardCountsFallback(): Promise<OwnerDashboardCounts> {
   const data = await loadFullDataset();
   const today = new Date().toISOString().split("T")[0]!;
   const escalationIds = getUnitIdsWithWindowEscalations(data);
-  const stageCounts = { ...EMPTY_OWNER_DASHBOARD_COUNTS.stageCounts };
-
-  for (const unit of data.units) {
-    const stage = getUnitCurrentStage(unit);
-    stageCounts[stage] = (stageCounts[stage] ?? 0) + 1;
-  }
-
-  const issueCountMap = computeIssueCounts(data.units, today, escalationIds);
-  const issueCounts = { ...EMPTY_OWNER_DASHBOARD_COUNTS.issueCounts };
-  for (const [issue, count] of issueCountMap) {
-    issueCounts[issue] = count;
-  }
-
-  return {
-    totalUnits: data.units.length,
-    stageCounts,
-    issueCounts,
-  };
+  return computeOwnerDashboardCounts(data.units, today, escalationIds);
 }
 
 export const loadOwnerDashboardCounts = cache(async (): Promise<OwnerDashboardCounts> => {

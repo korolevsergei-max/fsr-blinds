@@ -53,11 +53,20 @@ WITH unit_scope AS (
     u.assigned_installer_id,
     u.bracketing_date,
     u.installation_date,
-    CASE u.status
-      WHEN 'installed' THEN 'installation'
-      WHEN 'manufactured' THEN 'qc'
-      WHEN 'bracketed' THEN 'bracketing'
-      WHEN 'measured' THEN 'measurement'
+    -- Mirror getUnitCurrentStage() (src/lib/current-stage.ts) for the owner path,
+    -- where currentStage is not derived: an open post-install issue takes precedence
+    -- over the status-derived stage. Without this the post_install_issue bucket is
+    -- always 0 and those units are silently mis-counted into their status bucket.
+    -- (EXISTS is index-backed by idx_wpii_unit_open.)
+    CASE
+      WHEN EXISTS (
+        SELECT 1 FROM window_post_install_issues wpi
+        WHERE wpi.unit_id = u.id AND wpi.status = 'open'
+      ) THEN 'post_install_issue'
+      WHEN u.status = 'installed' THEN 'installation'
+      WHEN u.status = 'manufactured' THEN 'qc'
+      WHEN u.status = 'bracketed' THEN 'bracketing'
+      WHEN u.status = 'measured' THEN 'measurement'
       ELSE 'not_started'
     END AS current_stage,
     EXISTS (

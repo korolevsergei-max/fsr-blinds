@@ -1,5 +1,5 @@
 import type { Unit } from "./types";
-import { computeUnitFlags } from "./unit-flags";
+import { computeUnitFlags } from "./unit-flags.ts";
 
 export type DashboardIssue =
   | "past_scheduled"
