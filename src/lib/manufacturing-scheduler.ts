@@ -573,73 +573,21 @@ export async function buildManufacturingCalendarMonth(
   }));
 }
 
-/**
- * Detects units in the manufacturing zone whose windows have no
- * window_manufacturing_schedule row. Such units are invisible to the
- * cutter/assembler/QC queues even though their unit.status says they
- * should be cut. This can happen when status is mutated outside the
- * Node code path (SQL seeds, backfills, direct DB edits) or when a
- * window is added to an already-measured unit without a status change.
- */
-async function hasUnscheduledManufacturingWindows(
-  supabase: Awaited<ReturnType<typeof createClient>>
-): Promise<boolean> {
-  const { data: zoneUnits } = await supabase
-    .from("units")
-    .select("id")
-    .in("status", ["measured", "bracketed", "manufactured"])
-    .is("production_entered_at", null);
-  const zoneUnitIds = (zoneUnits ?? []).map((u) => u.id as string);
-  if (zoneUnitIds.length === 0) return false;
-
-  const rooms = await selectInChunks<{ id: string }>(zoneUnitIds, (chunk) =>
-    supabase
-      .from("rooms")
-      .select("id")
-      .in("unit_id", chunk)
-      .then((res) => ({ data: res.data as Array<{ id: string }> | null, error: res.error })),
-  );
-  const roomIds = rooms.map((r) => r.id);
-  if (roomIds.length === 0) return false;
-
-  const [windows, scheduledRows] = await Promise.all([
-    selectInChunks<{ id: string }>(roomIds, (chunk) =>
-      supabase
-        .from("windows")
-        .select("id")
-        .in("room_id", chunk)
-        .then((res) => ({ data: res.data as Array<{ id: string }> | null, error: res.error })),
-    ),
-    selectInChunks<{ window_id: string }>(zoneUnitIds, (chunk) =>
-      supabase
-        .from("window_manufacturing_schedule")
-        .select("window_id")
-        .in("unit_id", chunk)
-        .then((res) => ({
-          data: res.data as Array<{ window_id: string }> | null,
-          error: res.error,
-        })),
-    ),
-  ]);
-
-  const scheduledSet = new Set(scheduledRows.map((s) => s.window_id));
-  return windows.some((w) => !scheduledSet.has(w.id));
-}
-
 export async function loadPersistedRoleSchedule(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
-  // Self-heal: if any unit in the manufacturing zone has windows without
-  // schedule rows, planning never ran for them and they would be silently
-  // missing from the queue. Reflow synchronously so the read below sees
-  // them. The after()-triggered reflow on the page is then purely a
-  // re-planning optimization, not a correctness requirement.
-  if (await hasUnscheduledManufacturingWindows(supabase)) {
-    await reflowManufacturingSchedules("self_heal_missing_schedule");
-  }
+  // NOTE: this is a pure read. Correctness of the persisted schedule (every
+  // zone window has a row) is now guaranteed by the mutations that create
+  // unscheduled windows — moving a unit into the zone (recomputeUnitStatus)
+  // and adding a window to a unit already in the zone (addWindow*) both
+  // trigger reflowManufacturingSchedules. We deliberately do NOT self-heal
+  // inline here: under concurrent load that turned every queue view into a
+  // facility-wide reflow + upsert storm (the 2026-06-23 pool-exhaustion
+  // shape). Out-of-band writes (SQL seeds/backfills/direct DB edits) must
+  // call reflowManufacturingSchedules() themselves.
 
   const dateColumn =
     role === "cutter"
@@ -803,7 +751,9 @@ export async function loadPersistedRoleSchedule(
 export async function loadManufacturingRoleSchedule(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
-  await reflowManufacturingSchedules("load_queue");
+  // Pure read: the persisted schedule is kept current by mutation-triggered
+  // reflows, so neither the queue nor the completed views need to recompute
+  // the facility on every load.
   return loadPersistedRoleSchedule(role);
 }
 

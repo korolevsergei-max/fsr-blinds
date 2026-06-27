@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { CalendarBlank, Factory } from "@phosphor-icons/react";
 import { useDatasetSelector, shallowEqual } from "@/lib/dataset-context";
 import type { ScheduleViewData } from "@/components/schedule/installation-schedule-view";
@@ -9,14 +9,16 @@ import { SCHEDULE_SCOPE_LABELS, type ScheduleScope } from "@/lib/schedule-ui";
 import { OwnerSchedule } from "./owner-schedule";
 import { ManufacturingSchedulePanel } from "./manufacturing-schedule-panel";
 
+export type ManufacturingSchedules = {
+  cutter: ManufacturingRoleSchedule;
+  assembler: ManufacturingRoleSchedule;
+  qc: ManufacturingRoleSchedule;
+};
+
 export function ScheduleScreen({
-  cutterSchedule,
-  assemblerSchedule,
-  qcSchedule,
+  manufacturingSchedulesPromise,
 }: {
-  cutterSchedule: ManufacturingRoleSchedule;
-  assemblerSchedule: ManufacturingRoleSchedule;
-  qcSchedule: ManufacturingRoleSchedule;
+  manufacturingSchedulesPromise: Promise<ManufacturingSchedules>;
 }) {
   const data = useDatasetSelector<ScheduleViewData>(
     (value) => ({
@@ -115,14 +117,27 @@ export function ScheduleScreen({
       {tab === "installer" ? (
         <OwnerSchedule data={data} scope={scope} onScopeChange={setScope} />
       ) : (
-        <ManufacturingSchedulePanel
-          cutterSchedule={cutterSchedule}
-          assemblerSchedule={assemblerSchedule}
-          qcSchedule={qcSchedule}
-          scope={scope}
-          onScopeChange={setScope}
-        />
+        <Suspense fallback={<ManufacturingScheduleFallback />}>
+          <ManufacturingSchedulePanel
+            schedulesPromise={manufacturingSchedulesPromise}
+            scope={scope}
+            onScopeChange={setScope}
+          />
+        </Suspense>
       )}
+    </div>
+  );
+}
+
+function ManufacturingScheduleFallback() {
+  return (
+    <div className="space-y-3 px-4 py-6">
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="h-16 animate-pulse rounded-xl border border-border bg-surface"
+        />
+      ))}
     </div>
   );
 }

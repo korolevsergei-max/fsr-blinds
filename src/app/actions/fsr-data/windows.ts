@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { type BlindType, type RiskFlag, type UnitStatus } from "@/lib/types";
+import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { BUCKET, MAX_PHOTOS_PER_STAGE, type ActionResult, type UnitMutationResult, normalizeStorageError, validateIncomingImageFile, getPhaseForStage, getStageForWindowUpload, countWindowStagePhotos, emitUnitProgressNotification, emitWindowEscalationNotification, finalizeUnitMutation, logUnitActivity, resolveFieldActor, getSchedulerForUnit, recomputeAllMeasuredAt } from "./_shared";
+
+const MANUFACTURING_ZONE_STATUSES: UnitStatus[] = ["measured", "bracketed", "manufactured"];
 
 /** @deprecated Status is auto-derived via recomputeUnitStatus from window data. */
 export async function updateUnitStatus(): Promise<ActionResult> {
@@ -276,6 +279,16 @@ export async function createWindowWithPhoto(
     const { actorRole, actorName } = await resolveFieldActor(unit?.assigned_installer_name);
 
     after(async () => {
+      // A window added to a unit already in the manufacturing zone does not
+      // change unit status, so finalizeUnitMutation → recomputeUnitStatus did
+      // not reflow (it only reflows on a status transition into the zone).
+      // Without this, the new window would have no window_manufacturing_schedule
+      // row and be invisible to the queues. This replaces the read-path
+      // self-heal that previously reflowed the whole facility on every view.
+      if (unitStatus === prevStatus && MANUFACTURING_ZONE_STATUSES.includes(unitStatus)) {
+        await reflowManufacturingSchedules("window_added");
+      }
+
       const db = createAdminClient();
       await logUnitActivity(
         db,

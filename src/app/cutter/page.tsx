@@ -3,10 +3,7 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import {
-  loadPersistedRoleSchedule,
-  reflowManufacturingSchedules,
-} from "@/lib/manufacturing-scheduler";
+import { loadPersistedRoleSchedule } from "@/lib/manufacturing-scheduler";
 import { computeAndUpdateManufacturingRisk } from "@/app/actions/production-actions";
 import { ManufacturingRoleShell } from "@/components/manufacturing/manufacturing-role-dashboard";
 import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
@@ -16,9 +13,11 @@ export default async function CutterPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // Recompute time-based manufacturing risk flags out-of-band. The schedule
+  // itself is reflowed by mutations, not by views, so we no longer recompute
+  // the whole facility on every dashboard load (the 2026-06-23 storm shape).
   after(async () => {
     await computeAndUpdateManufacturingRisk();
-    await reflowManufacturingSchedules("load_queue");
     revalidatePath("/cutter", "layout");
   });
 
