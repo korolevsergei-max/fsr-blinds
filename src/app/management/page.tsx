@@ -1,19 +1,7 @@
-"use client";
+import { loadOwnerDashboardCounts } from "@/lib/server-data";
+import { ManagementPageClient } from "./management-page-client";
 
-import { useDatasetSlices, useDatasetSelector } from "@/lib/dataset-context";
-import { ManagementDashboard } from "./management-dashboard";
-
-export default function ManagementPage() {
-  const data = useDatasetSlices([
-    "units",
-    "clients",
-    "buildings",
-    "installers",
-    "schedulers",
-    "rooms",
-    "windows",
-    "manufacturingEscalations",
-  ]);
-  const userName = useDatasetSelector((value) => value.user.displayName);
-  return <ManagementDashboard data={data} userName={userName} />;
+export default async function ManagementPage() {
+  const initialCounts = await loadOwnerDashboardCounts();
+  return <ManagementPageClient initialCounts={initialCounts} />;
 }

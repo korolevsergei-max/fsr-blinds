@@ -31,7 +31,31 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const startedAt = performance.now();
   const supabase = await createClient();
 
-  // Fast path: single RPC call (requires migration 20260408110000)
+  // Owner fast path: single RPC call that never builds raw rooms/windows server-side.
+  // get_full_dataset remains below as the rollback / pre-migration fallback.
+  const { data: ownerRpcData, error: ownerRpcError } = await supabase.rpc("get_owner_dataset");
+  if (!ownerRpcError && ownerRpcData) {
+    const raw = ownerRpcData as {
+      clients: ClientRow[];
+      buildings: BuildingRow[];
+      units: UnitRow[];
+      rooms: RoomRow[];
+      windows: WindowRow[];
+      installers: InstallerRow[];
+      schedule_entries: ScheduleRow[];
+      cutters: CutterRow[];
+      schedulers: SchedulerRow[];
+      scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
+    };
+    console.log(
+      `[owner-load] management units=${raw.units?.length ?? 0} rooms=0 windows=0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
+    );
+    return finalizeDataset(buildDatasetFromRaw(raw), {
+      deriveStatusFromWindows: false,
+    });
+  }
+
+  // Fallback fast path: single RPC call (requires migration 20260408110000)
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_full_dataset");
   if (!rpcError && rpcData) {
     const raw = rpcData as {

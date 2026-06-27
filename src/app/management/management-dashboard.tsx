@@ -30,6 +30,7 @@ import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-iss
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
 import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
+import type { OwnerDashboardCounts } from "@/lib/owner-dashboard-counts";
 
 function fadeUp(delay = 0) {
   return {
@@ -39,9 +40,25 @@ function fadeUp(delay = 0) {
   };
 }
 
+function ownerStageCountsToMap(counts: OwnerDashboardCounts) {
+  return new Map<CurrentStage, number>(
+    CURRENT_STAGES.map((stage) => [stage, counts.stageCounts[stage]])
+  );
+}
+
+function ownerIssueCountsToMap(counts: OwnerDashboardCounts) {
+  const map = new Map<DashboardIssue, number>();
+  for (const issue of ISSUE_ORDER) {
+    const count = counts.issueCounts[issue] ?? 0;
+    if (count > 0) map.set(issue, count);
+  }
+  return map;
+}
+
 export function ManagementDashboard({
   data,
   userName,
+  initialCounts,
 }: {
   data: Pick<
     AppDataset,
@@ -55,6 +72,7 @@ export function ManagementDashboard({
     | "manufacturingEscalations"
   >;
   userName?: string;
+  initialCounts?: OwnerDashboardCounts;
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
@@ -117,6 +135,15 @@ export function ManagementDashboard({
     return preFloorUnits.filter((u) => floorFilter.includes(getFloor(u.unitNumber)));
   }, [preFloorUnits, floorFilter]);
 
+  const hasScopeFilters =
+    clientFilter.length > 0 ||
+    buildingFilter.length > 0 ||
+    floorFilter.length > 0 ||
+    installerFilter.length > 0 ||
+    schedulerFilter.length > 0 ||
+    yearFilter !== "all" ||
+    (yearFilter !== "all" && monthFilter !== "all");
+
   const yearOptions = useMemo(() => buildYearOptions(units), [units]);
   const monthOptions = useMemo(() => buildMonthFilterOptions(), []);
 
@@ -134,6 +161,9 @@ export function ManagementDashboard({
 
   // Pipeline counts — cross-filtered by selected issue so clicks in either strip narrow the other
   const stageCounts = useMemo(() => {
+    if (initialCounts && !hasScopeFilters && selectedIssue === null) {
+      return ownerStageCountsToMap(initialCounts);
+    }
     const source = selectedIssue
       ? scopedUnits.filter((u) =>
           getUnitIssues(u, today, escalationIds).includes(selectedIssue)
@@ -145,15 +175,18 @@ export function ManagementDashboard({
       map.set(stage, (map.get(stage) ?? 0) + 1);
     });
     return map;
-  }, [scopedUnits, selectedIssue, today, escalationIds]);
+  }, [initialCounts, hasScopeFilters, scopedUnits, selectedIssue, today, escalationIds]);
 
   // Issue counts — cross-filtered by selected stage
   const issueCounts = useMemo(() => {
+    if (initialCounts && !hasScopeFilters && selectedStage === null) {
+      return ownerIssueCountsToMap(initialCounts);
+    }
     const source = selectedStage
       ? scopedUnits.filter((u) => getUnitCurrentStage(u) === selectedStage)
       : scopedUnits;
     return computeIssueCounts(source, today, escalationIds);
-  }, [scopedUnits, selectedStage, today, escalationIds]);
+  }, [initialCounts, hasScopeFilters, scopedUnits, selectedStage, today, escalationIds]);
 
   // Results = scopedUnits narrowed by selected stage + selected issue (intersection)
   const resultsUnits = useMemo(() => {
