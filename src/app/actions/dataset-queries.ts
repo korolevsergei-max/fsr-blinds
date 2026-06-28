@@ -1,6 +1,6 @@
 "use server";
 
-import { loadFullDataset, loadSchedulerDataset, loadInstallerDataset, loadUnitDetail, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
+import { loadFullDataset, loadSchedulerDataset, loadInstallerDataset, loadUnitDetail, loadSchedulerUnitDetail, loadUnitActivityLog, loadUnitStageMedia } from "@/lib/server-data";
 import { getCurrentUser, getLinkedInstallerId } from "@/lib/auth";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { getUnitMilestoneCoverage, type UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -35,6 +35,17 @@ export async function refreshUnitDetail(unitId: string): Promise<AppDataset | nu
   const user = await getCurrentUser();
   if (!user || user.role !== "owner") return null;
   return loadUnitDetail(unitId);
+}
+
+/**
+ * Scoped refetch for the scheduler unit-detail subtree (Phase 10). Scheduler-gated; returns `null`
+ * on unauthorized so the scoped realtime bridge skips `setData`. `loadSchedulerUnitDetail` applies
+ * the per-unit scheduler scope guard, so out-of-scope ids resolve to an empty (not-found) dataset.
+ */
+export async function refreshSchedulerUnitDetail(unitId: string): Promise<AppDataset | null> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "scheduler") return null;
+  return loadSchedulerUnitDetail(unitId);
 }
 
 export type UnitSupplementalData = {

@@ -13,4 +13,5 @@ export {
   loadUnitSchedulerAssignmentMap,
   loadAllSchedulerBuildingAccess,
   loadUnitDetail,
+  loadSchedulerUnitDetail,
 } from "./server-data/lookups";

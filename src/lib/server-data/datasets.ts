@@ -175,7 +175,6 @@ function buildSchedulerDataset(
 
   const buildings = (raw.buildings ?? []).map(mapBuilding);
   const clients = (raw.clients ?? []).map(mapClient);
-  const rooms = (raw.rooms ?? []).map(mapRoom);
 
   // Fall back to all installers when the scheduler has no team yet.
   let installers = (raw.team_installers ?? []).map(mapInstaller);
@@ -200,22 +199,28 @@ function buildSchedulerDataset(
     ];
   }
 
-  const windows = (raw.windows ?? []).map(mapWindow);
   const schedule = normalizeScheduleEntries(units, (raw.schedule_entries ?? []).map(mapSchedule));
 
-  return finalizeDataset({
-    clients,
-    buildings,
-    units,
-    rooms,
-    windows,
-    installers,
-    schedule,
-    cutters: [],
-    schedulers: [],
-    manufacturingEscalations: [],
-    postInstallIssues: [],
-  });
+  // Phase 10: the global scheduler shell ships no raw rooms/windows (the unit-detail subtree
+  // loads its own via loadSchedulerUnitDetail). No global scheduler screen reads currentStage,
+  // and units.status is persisted at every mutation by recomputeUnitStatus, so skip the
+  // windows-derived status re-derivation — mirrors the owner path (deriveStatusFromWindows:false).
+  return finalizeDataset(
+    {
+      clients,
+      buildings,
+      units,
+      rooms: [],
+      windows: [],
+      installers,
+      schedule,
+      cutters: [],
+      schedulers: [],
+      manufacturingEscalations: [],
+      postInstallIssues: [],
+    },
+    { deriveStatusFromWindows: false }
+  );
 }
 
 /**
@@ -285,7 +290,9 @@ export async function loadSchedulerDataset(
   const allowedClientIds = [...new Set(unitData.map((u) => u.client_id))];
   const allowedUnitIds = unitData.map((u) => u.id);
 
-  const [buildingRows, clientRows, schedulerRoomRows, schedulerScheduleRows, installerRows] = await Promise.all([
+  // Phase 10: the global scheduler payload no longer ships raw rooms/windows, so the fallback
+  // skips those queries too (buildSchedulerDataset hardcodes them to []).
+  const [buildingRows, clientRows, schedulerScheduleRows, installerRows] = await Promise.all([
     selectInChunks<BuildingRow>(allowedBuildingIds, (chunk) =>
       supabase
         .from("buildings")
@@ -302,14 +309,6 @@ export async function loadSchedulerDataset(
         .order("name")
         .then((res) => ({ data: res.data as ClientRow[] | null, error: res.error })),
     ),
-    selectInChunks<RoomRow>(allowedUnitIds, (chunk) =>
-      supabase
-        .from("rooms")
-        .select("*")
-        .in("unit_id", chunk)
-        .order("name")
-        .then((res) => ({ data: res.data as RoomRow[] | null, error: res.error })),
-    ),
     selectInChunks<ScheduleRow>(allowedUnitIds, (chunk) =>
       supabase
         .from("schedule_entries")
@@ -321,16 +320,6 @@ export async function loadSchedulerDataset(
     // Scope installers to this scheduler's team.
     supabase.from("installers").select("*").eq("scheduler_id", schedulerId).order("name"),
   ]);
-
-  const allowedRoomIds = schedulerRoomRows.map((r) => r.id);
-  const schedulerWindowRows = await selectInChunks<WindowRow>(allowedRoomIds, (chunk) =>
-    supabase
-      .from("windows")
-      .select("*")
-      .in("room_id", chunk)
-      .order("label")
-      .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
-  );
 
   const teamInstallers = (installerRows.data as InstallerRow[]) ?? [];
   // Only fetch the full installers list when the team is empty (the builder's fallback).
@@ -347,8 +336,8 @@ export async function loadSchedulerDataset(
       scheduler: (schedulerRowRes.data as SchedulerRow | null) ?? null,
       buildings: buildingRows,
       clients: clientRows,
-      rooms: schedulerRoomRows,
-      windows: schedulerWindowRows,
+      rooms: [],
+      windows: [],
       schedule_entries: schedulerScheduleRows,
       team_installers: teamInstallers,
       all_installers: allInstallers,

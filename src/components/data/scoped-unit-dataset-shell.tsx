@@ -26,15 +26,22 @@ export function ScopedUnitDatasetShell({
   initialData,
   user,
   children,
+  refreshAction = refreshUnitDetail,
 }: {
   unitId: string;
   initialData: AppDataset;
   user: AppUser;
   children: ReactNode;
+  /**
+   * Scoped refetch used by the realtime bridge. Defaults to the owner-gated `refreshUnitDetail`;
+   * the scheduler subtree passes `refreshSchedulerUnitDetail` so a realtime refresh re-applies the
+   * scheduler scope + team installer pick-list instead of returning `null` (owner-only).
+   */
+  refreshAction?: (unitId: string) => Promise<AppDataset | null>;
 }) {
   return (
     <AppDatasetProvider initialData={initialData} user={user} linkedEntityId={unitId}>
-      <ScopedUnitRealtimeBridge unitId={unitId} />
+      <ScopedUnitRealtimeBridge unitId={unitId} refreshAction={refreshAction} />
       {children}
     </AppDatasetProvider>
   );
@@ -47,11 +54,19 @@ export function ScopedUnitDatasetShell({
  * `unit_id`; `windows` has no `unit_id` (only `room_id`) so it subscribes unfiltered — the refetch
  * is one unit (cheap). C5 will consolidate/optimize channels.
  */
-function ScopedUnitRealtimeBridge({ unitId }: { unitId: string }) {
+function ScopedUnitRealtimeBridge({
+  unitId,
+  refreshAction,
+}: {
+  unitId: string;
+  refreshAction: (unitId: string) => Promise<AppDataset | null>;
+}) {
   const { setData } = useDatasetActions();
   const setDataRef = useRef(setData);
+  const refreshRef = useRef(refreshAction);
   useEffect(() => {
     setDataRef.current = setData;
+    refreshRef.current = refreshAction;
   });
 
   useEffect(() => {
@@ -63,7 +78,7 @@ function ScopedUnitRealtimeBridge({ unitId }: { unitId: string }) {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         refreshTimer = null;
-        refreshUnitDetail(unitId).then((fresh) => {
+        refreshRef.current(unitId).then((fresh) => {
           if (fresh) setDataRef.current(fresh);
         });
       }, 120);
