@@ -489,6 +489,92 @@ residual-risk note. No further feature changes.
 
 ---
 
+## Phase 9 — Scheduler & installer scoped RPCs (2026-06-28)
+
+**Goal:** make `/scheduler` and `/installer` snappy by collapsing the 6+ chunked PostgREST
+round-trips each loader made into one DB round-trip, mirroring the Phase 4 owner RPC.
+
+### Task 0 — measure first (which lever dominates)
+
+Round-trips, not payload or hydration, dominate the scoped loaders. Measured warm (2 warmup +
+median of 5) against **live prod** via a throwaway service-role validator that timed the new RPC
+vs an exact re-implementation of the chunked loader's round-trip sequence:
+
+| Path | Chunked (old) | RPC (new) | Speedup | Scope |
+|---|---:|---:|---:|---|
+| Scheduler (Tom U) | ~2038 ms | ~433 ms | ~4.7× | 460 units / 866 rooms / 1989 windows |
+| Installer (Mike Bull) | ~244 ms | ~81 ms | ~3.0× | 8 units / 14 rooms / 34 windows |
+
+The scheduler chunked path pays ~2 s mostly in serial chunk waves (units → buildings/clients/
+rooms/schedule/installers → windows), each gated on the prior wave. The RPC returns the same
+scoped spine in a single call. Payload is unchanged (same rows); the win is purely round-trips,
+so Task 3 (pagination) is **not** the dominant lever here.
+
+### Task 1 — `get_scheduler_dataset(text)` + `get_installer_dataset(text)` — DONE
+
+Migration [20260628120000_scheduler_installer_dataset_scoping.sql](../../supabase/migrations/20260628120000_scheduler_installer_dataset_scoping.sql).
+Both are `SECURITY DEFINER`, `search_path = public`, granted to `authenticated`, and return the
+**same raw scoped rows** the chunked loaders fetch. ALL mapping/business logic stays in TS via
+shared `buildSchedulerDataset` / `buildInstallerDataset` builders fed by both the RPC fast path
+and the retained chunked fallback (pre-migration / rollback), so visibility is byte-identical.
+
+- **Scheduler scope** = `scheduler_unit_assignments` for this scheduler UNION units whose
+  `assigned_installer_id` is a team installer (`installers.scheduler_id`) — exactly
+  `getSchedulerScopedUnitIds`. RPC also returns the scheduler row (name + synthetic `sch-<id>`
+  self pick-list entry), team installers, and `all_installers` for the empty-team fallback.
+- **Installer scope** = units where `assigned_installer_id = p_installer_id`, plus their
+  buildings/clients/rooms/windows/schedule.
+- **Gotcha hit & fixed:** id columns (`schedulers.id`, `installers.id`,
+  `units.assigned_installer_id`, `scheduler_unit_assignments.scheduler_id`) are **TEXT**
+  (`sch-…`, `inst-…`), not uuid. The first apply used `uuid` params and failed at call time with
+  `invalid input syntax for type uuid`. Re-pushed with `text` params (the migration drops the
+  old uuid signatures); validator then passed.
+
+**Validation (live prod, service-role parity diff):** exact set parity for
+units / rooms / windows / buildings / clients / schedule_entries / team_installers / assignments
+for the 1 scheduler (460 units) and all 6 installers (2 with scope, 4 empty), plus field-value
+parity on sampled unit/window rows (jsonb reorders keys but every value matches). **ALL CHECKS
+PASSED.**
+
+### Task 2 — reference-data caching — NOT IMPLEMENTED (premise invalidated by RPC bundling)
+
+The Phase 3 plan's premise was that `clients/buildings/installers/schedulers` are re-read on
+every navigation as a latency cost. After the owner RPC (Phase 4) and these scheduler/installer
+RPCs, that reference data now rides **inside** the single dataset RPC (read in-DB on one
+connection), so there is nothing separate to wrap in `unstable_cache` on the hot dataset path —
+and caching can't intercept reads that happen inside a SQL function.
+
+The only residual separate reads are `loadUnitDetail`'s full `installers`/`schedulers` lists,
+but they run **in parallel** with the required `units`/`rooms` queries, so caching them saves
+~0 latency (and both tables are tiny with a 1.00 PG cache-hit rate). The only upside would be a
+marginal reduction in pooler connections under heavy concurrent unit-detail viewing, weighed
+against a real **staleness risk**: a newly added installer/scheduler would not appear in
+assignment pick-lists until cache TTL unless `revalidateTag` is wired into **every** mutation
+site (`actions/auth/installer.ts`, `actions/auth/scheduler.ts`, `actions/auth/helpers.ts`
+delete, `lib/account-sync.ts`). Net: low value, real correctness risk on a live ops app —
+deferred. Revisit only with complete revalidation wiring if unit-detail pooler load shows up in
+`pg_stat_statements` under concurrency.
+
+### Task 3 — server-side unit pagination — DEFERRED (payload is not the dominant lever)
+
+Task 0 showed round-trips, not payload, dominated; Phase 9 already collapsed those. Pagination
+remains the larger, riskier change (the shared `AppDatasetProvider` feeds schedule/reports/
+installers/building/client pages from the full units array, which must get their own scoped
+loaders first — the reason Phase 4 deferred it). Not warranted by the current measurement.
+
+### Verification & residual risk
+
+- `npm run lint` (0 errors; pre-existing warnings only), `npm run typecheck`, `npm run build`,
+  `npm test` (85/85) all green. Migration applied to prod via `supabase db push`.
+- Fallback chunked path is retained, so a missing/failed RPC degrades to the prior behavior
+  (no hard dependency ordering risk, unlike the management regression noted earlier).
+- Residual: scheduler payload is still large (460 units + 866 rooms + 1989 windows in one
+  response) — acceptable at one round-trip but the candidate for a future pagination pass.
+  `finalizeDataset` still issues its own enrichment round-trips (post-install issues, live
+  statuses, manufacturing escalations) on both scoped paths, unchanged by Phase 9.
+
+---
+
 ## 6. Constraints & non-goals
 
 - Keep each phase **independently shippable and revertible** (own branch, own commit).

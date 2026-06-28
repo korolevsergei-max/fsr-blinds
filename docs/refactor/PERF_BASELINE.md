@@ -399,3 +399,29 @@ No materialized owner summary is warranted yet. The Phase 4 `get_owner_dashboard
 | Supabase `calls`/`index-stats`/`db-stats` refresh | Blocked by temporary CLI login-role auth/circuit-breaker failures |
 
 Residual risk: completed manufacturing views still read all-time schedule rows, scheduler nav still has two notification channels, and true server-side realtime scoping for scheduler/installer `windows` events still needs a data-model change such as denormalizing `unit_id` onto `windows`.
+
+---
+
+## Phase 9 scoped-RPC timing (2026-06-28)
+
+Scheduler/installer dataset loaders moved from 6+ chunked PostgREST round-trips to a single
+`get_scheduler_dataset(text)` / `get_installer_dataset(text)` RPC (migration
+`20260628120000_scheduler_installer_dataset_scoping.sql`). Round-trips, not payload, were the
+dominant lever (confirmed below). Warm timing (2 warmup + median of 5) against the linked prod
+DB via a throwaway service-role validator that diffed the RPC against an exact re-implementation
+of the chunked round-trip sequence:
+
+| Loader | Scope | Chunked path (old) | RPC (new) | Speedup |
+|---|---|---:|---:|---:|
+| `loadSchedulerDataset` (Tom U) | 460 units / 866 rooms / 1989 windows | ~2038 ms | ~433 ms | ~4.7× |
+| `loadInstallerDataset` (Mike Bull) | 8 units / 14 rooms / 34 windows | ~244 ms | ~81 ms | ~3.0× |
+
+Notes:
+- Times are network-inclusive from a dev machine to prod (Supabase API); the in-app serverless
+  numbers will be lower but the round-trip ratio holds. Capture `[scoped-load] … rpc …ms` vs the
+  chunked variant from `vercel logs` during a real authenticated session to confirm in-prod.
+- Payload is unchanged (same rows returned), so server-side pagination (deferred) is not the
+  dominant lever for these routes.
+- Parity verified on live prod data: exact set parity for units/rooms/windows/buildings/clients/
+  schedule/installers/assignments across the 1 scheduler and all 6 installers, plus field-value
+  parity on sampled rows. The validator was deleted after use per the workflow.
