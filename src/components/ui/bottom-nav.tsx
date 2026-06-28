@@ -36,8 +36,10 @@ export function BottomNav({
     if (!recipientId) return;
 
     const supabase = createClient();
-    const notificationsChannel = supabase
-      .channel(`installer-nav-notifications-${recipientId}`)
+    // Single channel with two postgres_changes listeners → one WebSocket subscription per installer
+    // (previously two separate channels stacked on top of the main realtime-installer sync channel).
+    const channel = supabase
+      .channel(`installer-nav-${recipientId}`)
       .on(
         "postgres_changes" as "system",
         { event: "INSERT", schema: "public", table: "notifications" } as unknown as { event: "system" },
@@ -48,10 +50,6 @@ export function BottomNav({
           }
         }
       )
-      .subscribe();
-
-    const readsChannel = supabase
-      .channel(`installer-nav-reads-${recipientId}`)
       .on(
         "postgres_changes" as "system",
         { event: "INSERT", schema: "public", table: "notification_reads" } as unknown as { event: "system" },
@@ -65,8 +63,7 @@ export function BottomNav({
       .subscribe();
 
     return () => {
-      void supabase.removeChannel(notificationsChannel);
-      void supabase.removeChannel(readsChannel);
+      void supabase.removeChannel(channel);
     };
   }, [recipientId]);
 

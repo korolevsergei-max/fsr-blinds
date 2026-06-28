@@ -123,6 +123,12 @@ export function useRealtimeSync(
     const shouldTrackMetaTables = loaderKind !== "installer";
     const shouldTrackStaffLists = loaderKind === "full" || loaderKind === "scheduler";
     const shouldTrackManufacturingLists = loaderKind === "full";
+    // Owner ("full") drops rooms+windows from its global load (d277329) and renders them only in
+    // the separately-wired scoped unit-detail shell — so the global owner channel must NOT subscribe
+    // to these high-cardinality tables (every facility room/window change would otherwise fan out to
+    // every owner browser for no benefit). Scheduler/installer DO render their scoped rooms+windows,
+    // so they subscribe but apply patches only for rows already in their loaded scope (below).
+    const shouldTrackUnitChildren = loaderKind !== "full";
     let schedulerRefreshTimer: number | null = null;
     let datasetRefreshTimer: number | null = null;
 
@@ -204,21 +210,35 @@ export function useRealtimeSync(
       });
     });
 
-    on<RoomRow>("rooms", (p) => {
-      patchRef.current((prev) => {
-        const id = p.old.id;
-        if (p.eventType === "DELETE" && id) return { ...prev, rooms: remove(prev.rooms, id) };
-        return { ...prev, rooms: upsert(prev.rooms, mapRoom(p.new as RoomRow)) };
+    if (shouldTrackUnitChildren) {
+      on<RoomRow>("rooms", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) return { ...prev, rooms: remove(prev.rooms, id) };
+          const row = p.new as RoomRow;
+          // Out-of-scope room (another role's unit): ignore so it never pollutes this scoped store
+          // or triggers a re-render. A room belonging to a loaded unit (incl. a newly added one) passes.
+          if (!prev.units.some((u) => u.id === row.unit_id)) return prev;
+          return { ...prev, rooms: upsert(prev.rooms, mapRoom(row)) };
+        });
       });
-    });
 
-    on<WindowRow>("windows", (p) => {
-      patchRef.current((prev) => {
-        const id = p.old.id;
-        if (p.eventType === "DELETE" && id) return { ...prev, windows: remove(prev.windows, id) };
-        return { ...prev, windows: upsert(prev.windows, mapWindow(p.new as WindowRow)) };
+      on<WindowRow>("windows", (p) => {
+        patchRef.current((prev) => {
+          const id = p.old.id;
+          if (p.eventType === "DELETE" && id) return { ...prev, windows: remove(prev.windows, id) };
+          const row = p.new as WindowRow;
+          // The windows table carries only room_id (no unit_id), so scope client-side: apply only if
+          // the window is already loaded or belongs to a room in scope (covers a new window on a
+          // loaded room). Out-of-scope changes are dropped — no store pollution, no re-render.
+          const inScope =
+            prev.windows.some((w) => w.id === row.id) ||
+            prev.rooms.some((r) => r.id === row.room_id);
+          if (!inScope) return prev;
+          return { ...prev, windows: upsert(prev.windows, mapWindow(row)) };
+        });
       });
-    });
+    }
 
     if (shouldTrackStaffLists) {
       on<InstallerRow>("installers", (p) => {
