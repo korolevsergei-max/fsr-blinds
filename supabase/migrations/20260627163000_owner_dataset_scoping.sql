@@ -78,30 +78,33 @@ WITH unit_scope AS (
   FROM units u
 ),
 flagged AS (
+  -- bracketing_date / installation_date are DATE columns (units were migrated from
+  -- TEXT to DATE in 20260407000000_schema_best_practices.sql), so compare date-to-date
+  -- directly. NULL is the only "unset" sentinel — there is no empty-string case.
   SELECT
     *,
     status <> 'installed'
       AND (
         (
-          NULLIF(bracketing_date, '') IS NOT NULL
-          AND NULLIF(bracketing_date, '') < p_today::text
+          bracketing_date IS NOT NULL
+          AND bracketing_date < p_today
           AND status = 'not_started'
         )
         OR (
-          NULLIF(installation_date, '') IS NOT NULL
-          AND NULLIF(installation_date, '') < p_today::text
+          installation_date IS NOT NULL
+          AND installation_date < p_today
         )
       ) AS has_past_scheduled,
     status <> 'installed'
       AND (
         assigned_installer_id IS NULL
-        OR NULLIF(bracketing_date, '') IS NULL
-        OR (NULLIF(installation_date, '') IS NULL AND status IN ('measured', 'bracketed', 'manufactured'))
+        OR bracketing_date IS NULL
+        OR (installation_date IS NULL AND status IN ('measured', 'bracketed', 'manufactured'))
       ) AS has_missing,
     status <> 'installed'
-      AND NULLIF(installation_date, '') IS NOT NULL
-      AND NULLIF(installation_date, '') >= p_today::text
-      AND NULLIF(installation_date, '') <= (p_today + 3)::text AS has_at_risk
+      AND installation_date IS NOT NULL
+      AND installation_date >= p_today
+      AND installation_date <= p_today + 3 AS has_at_risk
   FROM unit_scope
 ),
 stage_counts AS (
