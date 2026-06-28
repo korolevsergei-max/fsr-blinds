@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { Camera, Images, User, X } from "@phosphor-icons/react";
 import { STAGE_META, type GalleryItem, type WindowStageKey } from "./gallery-shared";
 
@@ -27,24 +27,17 @@ export function GalleryModal({
   onClose: () => void;
 }) {
   return (
-    <AnimatePresence>
+    <>
       {galleryWindow && (
         <>
-          <motion.button
+          <button
             type="button"
             aria-label="Close window image gallery"
-            className="fixed inset-0 z-40 bg-zinc-950/45"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="animate-fade-in fixed inset-0 z-40 bg-zinc-950/45"
             onClick={onClose}
           />
-          <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col overflow-hidden rounded-t-[2rem] border border-border bg-white shadow-2xl sm:inset-6 sm:mx-auto sm:max-w-5xl sm:rounded-[2rem]"
+          <div
+            className="animate-fade-scale fixed inset-x-0 bottom-0 top-16 z-50 flex flex-col overflow-hidden rounded-t-[2rem] border border-border bg-white shadow-2xl sm:inset-6 sm:mx-auto sm:max-w-5xl sm:rounded-[2rem]"
           >
             <div className="flex items-center gap-3 border-b border-border px-5 py-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/8 text-accent">
@@ -144,9 +137,9 @@ export function GalleryModal({
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         </>
       )}
-    </AnimatePresence>
+    </>
   );
 }

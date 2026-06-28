@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+
 import {
   Camera,
   CaretLeft,
@@ -397,13 +397,10 @@ export function RoomWindowsView({
           };
 
           return (
-            <motion.div
+            <div
               key={win.id}
               id={`window-${win.id}`}
               className="scroll-mt-24"
-              initial={false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <div
                 role={galleryCount > 0 ? "button" : undefined}
@@ -782,7 +779,7 @@ export function RoomWindowsView({
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>

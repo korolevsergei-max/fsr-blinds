@@ -3,7 +3,6 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { motion } from "framer-motion";
 import {
   ArrowRight,
   Plus,
@@ -141,10 +140,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
       />
 
       {showEditForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="px-4 pt-4"
+        <div className="animate-fade-in px-4 pt-4"
         >
           <div className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3">
             <SectionLabel as="h3" noMargin>Edit Client</SectionLabel>
@@ -167,14 +163,11 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {showForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="px-4 pt-4"
+        <div className="animate-fade-in px-4 pt-4"
         >
           <div className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3">
             <SectionLabel as="h3" noMargin>New building</SectionLabel>
@@ -192,7 +185,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
               </Button>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       <div className="px-4 py-4 flex flex-col gap-3">
@@ -204,15 +197,9 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
           );
 
           return (
-            <motion.div
+            <div
               key={building.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: i * 0.06,
-                duration: 0.3,
-                ease: [0.16, 1, 0.3, 1],
-              }}
+              className="animate-fade-up"
             >
               <Link href={`/management/buildings/${building.id}`}>
                 <div className="bg-white rounded-2xl border border-border group p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
@@ -252,7 +239,7 @@ export function ClientDetail({ data, userRole }: ClientDetailProps) {
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           );
         })}
 

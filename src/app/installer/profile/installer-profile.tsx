@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useTransition } from "react";
-import { motion } from "framer-motion";
 import { Envelope, Phone, SignOut } from "@phosphor-icons/react";
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -39,11 +38,7 @@ export function InstallerProfile({
       <PageHeader title="Profile" actions={<RefreshButton />} />
 
       <div className="px-5 py-6 flex flex-col gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-4"
+        <div className="animate-fade-up flex items-center gap-4"
         >
           <div className="w-16 h-16 rounded-[var(--radius-xl)] overflow-hidden bg-accent-light flex-shrink-0 flex items-center justify-center">
             <Image
@@ -59,13 +54,9 @@ export function InstallerProfile({
             </h2>
             <p className="text-[12px] text-tertiary font-medium">Field installer</p>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4 flex flex-col gap-3"
+        <div className="animate-fade-up surface-card p-4 flex flex-col gap-3"
         >
           <div className="flex items-center gap-3 text-[14px] text-foreground">
             <Envelope size={15} className="text-accent" />
@@ -75,23 +66,15 @@ export function InstallerProfile({
             <Phone size={15} className="text-accent" />
             {installer.phone}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 gap-3"
+        <div className="animate-fade-up grid grid-cols-2 gap-3"
         >
           <MetricTile value={active} label="Active Units" />
           <MetricTile value={completed} label="Completed" />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pt-4"
+        <div className="animate-fade-up pt-4"
         >
           <Button
             variant="ghost"
@@ -108,7 +91,7 @@ export function InstallerProfile({
             <SignOut size={16} />
             {signingOut ? "Signing out…" : "Sign Out"}
           </Button>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

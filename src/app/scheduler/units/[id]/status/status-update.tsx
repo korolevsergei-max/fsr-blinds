@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
+
 import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import type { UnitMilestoneCoverage } from "@/lib/unit-milestones";
@@ -55,10 +55,7 @@ export function StatusUpdate({
       />
 
       <div className="flex-1 px-5 py-5 flex flex-col gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div className="animate-fade-up"
         >
           <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
             Current Progress
@@ -69,12 +66,10 @@ export function StatusUpdate({
               {UNIT_STATUS_LABELS[effectiveStatus] ?? effectiveStatus}
             </span>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div className="animate-fade-up"
+          style={{ "--anim-delay": "0.06s" } as React.CSSProperties}
         >
           <h2 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
             Window Progress
@@ -84,13 +79,10 @@ export function StatusUpdate({
             <MetricTile value={measuredWindows} label="Measured" />
             <MetricTile value={totalWindows} label="Total" />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div className="animate-fade-up surface-card p-4"
+          style={{ "--anim-delay": "0.12s" } as React.CSSProperties}
         >
           <UnitProgressMilestonesPanel
             unit={unit}
@@ -102,16 +94,13 @@ export function StatusUpdate({
               href: `/scheduler/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
             }))}
           />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="rounded-2xl border border-border bg-surface px-4 py-3.5 text-[12px] text-secondary leading-relaxed pb-28"
+        <div className="animate-fade-up rounded-2xl border border-border bg-surface px-4 py-3.5 text-[12px] text-secondary leading-relaxed pb-28"
+          style={{ "--anim-delay": "0.18s" } as React.CSSProperties}
         >
           Status updates automatically when measurements, bracketing photos, manufacturing QC, and installation are completed for the unit.
-        </motion.div>
+        </div>
       </div>
     </div>
   );

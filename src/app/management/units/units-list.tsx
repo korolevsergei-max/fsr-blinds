@@ -4,7 +4,6 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
   CalendarBlank,
@@ -546,14 +545,10 @@ export function UnitsList({
             </div>
 
             {/* Select-all row */}
-            <AnimatePresence>
               {selectMode && (
-                <motion.div
+                <div
                   key="select-all-row"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="pt-1 overflow-hidden"
+                  className="animate-fade-in pt-1 overflow-hidden"
                 >
                   <button
                     type="button"
@@ -567,9 +562,8 @@ export function UnitsList({
                     )}
                     {allFilteredSelected ? "Deselect all" : `Select all ${filtered.length}`}
                   </button>
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
           </div>
         }
       />
@@ -706,15 +700,10 @@ export function UnitsList({
       </div>
 
       {/* Floating bulk action bar */}
-      <AnimatePresence>
         {selectMode && selectedIds.size > 0 && (
-          <motion.div
+          <div
             key="bulk-bar"
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            transition={{ type: "spring", damping: 26, stiffness: 300 }}
-            className="fixed bottom-20 left-4 right-4 z-20"
+            className="animate-slide-up fixed bottom-20 left-4 right-4 z-20"
           >
             <div className="bg-foreground rounded-[var(--radius-xl)] px-3 py-3 sm:px-4 shadow-2xl flex flex-col gap-3 min-w-[320px]">
               <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
@@ -776,12 +765,10 @@ export function UnitsList({
                 </Button>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Bulk assign installer */}
-      <AnimatePresence>
         {showBulkSheet && (
           <BulkAssignSheet
             key="bulk-assign-installer"
@@ -792,10 +779,8 @@ export function UnitsList({
             showCompleteBy
           />
         )}
-      </AnimatePresence>
 
       {/* Bulk set dates only */}
-      <AnimatePresence>
         {showDatesSheet && (
           <BulkAssignSheet
             key="bulk-set-dates"
@@ -807,10 +792,8 @@ export function UnitsList({
             variant="datesOnly"
           />
         )}
-      </AnimatePresence>
 
       {/* Bulk assign scheduler */}
-      <AnimatePresence>
         {showSchedulerSheet && (
           <BulkAssignSchedulerSheet
             key="bulk-assign-scheduler"
@@ -820,26 +803,18 @@ export function UnitsList({
             onSuccess={exitSelectMode}
           />
         )}
-      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
-      <AnimatePresence>
         {showDeleteConfirm && (
           <div key="delete-confirm-modal" className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
+            <div
               key="delete-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
               onClick={() => !isDeleting && setShowDeleteConfirm(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="animate-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
-            <motion.div
+            <div
               key="delete-dialog"
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-[340px] bg-white rounded-[24px] overflow-hidden shadow-2xl"
+              className="animate-fade-scale relative w-full max-w-[340px] bg-white rounded-[24px] overflow-hidden shadow-2xl"
             >
               <div className="p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
@@ -870,10 +845,9 @@ export function UnitsList({
                   </Button>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }

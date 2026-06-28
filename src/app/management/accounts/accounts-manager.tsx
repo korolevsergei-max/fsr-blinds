@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { motion } from "framer-motion";
 import {
   Envelope,
   Phone,
@@ -224,16 +223,10 @@ export function AccountsManager({
             needed.
           </InlineAlert>
           {authDrift.map((entry, i) => (
-            <motion.div
-              key={entry.authUserId}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: i * 0.06,
-                duration: 0.3,
-                ease: [0.16, 1, 0.3, 1],
-              }}
-            >
+            <div
+                key={entry.authUserId}
+                className="animate-fade-up"
+              >
               <div className="surface-card p-4">
                 <div className="flex items-center gap-3 mb-3 justify-between">
                   <div className="flex items-center gap-3">
@@ -263,7 +256,7 @@ export function AccountsManager({
                   {entry.email}
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
       )}
@@ -349,15 +342,9 @@ export function AccountsManager({
         {tab === "cutters" && (
           <>
             {linkedCutters.map((mfr, i) => (
-              <motion.div
+              <div
                 key={mfr.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: i * 0.06,
-                  duration: 0.3,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
+                className="animate-fade-up"
               >
                 <div className="surface-card p-4">
                   <div className="flex items-center gap-3 mb-3 justify-between">
@@ -402,7 +389,7 @@ export function AccountsManager({
                   </div>
                   {mfr.authUserId && <ChangePasswordInline authUserId={mfr.authUserId} />}
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {orphanCutters.length > 0 && (
@@ -414,16 +401,10 @@ export function AccountsManager({
                   </InlineAlert>
                 </div>
                 {orphanCutters.map((mfr, i) => (
-                  <motion.div
-                    key={mfr.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{
-                      delay: i * 0.06,
-                      duration: 0.3,
-                      ease: [0.16, 1, 0.3, 1],
-                    }}
-                  >
+                  <div
+                key={mfr.id}
+                className="animate-fade-up"
+              >
                     <div className="surface-card p-4">
                       <div className="flex items-center gap-3 mb-3 justify-between">
                         <div className="flex items-center gap-3">
@@ -466,7 +447,7 @@ export function AccountsManager({
                         )}
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </>
             )}
@@ -482,11 +463,9 @@ export function AccountsManager({
         {tab === "schedulers" && (
           <>
             {linkedSchedulers.map((sch, i) => (
-              <motion.div
+              <div
                 key={sch.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="animate-fade-up"
               >
                 <div className="surface-card p-4">
                   <div className="flex items-center gap-3 mb-3 justify-between">
@@ -550,7 +529,7 @@ export function AccountsManager({
                   )}
                   {sch.authUserId && <ChangePasswordInline authUserId={sch.authUserId} />}
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {orphanSchedulers.length > 0 && (
@@ -562,12 +541,10 @@ export function AccountsManager({
                   </InlineAlert>
                 </div>
                 {orphanSchedulers.map((sch, i) => (
-                  <motion.div
-                    key={sch.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  >
+                  <div
+                key={sch.id}
+                className="animate-fade-up"
+              >
                     <div className="surface-card p-4">
                       <div className="flex items-center gap-3 justify-between">
                         <div className="flex items-center gap-3">
@@ -584,7 +561,7 @@ export function AccountsManager({
                         </Button>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </>
             )}
@@ -600,11 +577,9 @@ export function AccountsManager({
         {tab === "assemblers" && (
           <>
             {linkedAssemblers.map((qc: Assembler, i: number) => (
-              <motion.div
+              <div
                 key={qc.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="animate-fade-up"
               >
                 <div className="surface-card p-4">
                   <div className="flex items-center gap-3 mb-3 justify-between">
@@ -640,7 +615,7 @@ export function AccountsManager({
                   </div>
                   {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {orphanAssemblers.length > 0 && (
@@ -652,12 +627,10 @@ export function AccountsManager({
                   </InlineAlert>
                 </div>
                 {orphanAssemblers.map((qc: Assembler, i: number) => (
-                  <motion.div
-                    key={qc.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  >
+                  <div
+                key={qc.id}
+                className="animate-fade-up"
+              >
                     <div className="surface-card p-4">
                       <div className="flex items-center gap-3 justify-between">
                         <div className="flex items-center gap-3">
@@ -674,7 +647,7 @@ export function AccountsManager({
                         </Button>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </>
             )}
@@ -690,11 +663,9 @@ export function AccountsManager({
         {tab === "qcs" && (
           <>
             {linkedQcs.map((qc, i) => (
-              <motion.div
+              <div
                 key={qc.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="animate-fade-up"
               >
                 <div className="surface-card p-4">
                   <div className="flex items-center gap-3 mb-3 justify-between">
@@ -730,7 +701,7 @@ export function AccountsManager({
                   </div>
                   {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {orphanQcs.length > 0 && (
@@ -742,12 +713,10 @@ export function AccountsManager({
                   </InlineAlert>
                 </div>
                 {orphanQcs.map((qc, i) => (
-                  <motion.div
-                    key={qc.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                  >
+                  <div
+                key={qc.id}
+                className="animate-fade-up"
+              >
                     <div className="surface-card p-4">
                       <div className="flex items-center gap-3 justify-between">
                         <div className="flex items-center gap-3">
@@ -764,7 +733,7 @@ export function AccountsManager({
                         </Button>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </>
             )}
@@ -780,11 +749,9 @@ export function AccountsManager({
         {tab === "owners" && (
           <>
             {ownerProfiles.map((owner, i) => (
-              <motion.div
+              <div
                 key={owner.authUserId}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className="animate-fade-up"
               >
                 <div className="surface-card p-4">
                   <div className="flex items-center gap-3 justify-between">
@@ -823,7 +790,7 @@ export function AccountsManager({
                   </div>
                   <ChangePasswordInline authUserId={owner.authUserId} />
                 </div>
-              </motion.div>
+              </div>
             ))}
 
             {ownerProfiles.length === 0 && (

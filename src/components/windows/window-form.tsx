@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+
 import {
   Camera,
   CheckCircle,
@@ -411,11 +411,8 @@ export function WindowForm({
           </p>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-4"
+        <div
+          className="animate-fade-up flex flex-col gap-4"
         >
           <Input
             label="Window Label"
@@ -473,13 +470,11 @@ export function WindowForm({
             </div>
           </div>
 
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-4"
+        <div
+          className="animate-fade-up flex flex-col gap-4"
+          style={{ "--anim-delay": "0.08s" } as React.CSSProperties}
         >
           <div>
             <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-2">
@@ -609,12 +604,11 @@ export function WindowForm({
               />
             )}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div
+          className="animate-fade-up"
+          style={{ "--anim-delay": "0.16s" } as React.CSSProperties}
         >
           <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-0.5">
             Pre-bracketing Photo
@@ -702,7 +696,7 @@ export function WindowForm({
               )}
             </button>
           )}
-        </motion.div>
+        </div>
 
         {/* Additional measured photos — edit mode only */}
         {existingWindow && unit && (
@@ -715,10 +709,9 @@ export function WindowForm({
           />
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div
+          className="animate-fade-up"
+          style={{ "--anim-delay": "0.24s" } as React.CSSProperties}
         >
           <WindowRiskNotesFields
             riskFlag={riskFlag}
@@ -727,7 +720,7 @@ export function WindowForm({
             onRiskFlagChange={setRiskFlag}
             onNotesChange={setNotes}
           />
-        </motion.div>
+        </div>
 
         <div className="pt-2 pb-24 flex flex-col gap-2.5">
           <Button type="submit" fullWidth size="lg" disabled={pending || optimizingPhoto}>

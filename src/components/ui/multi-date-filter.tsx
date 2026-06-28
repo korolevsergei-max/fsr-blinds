@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+
 import {
   CalendarBlank,
   CaretDown,
@@ -164,18 +164,13 @@ export function MultiDateFilter({
       </button>
 
       {typeof document !== "undefined" && createPortal(
-        <AnimatePresence>
-          {open && (
+          open && (
             <div className="relative z-[9999]">
               <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-              <motion.div
+              <div
                 ref={menuRef}
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                transition={{ duration: 0.15 }}
                 style={{ top: position.top, left: position.left, right: position.right }}
-                className="fixed z-50 w-[min(calc(100vw-2rem),22rem)] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card p-4 shadow-[var(--shadow-md)]"
+                className="animate-fade-down fixed z-50 w-[min(calc(100vw-2rem),22rem)] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card p-4 shadow-[var(--shadow-md)]"
               >
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -287,10 +282,9 @@ export function MultiDateFilter({
                     Today
                   </button>
                 </div>
-              </motion.div>
+              </div>
             </div>
-          )}
-        </AnimatePresence>,
+          ),
         document.body
       )}
     </>

@@ -2,7 +2,7 @@
 
 import { useTransition, useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+
 import {
   Bell,
   CalendarBlank,
@@ -293,21 +293,14 @@ export function NotificationsList({
           />
         ) : (
           <div className="flex flex-col gap-2">
-            <AnimatePresence initial={false}>
+
               {filtered.map((notif, i) => (
-                <motion.button
+                <button
                   key={notif.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{
-                    delay: i * 0.03,
-                    duration: 0.3,
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
                   onClick={() => handleRead(notif)}
                   disabled={pending}
                   className={[
+                    "animate-fade-up",
                     "w-full text-left rounded-2xl border p-3.5 transition-all active:scale-[0.99]",
                     notif.read
                       ? "border-border bg-white"
@@ -360,9 +353,8 @@ export function NotificationsList({
                       </div>
                     </div>
                   </div>
-                </motion.button>
+                </button>
               ))}
-            </AnimatePresence>
           </div>
         )}
       </div>

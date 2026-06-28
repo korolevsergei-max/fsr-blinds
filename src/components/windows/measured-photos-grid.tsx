@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+
 import { Plus, Trash, User } from "@phosphor-icons/react";
 import type { UnitStageMediaItem } from "@/lib/server-data";
 import { deleteWindowStagePhoto } from "@/app/actions/fsr-data";
@@ -52,10 +52,9 @@ export function MeasuredPhotosGrid({
   if (additionalPhotos.length === 0) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.20, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+    <div
+      className="animate-fade-up"
+      style={{ "--anim-delay": "0.2s" } as React.CSSProperties}
     >
       <h2 className="text-xs font-bold text-zinc-600 uppercase tracking-[0.1em] mb-1 flex items-center justify-between">
         <span>All Measured Photos</span>
@@ -128,6 +127,6 @@ export function MeasuredPhotosGrid({
           </button>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

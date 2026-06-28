@@ -3,7 +3,7 @@
 import { useDeferredValue, useMemo, useState } from "react";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+
 import {
   ArrowRight,
   CheckSquare,
@@ -429,14 +429,10 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
             </div>
 
             {/* Select-all row */}
-            <AnimatePresence>
+
               {selectMode && (
-                <motion.div
-                  key="scheduler-select-all-row"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="pt-1 overflow-hidden"
+                <div
+                  className="animate-fade-in pt-1 overflow-hidden"
                 >
                   <button
                     type="button"
@@ -450,9 +446,8 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
                     )}
                     {allFilteredSelected ? "Deselect all" : `Select all ${sortedFilteredUnits.length}`}
                   </button>
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
           </div>
         }
       />
@@ -468,11 +463,9 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
           const isSelected = selectedIds.has(unit.id);
 
           return (
-            <motion.div
+            <div
               key={unit.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className="animate-fade-up"
             >
               {selectMode ? (
                 <button
@@ -578,20 +571,15 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
                   )}
                 </Link>
               )}
-            </motion.div>
+            </div>
           );
         })}
       </div>
 
-      <AnimatePresence>
+
         {selectMode && selectedIds.size > 0 && (
-          <motion.div
-            key="scheduler-bulk-bar"
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            transition={{ type: "spring", damping: 26, stiffness: 300 }}
-            className="fixed bottom-20 left-4 right-4 z-20"
+          <div
+            className="animate-slide-up fixed bottom-20 left-4 right-4 z-20"
           >
             <div className="bg-foreground rounded-[var(--radius-xl)] px-4 py-3 flex items-center justify-between shadow-2xl">
               <span className="text-sm font-semibold text-white">
@@ -606,11 +594,10 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
                 Action
               </Button>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
+
         {showBulkSheet && (
           <BulkAssignSheet
             key="scheduler-bulk-assign"
@@ -621,7 +608,7 @@ export function SchedulerUnitsList({ data }: { data: SchedulerUnitsListData }) {
             showScheduleDates
           />
         )}
-      </AnimatePresence>
+
     </div>
   );
 }

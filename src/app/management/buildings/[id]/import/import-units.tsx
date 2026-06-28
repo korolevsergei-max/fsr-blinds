@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   UploadSimple,
   FileText,
@@ -338,11 +337,7 @@ export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "cl
           </p>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04 }}
-          className="flex bg-zinc-100 p-1 rounded-xl"
+        <div className="animate-fade-up flex bg-zinc-100 p-1 rounded-xl"
         >
           <button
             type="button"
@@ -362,12 +357,9 @@ export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "cl
           >
             Paste Data
           </button>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08 }}
+        <div className="animate-fade-up"
         >
           {inputMode === "file" ? (
             <div className="flex flex-col gap-3">
@@ -419,13 +411,10 @@ export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "cl
               </Button>
             </div>
           )}
-        </motion.div>
+        </div>
 
         {parsed.length > 0 && !result && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12 }}
+          <div className="animate-fade-up"
           >
             <SectionLabel as="h3">Dates & assignments ({parsed.length} rows)</SectionLabel>
             {missingCompleteByCount > 0 && (
@@ -579,14 +568,11 @@ export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "cl
                 {pending ? "Importing…" : `Import ${validUnitCount} Units`}
               </Button>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {result && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3"
+          <div className="animate-fade-up bg-white rounded-2xl border border-border p-4 flex flex-col gap-3"
           >
             <SectionLabel as="h3" noMargin>Import results</SectionLabel>
             <div className="flex gap-4">
@@ -620,7 +606,7 @@ export function ImportUnits({ data }: { data: Pick<AppDataset, "buildings" | "cl
             >
               Back to Building
             </Button>
-          </motion.div>
+          </div>
         )}
       </div>
     </div>

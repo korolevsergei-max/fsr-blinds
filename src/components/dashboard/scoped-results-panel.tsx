@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+
 import { ArrowRight, UserCircle, X } from "@phosphor-icons/react";
 import { CURRENT_STAGE_LABELS, type CurrentStage, type Unit } from "@/lib/types";
 import { CurrentStageChip } from "@/components/ui/status-chip";
@@ -42,12 +42,8 @@ export function ScopedResultsPanel({
   }));
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-col gap-3"
+    <div
+      className="animate-fade-up flex flex-col gap-3"
     >
       {/* Active selection chips + unit count */}
       <div className="flex items-center justify-between gap-2">
@@ -149,6 +145,6 @@ export function ScopedResultsPanel({
           ))}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

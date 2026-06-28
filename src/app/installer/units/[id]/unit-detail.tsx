@@ -2,7 +2,6 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ArrowRight, Info, WarningCircle, UserGear, CalendarCheck, Wrench, Buildings, Robot, ClockCounterClockwise, ShieldCheck } from "@phosphor-icons/react";
 import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -310,11 +309,7 @@ export function UnitDetail({
 
       <div className="px-5 py-5 flex flex-col gap-6">
         {/* Unit info */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        >
+        <div className="animate-fade-up">
           <h2 className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
             {unit.buildingName}
           </h2>
@@ -326,14 +321,10 @@ export function UnitDetail({
           <div className="flex items-center gap-2 mt-3">
             <StatusChip status={effectiveStatus} />
           </div>
-        </motion.div>
+        </div>
 
         {/* Key Dates */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-2 gap-2"
+        <div className="animate-fade-up grid grid-cols-2 gap-2"
         >
           <CompleteByHighlightCard completeByDate={unit.completeByDate} compact />
           <MilestoneDateCard
@@ -357,14 +348,11 @@ export function UnitDetail({
             isCompleted={Boolean(milestones.allInstalled && milestones.installedCompletedAt)}
             isPastDue={installationPastDue}
           />
-        </motion.div>
+        </div>
 
         {/* Rooms */}
         {rooms.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          <div className="animate-fade-up"
           >
             <h3 className="text-[10px] font-bold text-muted uppercase tracking-[0.12em] mb-3">
               Rooms
@@ -402,23 +390,16 @@ export function UnitDetail({
                 );
               })}
             </div>
-          </motion.div>
+          </div>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.13, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div className="animate-fade-up"
         >
           <UnitEscalationsPanel escalations={escalations} />
-        </motion.div>
+        </div>
 
         {/* Progress milestones */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-5"
+        <div className="animate-fade-up surface-card p-5"
         >
           <UnitProgressMilestonesPanel
             unit={unit}
@@ -439,15 +420,11 @@ export function UnitDetail({
               />
             }
           />
-        </motion.div>
+        </div>
 
         {/* Architectural note */}
         {unit.notesCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-accent-light rounded-[var(--radius-xl)] border border-[rgba(15,118,110,0.15)] p-4 flex gap-3"
+          <div className="animate-fade-up bg-accent-light rounded-[var(--radius-xl)] border border-[rgba(15,118,110,0.15)] p-4 flex gap-3"
           >
             <Info size={20} weight="fill" className="text-accent flex-shrink-0 mt-0.5" />
             <div>
@@ -458,15 +435,11 @@ export function UnitDetail({
                 Review measurement details and special conditions in room-level notes before proceeding.
               </p>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.32, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3 pt-2 pb-4"
+        <div className="animate-fade-up flex flex-col gap-3 pt-2 pb-4"
         >
           <Link href={`/installer/units/${unit.id}/rooms`}>
             <Button fullWidth size="lg">
@@ -497,14 +470,10 @@ export function UnitDetail({
             allGreenRiskFlags={allGreenRiskFlags}
             milestones={milestones}
           />
-        </motion.div>
+        </div>
 
         {/* Activity log */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.36, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pb-6"
+        <div className="animate-fade-up pb-6"
         >
           <SectionLabel className="mb-2">Activity</SectionLabel>
           {activityLog.length === 0 ? (
@@ -553,7 +522,7 @@ export function UnitDetail({
               })}
             </div>
           )}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

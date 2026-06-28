@@ -3,7 +3,6 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { motion } from "framer-motion";
 import {
   Plus,
   ArrowRight,
@@ -146,10 +145,7 @@ export function BuildingDetail({
       />
 
       {showEditForm && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="px-4 pt-4"
+        <div className="animate-fade-in px-4 pt-4"
         >
           <div className="bg-white rounded-2xl border border-border p-4 flex flex-col gap-3">
             <SectionLabel as="h3" noMargin>Edit building</SectionLabel>
@@ -174,7 +170,7 @@ export function BuildingDetail({
               </Button>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       <div className="px-4 py-4 flex flex-col gap-2">
@@ -183,15 +179,9 @@ export function BuildingDetail({
         </p>
 
         {buildingUnits.map((unit, i) => (
-          <motion.div
+          <div
             key={unit.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              delay: i * 0.04,
-              duration: 0.3,
-              ease: [0.16, 1, 0.3, 1],
-            }}
+            className="animate-fade-up"
           >
             <Link href={`/management/units/${unit.id}`}>
               <div className="bg-white rounded-xl border border-border px-4 py-3.5 hover:border-zinc-300 transition-all active:scale-[0.99]">
@@ -224,7 +214,7 @@ export function BuildingDetail({
                 <StatusChip status={unit.status} />
               </div>
             </Link>
-          </motion.div>
+          </div>
         ))}
 
 

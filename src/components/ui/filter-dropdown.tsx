@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { CaretDown, Check } from "@phosphor-icons/react";
 
 type Option = { value: string; label: string };
@@ -125,22 +125,17 @@ export function FilterDropdown(props: FilterDropdownProps) {
       </button>
 
       {typeof document !== "undefined" && createPortal(
-        <AnimatePresence>
-          {open && (
+          open && (
             <div key="dd-wrap" className="relative z-[9999]">
               <div
                 key="dd-backdrop"
                 className="fixed inset-0 z-40"
                 onClick={() => setOpen(false)}
               />
-              <motion.div
+              <div
                 key="dd-menu"
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                transition={{ duration: 0.15 }}
                 style={{ top: position.top, left: position.left, right: position.right }}
-                className="fixed z-50 min-w-[180px] max-h-72 overflow-y-auto overflow-x-hidden rounded-[var(--radius-lg)] border border-border bg-card py-1 shadow-[var(--shadow-md)]"
+                className="animate-fade-down fixed z-50 min-w-[180px] max-h-72 overflow-y-auto overflow-x-hidden rounded-[var(--radius-lg)] border border-border bg-card py-1 shadow-[var(--shadow-md)]"
               >
                 {options.map((option) => {
                   const isFirst = option.value === options[0]?.value;
@@ -205,10 +200,9 @@ export function FilterDropdown(props: FilterDropdownProps) {
                     </button>
                   );
                 })}
-              </motion.div>
+              </div>
             </div>
-          )}
-        </AnimatePresence>,
+          ),
         document.body
       )}
     </>

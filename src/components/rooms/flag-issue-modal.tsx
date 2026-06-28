@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+
 import { WarningCircle } from "@phosphor-icons/react";
 
 export function FlagIssueModal({
@@ -25,24 +25,17 @@ export function FlagIssueModal({
   onSubmit: () => void;
 }) {
   return (
-    <AnimatePresence>
+    <>
       {issueWindow && unit && room && (
         <>
-          <motion.button
+          <button
             type="button"
             aria-label="Close post-install issue dialog"
-            className="fixed inset-0 z-40 bg-zinc-950/45"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="animate-fade-in fixed inset-0 z-40 bg-zinc-950/45"
             onClick={onCancel}
           />
-          <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-x-4 bottom-1/4 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
+          <div
+            className="animate-fade-scale fixed inset-x-4 bottom-1/4 z-50 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl sm:inset-x-auto sm:mx-auto sm:w-full sm:max-w-sm"
           >
             <div className="border-b border-border px-5 py-4">
               <div className="flex items-start gap-3">
@@ -93,9 +86,9 @@ export function FlagIssueModal({
                 Open issue
               </button>
             </div>
-          </motion.div>
+          </div>
         </>
       )}
-    </AnimatePresence>
+    </>
   );
 }

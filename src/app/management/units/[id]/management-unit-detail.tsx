@@ -3,7 +3,6 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useTransition } from "react";
-import { motion } from "framer-motion";
 import {
   UserCircle,
   CalendarBlank,
@@ -404,20 +403,12 @@ export function ManagementUnitDetail({
       />
 
       <div className="px-4 py-5 flex flex-col gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-        >
+        <div className="animate-fade-up">
           <CompleteByHighlightCard completeByDate={unit.completeByDate} />
-        </motion.div>
+        </div>
 
         {/* Risk + Assignment */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3"
+        <div className="animate-fade-up flex flex-col gap-3"
         >
           <div className="surface-card grid grid-cols-2 overflow-hidden" style={{ padding: 0 }}>
             <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
@@ -479,14 +470,10 @@ export function ManagementUnitDetail({
             </div>
             <div className="px-4 py-3" />
           </div>
-        </motion.div>
+        </div>
 
         {/* Progress milestones */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div className="animate-fade-up surface-card p-4"
         >
           <UnitProgressMilestonesPanel
             unit={unit}
@@ -506,13 +493,9 @@ export function ManagementUnitDetail({
               />
             }
           />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        >
+        <div className="animate-fade-up">
           <UnitEscalationsPanel
             escalations={escalations}
             getEscalationHref={(item) =>
@@ -521,14 +504,11 @@ export function ManagementUnitDetail({
                 : undefined
             }
           />
-        </motion.div>
+        </div>
 
         {/* Rooms preview */}
         {rooms.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          <div className="animate-fade-up"
           >
             <SectionLabel as="h2">Rooms</SectionLabel>
             <div className="flex flex-col gap-2">
@@ -559,15 +539,11 @@ export function ManagementUnitDetail({
                 );
               })}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Actions */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3"
+        <div className="animate-fade-up flex flex-col gap-3"
         >
           <Link href={`/management/units/${unit.id}/rooms`}>
             <Button fullWidth size="lg">
@@ -605,13 +581,10 @@ export function ManagementUnitDetail({
             allGreenRiskFlags={allGreenRiskFlags}
             milestones={milestones}
           />
-        </motion.div>
+        </div>
 
         {/* Activity Log */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.32, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div className="animate-fade-up"
         >
           <div className="flex items-center gap-2 mb-3">
             <ClockCounterClockwise size={14} className="text-tertiary" />
@@ -623,7 +596,7 @@ export function ManagementUnitDetail({
             )}
           </div>
           <ActivityTimeline logs={displayActivityLog} />
-        </motion.div>
+        </div>
 
       </div>
     </div>

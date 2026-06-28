@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { MagnifyingGlass, Buildings, ArrowRight, SignOut } from "@phosphor-icons/react";
 import { getUnitsByInstaller } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -115,15 +114,9 @@ export function InstallerHome({
               .sort()[0] ?? null;
 
           return (
-            <motion.div
+            <div
               key={building.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                delay: i * 0.055,
-                duration: 0.35,
-                ease: [0.16, 1, 0.3, 1],
-              }}
+              className="animate-fade-up"
             >
               <Link href={`/installer/buildings/${building.id}`}>
                 <div className="surface-card overflow-hidden hover:shadow-[var(--shadow-md)] transition-all duration-200 active:scale-[0.99]">
@@ -195,7 +188,7 @@ export function InstallerHome({
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </div>
           );
         })}
       </div>

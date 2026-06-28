@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { CheckCircle, CaretDown, CaretRight, SignOut, FunnelSimple, SortAscending, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { getFloor, getUnitIdsWithWindowEscalations } from "@/lib/app-dataset";
@@ -31,13 +31,6 @@ import { useSessionStorage } from "@/hooks/use-session-storage";
 import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
 import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
 
-function fadeUp(delay = 0) {
-  return {
-    initial: { opacity: 0, y: 8 },
-    animate: { opacity: 1, y: 0 },
-    transition: { delay, duration: 0.35, ease: [0.16, 1, 0.3, 1] as const },
-  };
-}
 
 export function SchedulerDashboard({
   data,
@@ -203,7 +196,7 @@ export function SchedulerDashboard({
 
       <div className="px-4 flex flex-col gap-5 pt-5">
         {/* Scope bar — always visible, never hidden during drill-down */}
-        <motion.div {...fadeUp(0)}>
+        <div className="animate-fade-up">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
             <div className="flex items-center gap-1 flex-shrink-0 text-zinc-400">
               <FunnelSimple size={13} />
@@ -281,10 +274,10 @@ export function SchedulerDashboard({
               </button>
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Pipeline by status — clickable, all statuses including zero counts */}
-        <motion.div {...fadeUp(0.06)}>
+        <div className="animate-fade-up" style={{ "--anim-delay": "0.06s" } as React.CSSProperties}>
           <SectionLabel as="h2">Pipeline by stage</SectionLabel>
           <div
             className="surface-card divide-y divide-border-subtle overflow-hidden"
@@ -325,10 +318,10 @@ export function SchedulerDashboard({
               })
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Issue buckets — clickable, combinable with status */}
-        <motion.div {...fadeUp(0.08)}>
+        <div className="animate-fade-up" style={{ "--anim-delay": "0.08s" } as React.CSSProperties}>
           <SectionLabel as="h2">Issues</SectionLabel>
           <div
             className="surface-card divide-y divide-border-subtle overflow-hidden"
@@ -381,17 +374,11 @@ export function SchedulerDashboard({
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
         {/* Results panel — appears when status or issue selected */}
-        <AnimatePresence>
           {showResults && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            <div className="animate-fade-up"
             >
               <div className="flex items-center justify-between mb-2">
                 <SectionLabel as="h2" noMargin>
@@ -421,9 +408,8 @@ export function SchedulerDashboard({
                 }
                 hideClient
               />
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
       </div>
 
       {sortModalOpen && (

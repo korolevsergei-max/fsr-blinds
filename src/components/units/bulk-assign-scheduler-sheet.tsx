@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { motion } from "framer-motion";
+
 import { CalendarCheck, CheckCircle, X } from "@phosphor-icons/react";
 import { assignUnitsToScheduler } from "@/app/actions/management-actions";
 import { Button } from "@/components/ui/button";
@@ -49,13 +49,9 @@ export function BulkAssignSchedulerSheet({
         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
         onClick={onClose}
       />
-      <motion.div
+      <div
         key="scheduler-sheet-content"
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card rounded-t-[var(--radius-xl)] shadow-2xl max-h-[80dvh] overflow-y-auto"
+        className="animate-slide-up fixed bottom-0 left-0 right-0 z-40 bg-card rounded-t-[var(--radius-xl)] shadow-2xl max-h-[80dvh] overflow-y-auto"
       >
         <div className="px-4 pt-4 pb-2 flex items-center justify-between border-b border-border">
           <div>
@@ -122,14 +118,12 @@ export function BulkAssignSchedulerSheet({
 
           <div className="pb-32">
             {saved ? (
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-semibold"
+              <div
+                className="animate-fade-scale flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-semibold"
               >
                 <CheckCircle size={20} weight="fill" />
                 Assigned
-              </motion.div>
+              </div>
             ) : (
               <Button
                 fullWidth
@@ -144,7 +138,7 @@ export function BulkAssignSchedulerSheet({
             )}
           </div>
         </div>
-      </motion.div>
+      </div>
     </>
   );
 }

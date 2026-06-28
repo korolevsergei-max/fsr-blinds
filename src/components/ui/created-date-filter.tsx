@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { CaretDown } from "@phosphor-icons/react";
 import type { AddedDateFilter } from "@/lib/created-date";
 import { formatAddedDateLabel } from "@/lib/created-date";
@@ -80,22 +80,17 @@ export function CreatedDateFilter({
       </button>
 
       {typeof document !== "undefined" && createPortal(
-        <AnimatePresence>
-          {open && (
+          open && (
             <div key="date-filter-container" className="relative z-[9999]">
               <div
                 key="date-filter-backdrop"
                 className="fixed inset-0 z-40"
                 onClick={() => setOpen(false)}
               />
-              <motion.div
+              <div
                 key="date-filter-menu"
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                transition={{ duration: 0.15 }}
                 style={{ top: position.top, left: position.left, right: position.right }}
-                className="fixed z-50 w-[min(calc(100vw-2rem),260px)] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card p-3 shadow-[var(--shadow-md)]"
+                className="animate-fade-down fixed z-50 w-[min(calc(100vw-2rem),260px)] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card p-3 shadow-[var(--shadow-md)]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-2">
@@ -180,10 +175,9 @@ export function CreatedDateFilter({
                     {value === "all" ? "Currently showing all" : "Clear Filter"}
                   </button>
                 </div>
-              </motion.div>
+              </div>
             </div>
-          )}
-        </AnimatePresence>,
+          ),
         document.body
       )}
     </>

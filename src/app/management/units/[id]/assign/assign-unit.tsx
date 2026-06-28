@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -104,21 +103,14 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
           </p>
         )}
         {/* Current state */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex items-center gap-3"
+        <div className="animate-fade-up flex items-center gap-3"
         >
           <StatusChip status={unit.status} />
           <SectionLabel>Assignee</SectionLabel>
-        </motion.div>
+        </div>
 
         {/* Select assignee */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div className="animate-fade-up"
         >
           <SectionLabel as="h2">{role === "scheduler" ? "Choose scheduler" : "Choose installer"}</SectionLabel>
           <div className="flex flex-col gap-2">
@@ -171,7 +163,7 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
               </button>
             ))}
           </div>
-        </motion.div>
+        </div>
 
         <p className="text-[13px] text-muted">
           To edit measurement, bracketing, or installation dates, use{" "}
@@ -182,21 +174,14 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
         </p>
 
         {/* Save */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pt-2 pb-24"
+        <div className="animate-fade-up pt-2 pb-24"
         >
           {saved ? (
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-medium"
+            <div className="animate-fade-scale flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-medium"
             >
               <CheckCircle size={20} weight="fill" />
               Saved
-            </motion.div>
+            </div>
           ) : (
             <Button
               fullWidth
@@ -207,7 +192,7 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
               {pending ? "Saving…" : "Save assignee"}
             </Button>
           )}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

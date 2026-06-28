@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   ArrowRight,
 } from "@phosphor-icons/react";
@@ -141,11 +140,9 @@ export function BuildingUnits({
 
         <div className="flex flex-col gap-3 pb-6">
           {filtered.map((unit, i) => (
-            <motion.div
+            <div
               key={unit.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              className="animate-fade-up"
             >
               <Link href={`/installer/units/${unit.id}`}>
                 <div className="bg-white rounded-2xl border border-border p-4 hover:border-zinc-300 transition-all active:scale-[0.99]">
@@ -182,7 +179,7 @@ export function BuildingUnits({
                   )}
                 </div>
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>

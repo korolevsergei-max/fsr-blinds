@@ -2,7 +2,7 @@
 
 import { useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+
 import { CalendarBlank, Envelope, Phone, SignOut } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
@@ -52,11 +52,8 @@ export function SchedulerProfile({
       <PageHeader title="Profile" backHref="/scheduler" actions={<RefreshButton />} />
 
       <div className="px-5 py-6 flex flex-col gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-5 flex flex-col gap-4"
+        <div
+          className="animate-fade-up surface-card p-5 flex flex-col gap-4"
         >
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 rounded-[var(--radius-xl)] bg-accent-light text-accent flex items-center justify-center text-lg font-semibold">
@@ -87,24 +84,20 @@ export function SchedulerProfile({
               <span>{scheduler?.phone ?? "No phone on file"}</span>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-3 gap-3"
+        <div
+          className="animate-fade-up grid grid-cols-3 gap-3"
+          style={{ "--anim-delay": "0.08s" } as React.CSSProperties}
         >
           <MetricTile value={activeUnits} label="Active Units" />
           <MetricTile value={completedUnits} label="Completed" />
           <MetricTile value={upcomingEvents} label="Upcoming" />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4 flex items-start gap-3"
+        <div
+          className="animate-fade-up surface-card p-4 flex items-start gap-3"
+          style={{ "--anim-delay": "0.16s" } as React.CSSProperties}
         >
           <div className="mt-0.5 w-9 h-9 rounded-[var(--radius-md)] bg-accent-light text-accent flex items-center justify-center flex-shrink-0">
             <CalendarBlank size={18} />
@@ -117,13 +110,11 @@ export function SchedulerProfile({
               This profile reflects the units and schedule currently assigned to your scheduler scope.
             </p>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.24, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pt-2"
+        <div
+          className="animate-fade-up pt-2"
+          style={{ "--anim-delay": "0.24s" } as React.CSSProperties}
         >
           <Button
             variant="ghost"
@@ -140,7 +131,7 @@ export function SchedulerProfile({
             <SignOut size={16} />
             {signingOut ? "Signing out..." : "Sign Out"}
           </Button>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

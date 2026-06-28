@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { Camera, CheckCircle, Images, Plus, Spinner, X } from "@phosphor-icons/react";
 import { uploadRoomFinishedPhotos, deleteRoomFinishedPhoto } from "@/app/actions/fsr-data";
 import type { UnitStageMediaItem } from "@/lib/server-data";
@@ -139,22 +139,15 @@ export function RoomFinishedPhotos({
           : `View Room Photos (${allPhotos.length})`}
       </button>
 
-      <AnimatePresence>
+
         {open && (
           <>
-            <motion.div
-              className="fixed inset-0 z-[55] bg-zinc-950/45"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
+              className="animate-fade-in fixed inset-0 z-[55] bg-zinc-950/45"
               onClick={() => setOpen(false)}
             />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-4 top-1/2 z-[60] flex flex-col -translate-y-1/2 rounded-3xl border border-border bg-white shadow-2xl max-w-lg mx-auto"
+            <div
+              className="animate-fade-scale fixed inset-x-4 top-1/2 z-[60] flex flex-col -translate-y-1/2 rounded-3xl border border-border bg-white shadow-2xl max-w-lg mx-auto"
             >
               {/* Header */}
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
@@ -263,10 +256,9 @@ export function RoomFinishedPhotos({
                   </p>
                 )}
               </div>
-            </motion.div>
+            </div>
           </>
         )}
-      </AnimatePresence>
     </>
   );
 }

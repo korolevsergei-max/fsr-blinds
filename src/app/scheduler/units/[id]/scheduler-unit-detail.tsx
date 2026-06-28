@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+
 import {
   UserCircle,
   CalendarBlank,
@@ -278,11 +278,8 @@ export function SchedulerUnitDetail({
 
       <div className="flex-1 px-4 py-5 flex flex-col gap-6">
         {/* Status + flags */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3"
+        <div
+          className="animate-fade-up flex flex-col gap-3"
         >
           <div className="flex items-center gap-2">
             <StatusChip status={effectiveStatus} />
@@ -292,22 +289,19 @@ export function SchedulerUnitDetail({
               {flags.map((f) => <FlagBadge key={f} flag={f} />)}
             </div>
           )}
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.04, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        <div
+          className="animate-fade-up"
+          style={{ "--anim-delay": "0.04s" } as React.CSSProperties}
         >
           <CompleteByHighlightCard completeByDate={unit.completeByDate} />
-        </motion.div>
+        </div>
 
         {/* Key dates */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div
+          className="animate-fade-up surface-card p-4"
+          style={{ "--anim-delay": "0.06s" } as React.CSSProperties}
         >
           <div className="flex items-center justify-between mb-3">
             <SectionLabel>Key Dates</SectionLabel>
@@ -324,14 +318,12 @@ export function SchedulerUnitDetail({
             {milestoneField("Bracketed", unit.bracketingDate, milestones.allBracketed, milestones.bracketedCompletedAt)}
             {milestoneField("Installed", unit.installationDate, milestones.allInstalled, milestones.installedCompletedAt)}
           </div>
-        </motion.div>
+        </div>
 
         {/* Installer */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="surface-card p-4"
+        <div
+          className="animate-fade-up surface-card p-4"
+          style={{ "--anim-delay": "0.1s" } as React.CSSProperties}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -353,22 +345,19 @@ export function SchedulerUnitDetail({
               Assign installer
             </Link>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div
+          className="animate-fade-up"
+          style={{ "--anim-delay": "0.14s" } as React.CSSProperties}
         >
           <UnitEscalationsPanel escalations={escalations} />
-        </motion.div>
+        </div>
 
         {milestones.hasOpenPostInstallIssue && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="surface-card p-4"
+          <div
+            className="animate-fade-up surface-card p-4"
+            style={{ "--anim-delay": "0.16s" } as React.CSSProperties}
           >
             <UnitProgressMilestonesPanel
               unit={unit}
@@ -380,15 +369,13 @@ export function SchedulerUnitDetail({
                 href: `/scheduler/units/${unit.id}/rooms/${target.roomId}#window-${target.windowId}`,
               }))}
             />
-          </motion.div>
+          </div>
         )}
 
         {/* Rooms overview */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-2"
+        <div
+          className="animate-fade-up flex flex-col gap-2"
+          style={{ "--anim-delay": "0.18s" } as React.CSSProperties}
         >
           <div className="flex items-center justify-between">
             <SectionLabel>Rooms & Windows</SectionLabel>
@@ -417,11 +404,10 @@ export function SchedulerUnitDetail({
               const progressFillClass = roomEscalation === "green" ? "bg-white" : "bg-white/95";
 
               return (
-                <motion.div
+                <div
                   key={room.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 + i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                  className="animate-fade-up"
+                  style={{ "--anim-delay": `${0.2 + i * 0.04}s` } as React.CSSProperties}
                 >
                   <Link
                     href={`/scheduler/units/${id}/rooms/${room.id}`}
@@ -447,18 +433,16 @@ export function SchedulerUnitDetail({
                       <ArrowRight size={13} />
                     </div>
                   </Link>
-                </motion.div>
+                </div>
               );
             })
           )}
-        </motion.div>
+        </div>
 
         {/* Actions for Scheduler as Installer */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.22, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-3 pt-2 pb-4"
+        <div
+          className="animate-fade-up flex flex-col gap-3 pt-2 pb-4"
+          style={{ "--anim-delay": "0.22s" } as React.CSSProperties}
         >
           <Link href={`/scheduler/units/${unit.id}/rooms`}>
             <Button fullWidth size="lg">
@@ -489,14 +473,12 @@ export function SchedulerUnitDetail({
             allGreenRiskFlags={allGreenRiskFlags}
             milestones={milestones}
           />
-        </motion.div>
+        </div>
 
         {/* Activity log */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.28, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pb-6"
+        <div
+          className="animate-fade-up pb-6"
+          style={{ "--anim-delay": "0.28s" } as React.CSSProperties}
         >
           <SectionLabel className="mb-2">Activity</SectionLabel>
           {activityLog.length === 0 ? (
@@ -545,7 +527,7 @@ export function SchedulerUnitDetail({
               })}
             </div>
           )}
-        </motion.div>
+        </div>
 
       </div>
     </div>

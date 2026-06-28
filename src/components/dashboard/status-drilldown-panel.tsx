@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+
 import { ArrowRight, UserCircle, X } from "@phosphor-icons/react";
 import type { Unit, UnitStatus } from "@/lib/types";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -94,12 +94,8 @@ export function StatusDrilldownPanel({
   const hasSubFilter = clientFilter.length > 0 || buildingFilter.length > 0;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-col gap-3"
+    <div
+      className="animate-fade-up flex flex-col gap-3"
     >
       {/* Panel header: status chip + count + clear */}
       <div className="flex items-center justify-between">
@@ -252,6 +248,6 @@ export function StatusDrilldownPanel({
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+
 import { CaretDown, CaretLeft, CaretRight } from "@phosphor-icons/react";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -121,23 +121,18 @@ export function InstallDateCalendarFilter({
       </button>
 
       {typeof document !== "undefined" &&
+        open &&
         createPortal(
-          <AnimatePresence>
-            {open && (
               <div key="cal-wrap" className="relative z-[9999]">
                 <div
                   key="cal-backdrop"
                   className="fixed inset-0 z-40"
                   onClick={() => setOpen(false)}
                 />
-                <motion.div
+                <div
                   key="cal-menu"
-                  initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                  transition={{ duration: 0.15 }}
                   style={{ top: position.top, left: position.left, right: position.right }}
-                  className="fixed z-50 w-[228px] rounded-[var(--radius-lg)] border border-border bg-card p-3 shadow-[var(--shadow-md)]"
+                  className="animate-fade-down fixed z-50 w-[228px] rounded-[var(--radius-lg)] border border-border bg-card p-3 shadow-[var(--shadow-md)]"
                 >
                   {/* Month nav */}
                   <div className="mb-2.5 flex items-center justify-between">
@@ -235,10 +230,8 @@ export function InstallDateCalendarFilter({
                       Clear selection
                     </button>
                   )}
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>,
+                </div>
+              </div>,
           document.body
         )}
     </>

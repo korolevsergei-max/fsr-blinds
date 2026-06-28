@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { motion } from "framer-motion";
 import {
   Buildings,
   Camera,
@@ -82,11 +81,9 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
   return (
     <div className="px-5 py-4 flex flex-col gap-6 pb-24">
       {buildings.map((building, bi) => (
-        <motion.div
+        <div
           key={building.buildingId}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: bi * 0.06, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          className="animate-fade-up"
         >
           {/* Building header */}
           <div className="flex items-center gap-2 mb-3">
@@ -176,7 +173,7 @@ export function UploadsGallery({ items }: { items: InstallerMediaItem[] }) {
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
       ))}
     </div>
   );

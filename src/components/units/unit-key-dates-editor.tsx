@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+
 import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import { updateUnitCompleteByDate } from "@/app/actions/management-actions";
@@ -102,19 +102,15 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
           </p>
         )}
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        <div
+          className="animate-fade-up"
         >
           <StatusChip status={unit.status} />
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.08, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col gap-4"
+        <div
+          className="animate-fade-up flex flex-col gap-4"
+          style={{ "--anim-delay": "0.08s" } as React.CSSProperties}
         >
           <DateInput
             label="Measurement date"
@@ -142,29 +138,25 @@ export function UnitKeyDatesEditor({ data, unitsBasePath, showCompleteBy = false
               helper="Static client deadline for prioritization — does not affect unit status"
             />
           )}
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.16, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="pt-2 pb-24"
+        <div
+          className="animate-fade-up pt-2 pb-24"
+          style={{ "--anim-delay": "0.16s" } as React.CSSProperties}
         >
           {saved ? (
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-medium"
+            <div
+              className="animate-fade-scale flex items-center justify-center gap-2 h-13 rounded-xl bg-emerald-500 text-white font-medium"
             >
               <CheckCircle size={20} weight="fill" />
               Dates saved
-            </motion.div>
+            </div>
           ) : (
             <Button fullWidth size="lg" disabled={pending} onClick={handleSave}>
               {pending ? "Saving…" : "Save dates"}
             </Button>
           )}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

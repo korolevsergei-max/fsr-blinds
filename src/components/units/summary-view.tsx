@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
+
 import {
   Export,
   ShareNetwork,
@@ -118,11 +118,8 @@ export function SummaryView({
       <div className="flex-1 px-5 py-5 flex flex-col gap-4 pb-32">
         <div ref={printRef} className="flex flex-col gap-4 bg-white">
           {/* Unit header card */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-white rounded-2xl border border-border p-5"
+          <div
+            className="animate-fade-up bg-white rounded-2xl border border-border p-5"
           >
             <p className="text-base font-bold text-foreground tracking-tight">
               {unit.unitNumber}
@@ -141,21 +138,15 @@ export function SummaryView({
                 {unit.windowCount} window{unit.windowCount !== 1 ? "s" : ""}
               </span>
             </div>
-          </motion.div>
+          </div>
 
           {rooms.map((room, ri) => {
             const wins = getWindowsByRoom(data, room.id);
             return (
-              <motion.div
+              <div
                 key={room.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: 0.06 * (ri + 1),
-                  duration: 0.3,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-                className="bg-white rounded-2xl border border-border overflow-hidden"
+                className="animate-fade-up bg-white rounded-2xl border border-border overflow-hidden"
+                style={{ "--anim-delay": `${0.06 * (ri + 1)}s` } as React.CSSProperties}
               >
                 <div className="px-5 py-3.5 bg-surface border-b border-border">
                   <p className="text-sm font-bold text-foreground tracking-tight">
@@ -258,22 +249,20 @@ export function SummaryView({
                     ))}
                   </div>
                 )}
-              </motion.div>
+              </div>
             );
           })}
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.06 * (rooms.length + 2), duration: 0.3 }}
-          className="pt-2"
+        <div
+          className="animate-fade-up pt-2"
+          style={{ "--anim-delay": `${0.06 * (rooms.length + 2)}s` } as React.CSSProperties}
         >
           <Button fullWidth size="lg" onClick={handleExport}>
             <Export size={18} weight="bold" />
             Export Summary
           </Button>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

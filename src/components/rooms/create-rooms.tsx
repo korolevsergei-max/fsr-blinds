@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+
 import { Plus, Trash, Door, PencilSimple, ArrowRight, Info, Check, X } from "@phosphor-icons/react";
 import { createRoomsForUnit, deleteRoom, updateRoomName } from "@/app/actions/fsr-data";
 import { getRoomsByUnit } from "@/lib/app-dataset";
@@ -313,16 +313,11 @@ export function CreateRooms({
               </span>
             </div>
             <div className="flex flex-col gap-2">
-              <AnimatePresence mode="popLayout">
+
                 {newRooms.map((room) => (
-                  <motion.div
+                  <div
                     key={room.tempId}
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    className="flex items-center gap-3 bg-white rounded-2xl border border-border px-4 py-3.5"
+                    className="animate-fade-scale flex items-center gap-3 bg-white rounded-2xl border border-border px-4 py-3.5"
                   >
                     <div className="w-9 h-9 rounded-xl bg-accent/8 flex items-center justify-center">
                       <Door size={16} className="text-accent" />
@@ -378,9 +373,8 @@ export function CreateRooms({
                     >
                       <Trash size={16} />
                     </button>
-                  </motion.div>
+                  </div>
                 ))}
-              </AnimatePresence>
             </div>
           </div>
         )}
