@@ -481,6 +481,12 @@ residual-risk note. No further feature changes.
 
 **Verification:** all Phase 0 metrics improved and documented; concurrent-user simulation shows no pool exhaustion. **Rollback:** indexes are additive; revert any materialized-view migration independently.
 
+> **Implementation status — DONE WITH MANUAL QA GAPS (2026-06-28).** `npm run analyze` passed and [PERF_BASELINE.md](PERF_BASELINE.md) now has a Phase 8 after-section with current bundle numbers, DB hardening notes, pooler/runtime connection-path verification, and residual risks.
+> - **Task 1 (indexes / hot filters):** added [20260628003000_index_notification_reads_recipient.sql](../../supabase/migrations/20260628003000_index_notification_reads_recipient.sql), covering `notification_reads(user_role, user_id, notification_id)` for unread counts and read-list lookups. Manufacturing hot-filter indexes from Phase 1 were re-verified from migrations; no hot index was dropped because the remaining overlaps either back constraints/upserts or serve different leading-column orders.
+> - **Task 2 (materialized summaries):** not added. The Phase 4 owner dashboard count RPC did not appear in the successful Supabase outlier snapshot, so a materialized summary is premature on the current dataset.
+> - **Task 3 (serverless DB connection path):** Vercel envs expose only Supabase URL/key variables, and code search found no `DATABASE_URL`/raw Postgres runtime path. Runtime traffic uses Supabase SSR/Supabase JS over the Supabase API; CLI inspection targets the Supavisor pooler host (`aws-0-us-west-2.pooler.supabase.com`) when credentials are healthy.
+> - **Task 4 (regression):** local production build/analyze passed and bundle metrics improved versus Phase 0. `supabase inspect db outliers --linked` succeeded and did not show the old manufacturing queue/reflow shapes in the visible top outliers. Manual Slow 4G walkthrough and 10-20 user staging queue simulation still need browser/staging access; follow-up Supabase `calls`/`index-stats`/`db-stats` commands were blocked by temporary CLI login-role auth/circuit-breaker failures and should not be retried until auth is refreshed.
+
 ---
 
 ## 6. Constraints & non-goals

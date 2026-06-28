@@ -286,3 +286,116 @@ Many-users axis:
 | 3 | Manufacturing schedule global read | Phase 1 | Role reads use date indexes but still scan first `1,000` rows from the global `1,570`-row schedule; cutter sample took `65.499 ms`. |
 | 4 | Auth/session repeat work | Phase 3 | Auth/session/user/profile shapes are heavily called: auth users ~194,695 calls, sessions ~197,822 calls, `user_profiles` role lookups 114,634 calls. |
 | 5 | Notification read filters | Phase 6 or DB hardening | `notification_reads` role/user sample is a sequential scan over 662 rows (`3.066 ms` now, growth risk). |
+
+---
+
+## Phase 8 after-section (2026-06-28)
+
+Purpose: finalize the navigation performance phases with a DB-hardening pass and regression evidence. This pass added one index migration, measured the current build, and documented the remaining manual/staging checks.
+
+### Verification environment
+
+| Item | Value |
+|---|---|
+| Local machine | macOS darwin 24.6.0 |
+| Node / npm | Node `v24.10.0`, npm `11.6.2` |
+| Next.js | `16.2.1` |
+| Build command | `npm run analyze` (`ANALYZE=true next build`) |
+| Supabase CLI | `2.84.2`, linked project `fbjjqfmsroryfgfushmb` |
+| Vercel env check | `vercel env ls` showed Supabase URL/key env vars only; no `DATABASE_URL`/raw Postgres env var |
+
+`npm run analyze` passed. The Next bundle-analyzer plugin still reports that it is not compatible with Turbopack, so bundle sizes below use the same manifest + gzip methodology as Phase 0.
+
+### Bundle after current phases
+
+| Metric | Phase 0 gzip | Phase 8 gzip | Delta |
+|---|---:|---:|---:|
+| Shared base loaded on every route | 168.2 kB | 168.2 kB | 0.0 kB |
+| Total static JS in `.next/static` | 1,653.6 kB | 1,447.0 kB | -206.6 kB |
+
+Total static JS is now `4,869.2 kB raw / 1,447.0 kB gzip` across `113` chunks. The shared base remains `555.2 kB raw / 168.2 kB gzip` across `7` chunks.
+
+Hot-route first-load JS after the current phases:
+
+| Route | Phase 0 gzip | Phase 8 gzip | Delta |
+|---|---:|---:|---:|
+| `/management/units` | 346.2 kB | 301.1 kB | -45.1 kB |
+| `/management/schedule` | 336.8 kB | 292.2 kB | -44.6 kB |
+| `/scheduler/units` | 336.1 kB | 291.0 kB | -45.1 kB |
+| `/management` | 331.2 kB | 286.4 kB | -44.8 kB |
+| `/scheduler` | 328.4 kB | 283.6 kB | -44.8 kB |
+| `/installer/schedule` | 327.1 kB | 282.5 kB | -44.6 kB |
+| `/installer` | 312.6 kB | 269.7 kB | -42.9 kB |
+| `/cutter/queue` | 268.1 kB | 223.4 kB | -44.7 kB |
+| `/assembler/queue` | 263.0 kB | 218.4 kB | -44.6 kB |
+| `/qc/queue` | 262.7 kB | 218.0 kB | -44.7 kB |
+| `/cutter` | 261.2 kB | 216.5 kB | -44.7 kB |
+| `/assembler` | 260.7 kB | 216.0 kB | -44.7 kB |
+| `/qc` | 260.3 kB | 215.7 kB | -44.6 kB |
+| `/login` | 254.9 kB | 254.9 kB | 0.0 kB |
+
+Largest remaining production JS chunks:
+
+| Chunk | Raw | Gzip |
+|---|---:|---:|
+| `static/chunks/0~nzzthts-ri4.js` | 408.6 kB | 129.3 kB |
+| `static/chunks/0o4fy.y5zv7p-.js` | 226.2 kB | 70.6 kB |
+| `static/chunks/0gr69n4ollusm.js` | 204.2 kB | 54.4 kB |
+| `static/chunks/0xcdez3003l_x.js` | 220.6 kB | 53.5 kB |
+| `static/chunks/0w.plr96fhqf5.js` | 153.5 kB | 48.1 kB |
+| `static/chunks/11clafn-hp5lf.js` | 193.4 kB | 44.2 kB |
+| `static/chunks/03~yq9q893hmn.js` | 110.0 kB | 38.5 kB |
+| `static/chunks/0o9k22~.s6xvc.js` | 107.0 kB | 28.4 kB |
+
+### DB hardening
+
+Added `supabase/migrations/20260628003000_index_notification_reads_recipient.sql`:
+
+| Table | Index | Why |
+|---|---|---|
+| `notification_reads` | `idx_notification_reads_user_notification (user_role, user_id, notification_id)` | Covers unread counts (`user_role`, `user_id`) and read-list lookups (`user_role`, `user_id`, `notification_id IN (...)`). The existing primary key is ordered `(notification_id, user_role, user_id)`, which remains necessary for upserts but is not selective for user-scoped reads. |
+
+Manufacturing hot filters from Phase 1 remain covered by existing migrations:
+
+| Query area | Index state |
+|---|---|
+| `window_production_status.status` and `(unit_id, status)` | Added in `20260627120000_index_manufacturing_hot_filters.sql` |
+| `schedule_entries.status` | Added in `20260627120000_index_manufacturing_hot_filters.sql` |
+| `scheduler_unit_assignments.unit_id` | Already covered by the unique constraint in `20260402000000_scheduler_unit_assignments.sql` |
+| `window_manufacturing_schedule` role date ordering | Existing date indexes from `20260410110000_manufacturing_scheduler.sql`; no lossy status/date filter was added because Phase 1 documented that it would drop all-time completed output without a data-model change |
+
+No hot index was dropped in this pass. The remaining apparently overlapping indexes either back a constraint/upsert path or support a different leading-column order.
+
+### Supabase outlier snapshot
+
+`supabase inspect db outliers --linked` succeeded. The visible top total-time entries were Supabase dashboard/metadata introspection (`pg_available_extensions`, function/table metadata), a one-time `production_entered_at` backfill, and the Lansdowne seed migration. The previously-hot manufacturing queue read/reflow shapes did not appear in the returned outlier list.
+
+Follow-up `calls`, `index-stats`, and `db-stats` inspections failed while initializing the temporary CLI login role against `aws-0-us-west-2.pooler.supabase.com` with password-auth failures, then a Supavisor circuit breaker. Do not keep retrying those commands until the linked CLI auth state is refreshed.
+
+### Connection path
+
+The deployed app does not use a raw Postgres `DATABASE_URL` in Vercel. `vercel env ls` shows only:
+
+| Env var | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase HTTP API URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase client key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Admin Supabase client key |
+
+Code search found no runtime `postgres://`, `postgresql://`, `DATABASE_URL`, or `POSTGRES_*` usage. The serverless app path uses Supabase SSR / Supabase JS clients over the Supabase API, so Vercel functions are not opening direct TCP `5432` Postgres connections. CLI inspection attempts target the Supavisor pooler host (`aws-0-us-west-2.pooler.supabase.com`), which is the correct pooled path for direct inspection/maintenance access once credentials are healthy.
+
+### Materialized summaries
+
+No materialized owner summary is warranted yet. The Phase 4 `get_owner_dashboard_counts(date)` RPC did not appear in the outlier snapshot, and the current dataset is still small (`460` units in Phase 0). Revisit only if future `pg_stat_statements` shows the owner dashboard count RPC as a top total-time or p95 contributor.
+
+### Regression status and residual risk
+
+| Check | Result |
+|---|---|
+| `npm run analyze` | Passed after repairing pre-existing portal syntax in four modified filter components |
+| `supabase inspect db outliers --linked` | Passed; no manufacturing queue/reflow query in visible top outliers |
+| Slow 4G role walkthrough | Not run in this environment; still requires authenticated browser sessions for owner, scheduler, installer, cutter, assembler, and QC |
+| Concurrent queue simulation | Not run; still requires staging load probe with 10-20 users hitting cutter/assembler/QC queues |
+| Supabase `calls`/`index-stats`/`db-stats` refresh | Blocked by temporary CLI login-role auth/circuit-breaker failures |
+
+Residual risk: completed manufacturing views still read all-time schedule rows, scheduler nav still has two notification channels, and true server-side realtime scoping for scheduler/installer `windows` events still needs a data-model change such as denormalizing `unit_id` onto `windows`.
