@@ -575,6 +575,60 @@ loaders first — the reason Phase 4 deferred it). Not warranted by the current 
 
 ---
 
+## Phase 10 — Drop rooms/windows from the scheduler global payload (2026-06-28)
+
+**Goal:** cut the scheduler payload (the residual flagged by Phase 9) by porting the owner
+scoping pattern — ship no raw rooms/windows on the global path, and load them per-unit in the
+detail subtree. Round-trips were already fixed in Phase 9; this attacks payload.
+
+**Why it wasn't a one-liner:** the scheduler portal never received the Phase 1/Phase 4 scoping.
+Its global units list scanned raw `windows` (via `getUnitIdsWithWindowEscalations`), and its
+unit-detail/room/window pages read `rooms`/`windows` from the **same global provider** (no nested
+scoped shell, unlike `management/units/[id]/layout.tsx`). So dropping rooms/windows required
+porting the whole pattern.
+
+**Changes**
+- `get_scheduler_dataset` (migration
+  [20260628140000_scheduler_dataset_drop_rooms_windows.sql](../../supabase/migrations/20260628140000_scheduler_dataset_drop_rooms_windows.sql))
+  now returns `rooms: []` / `windows: []` (like `get_owner_dataset`); scope/shape otherwise
+  identical. `buildSchedulerDataset` hardcodes rooms/windows to `[]` and passes
+  `deriveStatusFromWindows: false` (trusts persisted `units.status`, which `recomputeUnitStatus`
+  writes at every mutation — drift confirmed 0). The chunked fallback skips those queries too.
+- **Verified safe:** the only global scheduler reads of rooms/windows are through
+  `getUnitIdsWithWindowEscalations` (dashboard, units list, schedule) — with empty windows it
+  degrades to escalations-only, **exactly** how the owner units list already behaves. Status/risk
+  badges use denormalized `unit.status` / `unit.manufacturingRiskFlag`. No global scheduler screen
+  reads `currentStage`.
+  - **Behavior delta (accepted):** the units-list "has issues" filter no longer flags units solely
+    by an individual non-green window `riskFlag` (only open manufacturing escalations) — matching
+    owner.
+- **Nested provider for the detail subtree** (so detail/rooms/windows/assign/summary still get one
+  unit's rooms/windows): new `loadSchedulerUnitDetail(unitId)` (in
+  [lookups.ts](../../src/lib/server-data/lookups.ts)) is **scope-guarded** (`isSchedulerScopedUnit`
+  — a scheduler cannot load an out-of-scope unit, so visibility is NOT widened) and uses the
+  **team** installer pick-list + synthetic `sch-<id>` self row, byte-identical to
+  `loadSchedulerDataset` (not the owner all-installers/all-schedulers list). `refreshSchedulerUnitDetail`
+  is the scheduler-gated realtime refetch; `ScopedUnitDatasetShell` gained a `refreshAction` prop
+  (defaults to the owner-only `refreshUnitDetail`); and
+  [scheduler/units/[id]/layout.tsx](../../src/app/scheduler/units/[id]/layout.tsx) mounts the nested
+  provider with `key={id}`, mirroring the management subtree.
+
+**Validation (live prod):** scheduler payload **1515 KB → 483 KB (−68.1%)** with rooms (866) +
+windows (1989) removed; `units` / `buildings` / `clients` / `schedule_entries` / `team_installers`
+/ `assignments` byte-unchanged. Scope guard verified for the in-scope case; the team pick-list is
+`6` (5 team + self), not the full installer list. (The single prod scheduler is assigned all 460
+units, so the guard's rejection branch had no out-of-scope id to exercise on current data — the
+helper is the same one used by the existing assignment server actions.) `npm run lint` 0 errors
+(same 24 pre-existing warnings), `typecheck`, `build`, `test` 85/85 all green.
+
+**Residual risk:** −68% is uncompressed; over the wire it is gzipped, but it still removes ~2,855
+rows of parse/transfer work per scheduler navigation. The scheduler detail subtree now mounts a
+nested provider per unit (one extra scoped load on detail entry, same model management has run
+since Phase 1). Server-side unit pagination (deferred) remains the only larger lever left, and is
+still not warranted by current scale.
+
+---
+
 ## 6. Constraints & non-goals
 
 - Keep each phase **independently shippable and revertible** (own branch, own commit).
