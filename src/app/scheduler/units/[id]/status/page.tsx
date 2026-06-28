@@ -1,11 +1,12 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { useUnitMilestones } from "@/lib/use-unit-supplemental";
+import { loadCachedUnitMilestones } from "@/lib/unit-route-data";
 import { StatusUpdate } from "./status-update";
 
-export default function SchedulerStatusPage() {
-  const { id } = useParams<{ id: string }>();
-  const milestones = useUnitMilestones(id);
+export default async function SchedulerStatusPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const milestones = await loadCachedUnitMilestones(id);
   return <StatusUpdate milestones={milestones} />;
 }

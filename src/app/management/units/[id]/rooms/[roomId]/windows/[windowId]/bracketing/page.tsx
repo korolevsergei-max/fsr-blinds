@@ -1,11 +1,12 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { useUnitMediaAndMilestones } from "@/lib/use-unit-supplemental";
+import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
 import { PostBracketingPhotoForm } from "@/components/windows/post-bracketing-photo-form";
 
-export default function ManagementPostBracketingPhotoPage() {
-  const { id } = useParams<{ id: string }>();
-  const { mediaItems, milestones } = useUnitMediaAndMilestones(id);
+export default async function ManagementPostBracketingPhotoPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
   return <PostBracketingPhotoForm mediaItems={mediaItems} milestones={milestones} routeBasePath="/management/units" />;
 }

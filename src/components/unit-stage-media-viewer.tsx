@@ -212,7 +212,7 @@ export function UnitStageMediaViewer({
                           src={activePhoto.publicUrl}
                           alt={activePhoto.title}
                           fill
-                          unoptimized
+                          unoptimized={activePhoto.publicUrl.startsWith("blob:")}
                           sizes="100vw"
                           className="object-contain"
                         />

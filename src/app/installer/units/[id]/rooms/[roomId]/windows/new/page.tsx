@@ -1,14 +1,16 @@
-"use client";
-
-import { useParams, useSearchParams } from "next/navigation";
-import { useUnitSupplementalData } from "@/lib/use-unit-supplemental";
+import { loadCachedUnitSupplementalData } from "@/lib/unit-route-data";
 import { WindowForm } from "@/components/windows/window-form";
 
-export default function InstallerNewWindowPage() {
-  const { id } = useParams<{ id: string }>();
-  const searchParams = useSearchParams();
-  const { activityLog, mediaItems, milestones } = useUnitSupplementalData(id);
-  const t = searchParams.get("t");
+export default async function InstallerNewWindowPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
+}) {
+  const { id } = await params;
+  const { t } = await searchParams;
+  const { activityLog, mediaItems, milestones } = await loadCachedUnitSupplementalData(id);
   const formKey = t ?? "default";
 
   return (

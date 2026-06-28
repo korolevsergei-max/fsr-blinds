@@ -1,11 +1,12 @@
-"use client";
-
-import { useParams } from "next/navigation";
-import { useUnitMediaAndMilestones } from "@/lib/use-unit-supplemental";
+import { loadCachedUnitMediaAndMilestones } from "@/lib/unit-route-data";
 import { InstalledPhotoForm } from "@/components/windows/installed-photo-form";
 
-export default function ManagementInstalledPhotoPage() {
-  const { id } = useParams<{ id: string }>();
-  const { mediaItems, milestones } = useUnitMediaAndMilestones(id);
+export default async function ManagementInstalledPhotoPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const { mediaItems, milestones } = await loadCachedUnitMediaAndMilestones(id);
   return <InstalledPhotoForm mediaItems={mediaItems} milestones={milestones} routeBasePath="/management/units" />;
 }
