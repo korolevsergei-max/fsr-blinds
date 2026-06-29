@@ -425,3 +425,31 @@ Notes:
 - Parity verified on live prod data: exact set parity for units/rooms/windows/buildings/clients/
   schedule/installers/assignments across the 1 scheduler and all 6 installers, plus field-value
   parity on sampled rows. The validator was deleted after use per the workflow.
+
+---
+
+## Phase 11 enrichment-fold timing (2026-06-28)
+
+Folded the per-unit enrichment (`withPostInstallIssues` open-PI boolean + `withManufacturingEscalations`)
+into `get_owner_dataset` / `get_scheduler_dataset` (migration
+`20260628150000_fold_enrichment_into_dataset_rpcs.sql`), so the global owner/scheduler load is a
+single DB round-trip end-to-end. Before this, `finalizeDataset` ran those enrichment round-trips
+*after* the spine RPC on every owner/scheduler navigation. Warm timing (2 warmup + median of 5)
+against linked prod via a throwaway service-role script (deleted after use):
+
+| Owner global data fetch | Before | After | Saving |
+|---|---:|---:|---:|
+| Spine RPC (`get_owner_dataset`) | ~167 ms | ~167 ms | — |
+| `finalizeDataset` enrichment round-trips | ~452 ms | 0 (folded in) | −452 ms |
+| **Total (sequential)** | **~619 ms** | **~167 ms** | **~−73%** |
+
+Notes:
+- Network-inclusive from a dev machine to prod (Supabase API); in-app serverless numbers are lower
+  but the ratio holds. The folded RPC absorbs the enrichment as two extra subqueries
+  (`status='open'` escalations + `DISTINCT unit_id` open-PI, index-backed by `idx_wpii_unit_open`)
+  at negligible marginal cost on current data (0 open escalations, 37 open-PI rows → 23 units).
+- The same enrichment also rode the scheduler path (`buildSchedulerDataset` → `finalizeDataset`);
+  Phase 11 removes it there too (scoped to the scheduler's units inside the RPC).
+- Parity verified on live prod: open-escalation IDs and units-with-open-PI sets match an independent
+  re-read of the old enrichment for the owner (all units) and the prod scheduler (460 units) —
+  `0=0` escalations, `23=23` PI units. Validators deleted after use per the workflow.

@@ -629,6 +629,69 @@ still not warranted by current scale.
 
 ---
 
+## Phase 11 — Fold per-unit enrichment into the owner & scheduler dataset RPCs (2026-06-28)
+
+**Goal:** make the global owner/scheduler load a single DB round-trip end-to-end. Phases 9–10
+collapsed the dataset *spine* into one RPC, but `finalizeDataset` still issued its own enrichment
+round-trips on every owner/scheduler nav (the residual flagged in Phase 9). User symptom this
+targets: "long blank/skeleton first" + "worse on mobile/poor wifi" — the skeleton
+(`ManagementLoading`/`SchedulerLoading`) is gated on the *full* dataset load, and those serial
+round-trips extend it (each ≈ one RTT, amplified on high-latency links).
+
+**What was wasteful (verified):** `finalizeDataset` ([enrichment.ts](../../src/lib/server-data/enrichment.ts))
+ran, after the spine RPC, `withPostInstallIssues` (3 sequential chunked waves over all ~460 units:
+issues → notes + profiles → missing authors) + `withManufacturingEscalations` (another wave) — but
+**no global owner/scheduler screen reads the `postInstallIssues` array, its notes, or the joined
+`user_profiles`.** The only global consumers are the per-unit boolean `unit.hasOpenPostInstallIssue`
+(stage bucketing via `getUnitCurrentStage`, and the reports "PI" badge) and the open
+`manufacturingEscalations` (dashboard "Escalations" bucket + units-list issue filter). So the
+notes/profile fan-out was pure latency waste on the hot path.
+
+**Changes**
+- Migration [20260628150000_fold_enrichment_into_dataset_rpcs.sql](../../supabase/migrations/20260628150000_fold_enrichment_into_dataset_rpcs.sql)
+  (additive `CREATE OR REPLACE`): `get_owner_dataset()` and `get_scheduler_dataset(text)` each return
+  two new keys — `manufacturing_escalations` (`status='open'`; scheduler scoped to its `scoped_units`
+  CTE) and `units_with_open_post_install_issue` (`DISTINCT unit_id WHERE status='open'`, index-backed
+  by `idx_wpii_unit_open`). Same EXISTS/status patterns already in `get_owner_dashboard_counts`.
+- TS: `finalizeDataset` gains `opts.preEnriched` — when set it skips `withPostInstallIssues` +
+  `withManufacturingEscalations` (the dataset already carries them). `buildDatasetFromRaw`
+  ([build.ts](../../src/lib/server-data/build.ts)) and `buildSchedulerDataset`
+  ([datasets.ts](../../src/lib/server-data/datasets.ts)) map the RPC escalation rows via the shared
+  `mapManufacturingEscalation` and stamp each unit's `hasOpenPostInstallIssue` from the open-PI set.
+  The owner/scheduler RPC fast paths pass `preEnriched: raw.units_with_open_post_install_issue !== undefined`.
+- **Rollback-safe by construction:** `preEnriched` is gated on the new key being *present*, so a
+  pre-migration RPC (or a reverted DB) returns `undefined` → the full TS enrichment runs (byte-identical
+  to before). Every fallback branch (`get_full_dataset`, owner multi-query, scheduler chunked, installer)
+  is untouched. `loadUnitDetail` / installer paths keep full enrichment (they consume notes + `currentStage`).
+
+**Validation (live prod, service-role parity diff + timing; throwaway scripts deleted after):**
+- Parity: the folded RPC keys match an independent re-read of the old enrichment for the owner (all
+  units) and the prod scheduler (Tom U, 460 units): open-escalation IDs `0 = 0`, units-with-open-PI
+  `23 = 23` on both paths. **ALL CHECKS PASSED.** (Current prod has 0 open escalations, so the
+  escalation field-value spot-check had no row to sample; the RPC returns `row_to_json(wme.*)` — the
+  identical snake_case shape the old path fed to the same `mapManufacturingEscalation` mapper — so the
+  mapping is byte-identical by construction, and the existing `getUnitEscalations` test covers it.)
+- Timing (warm, 2 warmup + median of 5, network-inclusive from a dev machine; in-app serverless is
+  lower but the ratio holds): the removed enrichment sequence = **~452 ms** median; `get_owner_dataset`
+  (now folded) single round-trip = **~167 ms** median. So the owner data-fetch wall-clock drops from
+  ~619 ms (167 + 452, sequential) to ~167 ms — **~452 ms of blank-skeleton removed per owner/scheduler
+  navigation (~73%)**, larger in absolute terms on high-RTT mobile.
+- `npm run lint` (0 errors, same 24 pre-existing warnings), `typecheck`, `build`, `test` (85/85) all
+  green. Migration applied to prod via `supabase db push`.
+
+**Residual risk:**
+- The folded subqueries scan `window_manufacturing_escalations`/`window_post_install_issues` for
+  `status='open'` on every owner load; both are tiny "currently-open" sets and the PI lookup is
+  index-backed, so cost is negligible at current scale. If the open sets grow large, the owner
+  variant (no unit filter) is the one to watch.
+- The full `postInstallIssues` array (with notes) is intentionally no longer loaded on the global
+  path — correct today since nothing global reads it, but any future global feature needing issue
+  *detail* must load it itself (the unit-detail path still does).
+- Server-side unit pagination + shared-bundle diet remain the larger, still-deferred levers for the
+  same "blank-first / weak-wifi" symptom.
+
+---
+
 ## 6. Constraints & non-goals
 
 - Keep each phase **independently shippable and revertible** (own branch, own commit).
