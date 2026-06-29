@@ -30,7 +30,7 @@ import {
   openPostInstallIssue,
   resolvePostInstallIssue,
 } from "@/app/actions/post-install-issue-actions";
-import { refreshDataset } from "@/app/actions/dataset-queries";
+import { refreshUnitDetail, refreshSchedulerUnitDetail } from "@/app/actions/dataset-queries";
 import { useDatasetSelectorMaybe, useDatasetActionsMaybe } from "@/lib/dataset-context";
 import { DeleteWindowModal } from "@/components/rooms/delete-window-modal";
 import { FlagIssueModal } from "@/components/rooms/flag-issue-modal";
@@ -94,7 +94,6 @@ export function RoomWindowsView({
   const room = data.rooms.find((item) => item.id === roomId);
   const unit = room ? data.units.find((item) => item.id === room.unitId) : null;
   const canManagePostInstallIssues = currentRole === "owner" || currentRole === "scheduler";
-  const issueLoaderKind = currentRole === "scheduler" ? "scheduler" : currentRole === "installer" ? "installer" : "full";
   const [imageOrientationByUrl, setImageOrientationByUrl] = useState<
     Record<string, ImageOrientation>
   >({});
@@ -113,11 +112,22 @@ export function RoomWindowsView({
   const [isPendingDelete, startDeleteTransition] = useTransition();
   const [isPendingIssueAction, startIssueTransition] = useTransition();
 
-  const refreshIssueData = () =>
-    refreshDataset(issueLoaderKind).then((freshData) => {
-      if (freshData) datasetActions?.setData(freshData);
-      router.refresh();
-    });
+  // Post-install issues are managed inside the scoped unit-detail provider (management + scheduler
+  // subtrees), whose store holds only THIS unit's rooms/windows — the global scheduler/owner
+  // payloads no longer ship them. Refetch the matching scoped per-unit dataset so `setData` keeps
+  // rooms/windows intact (the global `refreshDataset` would replace them with empty arrays, leaving
+  // the room "not found" until a hard refresh re-seeds the provider).
+  const refreshIssueData = async () => {
+    const freshData = unit
+      ? currentRole === "scheduler"
+        ? await refreshSchedulerUnitDetail(unit.id)
+        : currentRole === "owner"
+          ? await refreshUnitDetail(unit.id)
+          : null
+      : null;
+    if (freshData) datasetActions?.setData(freshData);
+    router.refresh();
+  };
 
   const handleConfirmDelete = () => {
     if (!onDeleteWindow || !confirmDeleteWindowId) return;
