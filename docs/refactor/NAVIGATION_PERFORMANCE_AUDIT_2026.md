@@ -34,6 +34,8 @@ A senior dev confirmed the app is "no way this slow" to navigate. Two distinct s
 | Units list virtualization | Done (TanStack virtual) | [units-list.tsx:365-370](../../src/app/management/units/units-list.tsx#L365-L370) |
 | React Compiler, dynamic PDF/canvas imports, dead-dep cleanup (`lucide-react`, `xlsx`→dev) | Done | [next.config.ts](../../next.config.ts), [PERF_BASELINE.md](PERF_BASELINE.md) |
 | Bounded chunk concurrency (`selectInChunks`, cap 4) | Done (post-outage band-aid) | [supabase-chunking.ts:9-14](../../src/lib/supabase-chunking.ts#L9-L14) |
+| Per-unit enrichment folded into owner/scheduler RPCs | Done (Phase 11, 2026-06-29) | [datasets.ts](../../src/lib/server-data/datasets.ts), [20260628150000](../../supabase/migrations/20260628150000_fold_enrichment_into_dataset_rpcs.sql) |
+| **Shared-bundle base diet** | **REJECTED — not viable**; 168 kB base is framework floor (spiked 2026-06-29) | see "Bundle base diet — investigated & REJECTED" below |
 
 ---
 
@@ -687,8 +689,51 @@ notes/profile fan-out was pure latency waste on the hot path.
 - The full `postInstallIssues` array (with notes) is intentionally no longer loaded on the global
   path — correct today since nothing global reads it, but any future global feature needing issue
   *detail* must load it itself (the unit-detail path still does).
-- Server-side unit pagination + shared-bundle diet remain the larger, still-deferred levers for the
-  same "blank-first / weak-wifi" symptom.
+- Server-side unit pagination remains the larger, still-deferred lever for scale; the shared-bundle
+  diet was investigated after Phase 11 and **rejected as non-viable** (see below).
+
+---
+
+## Bundle base diet — investigated & REJECTED (2026-06-29)
+
+**Do not re-chase this.** After Phase 11, the shared-bundle diet (the other lever for the
+"blank-first / weak-wifi on mobile" symptom) was spiked and proven not viable. The
+every-route shared base is **168 kB gz / 7 chunks** and is **framework floor** — there is no
+app-side change that shrinks it.
+
+**Method (Turbopack-specific):** `@next/bundle-analyzer` does **not** work with Turbopack builds
+("not compatible with Turbopack builds, no report will be generated"), so sizing was done by
+parsing `.next/build-manifest.json` `rootMainFiles` + `polyfillFiles` and gzipping each chunk, plus
+fingerprinting chunk contents by retained runtime strings (Turbopack strips `node_modules` paths).
+
+**What the 168 kB base is:** React + React-DOM (~71 kB), Next App Router client runtime (~28 kB),
+Next's **vendored polyfills** (~38 kB — the chunk whose strings read like `core-js`), and Next
+internals + the Turbopack runtime (~31 kB). All framework; none app-controllable.
+
+**Two hypotheses tested, both negative:**
+1. *"The ~38 kB core-js chunk leaks from `jspdf`→`canvg` (the only `npm ls core-js` path) into the
+   eager base."* **FALSE.** Fully removing jspdf from the client graph (stub the dynamic imports →
+   the 129 kB jspdf chunk disappears) left the base at **168.2 kB with the core-js chunk still
+   present**. So core-js is **vendored inside `next` itself**, not pulled by jspdf — moving PDF
+   generation server-side would **not** shrink the cold-load base by a byte. (The 129 kB jspdf chunk
+   is already lazy — loads only on PDF generation, not on nav — so it never touched cold first paint.)
+2. *"A modern `browserslist` will drop the polyfills."* **FALSE.** Adding
+   `chrome>=110/safari>=16/...` and rebuilding → **168.5 kB, core-js still present**. The polyfills
+   are baked into Next's runtime, not driven by browser targets.
+
+**Conclusion / what actually helps the phone cold-load symptom instead:**
+- The every-route base is the irreducible cost of React 19 + Next 16 App Router. Leave it.
+- The **app-shell SW (Phase 2)** already caches that base, so the cost is only paid on the *first*
+  visit and the *first visit after each deploy* (new hashes → cache miss). The highest-leverage
+  non-code lever is therefore **deploy cadence** — frequent deploys invalidate the SW shell and force
+  field users to re-download the base; spacing deploys / off-hours deploys helps more than any bundle
+  work could.
+- The only app-controllable bundle remaining is **per-route** chunks (~115–130 kB on top of the base:
+  Supabase realtime client + Phosphor icons), a per-route micro-opt with real refactor cost — not the
+  shared base, and not worth it for this symptom.
+- Phase 7's earlier framing of "trim the shared base" via framer-motion/date-fns removal *did* help
+  total JS (−206 kB across all chunks), but the every-route **base** has been 168 kB gz throughout and
+  cannot go lower without changing framework.
 
 ---
 
