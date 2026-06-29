@@ -24,8 +24,10 @@ import {
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import { mapManufacturingEscalation } from "@/lib/manufacturing-escalations";
 import { buildDatasetFromRaw, emptyDataset } from "./build";
 import { finalizeDataset } from "./enrichment";
+import type { ManufacturingEscalationRow } from "./internal-types";
 
 export const loadFullDataset = cache(async (): Promise<AppDataset> => {
   const startedAt = performance.now();
@@ -46,12 +48,18 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       cutters: CutterRow[];
       schedulers: SchedulerRow[];
       scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
+      // Phase 11: enrichment folded into get_owner_dataset (open escalations + open-PI unit ids).
+      manufacturing_escalations?: ManufacturingEscalationRow[];
+      units_with_open_post_install_issue?: string[];
     };
     console.log(
       `[owner-load] management units=${raw.units?.length ?? 0} rooms=0 windows=0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
     );
+    // preEnriched: the RPC already returned manufacturingEscalations + each unit's
+    // hasOpenPostInstallIssue, so skip the redundant finalizeDataset round-trips.
     return finalizeDataset(buildDatasetFromRaw(raw), {
       deriveStatusFromWindows: false,
+      preEnriched: raw.units_with_open_post_install_issue !== undefined,
     });
   }
 
@@ -152,6 +160,10 @@ type SchedulerDatasetRaw = {
   schedule_entries: ScheduleRow[];
   team_installers: InstallerRow[];
   all_installers: InstallerRow[];
+  // Phase 11: enrichment folded into get_scheduler_dataset (open escalations + open-PI unit ids),
+  // scoped to this scheduler's units. Absent on the chunked fallback path (enriched in TS).
+  manufacturing_escalations?: ManufacturingEscalationRow[];
+  units_with_open_post_install_issue?: string[];
 };
 
 /**
@@ -169,9 +181,18 @@ function buildSchedulerDataset(
   );
   const schedulerName = raw.scheduler?.name || "Unknown";
 
-  const units = (raw.units ?? []).map((r) =>
-    mapUnit({ ...r, assigned_at: assignmentAtMap.get(r.id) }, schedulerName, schedulerId)
-  );
+  // Phase 11: when the RPC folded in the open-PI unit set, stamp every unit's boolean from it
+  // (present-but-empty => all false). Absent on the chunked fallback => left to TS enrichment.
+  const openPostInstallUnitIds = raw.units_with_open_post_install_issue
+    ? new Set(raw.units_with_open_post_install_issue)
+    : null;
+  const units = (raw.units ?? []).map((r) => {
+    const unit = mapUnit({ ...r, assigned_at: assignmentAtMap.get(r.id) }, schedulerName, schedulerId);
+    if (openPostInstallUnitIds) {
+      unit.hasOpenPostInstallIssue = openPostInstallUnitIds.has(r.id);
+    }
+    return unit;
+  });
 
   const buildings = (raw.buildings ?? []).map(mapBuilding);
   const clients = (raw.clients ?? []).map(mapClient);
@@ -205,6 +226,10 @@ function buildSchedulerDataset(
   // loads its own via loadSchedulerUnitDetail). No global scheduler screen reads currentStage,
   // and units.status is persisted at every mutation by recomputeUnitStatus, so skip the
   // windows-derived status re-derivation — mirrors the owner path (deriveStatusFromWindows:false).
+  // Phase 11: when the RPC folded enrichment in (units_with_open_post_install_issue present),
+  // manufacturingEscalations + per-unit hasOpenPostInstallIssue are already populated above, so
+  // skip the redundant finalizeDataset round-trips (preEnriched). The chunked fallback omits
+  // those keys, so it keeps doing the full TS enrichment (byte-identical, rollback-safe).
   return finalizeDataset(
     {
       clients,
@@ -216,10 +241,13 @@ function buildSchedulerDataset(
       schedule,
       cutters: [],
       schedulers: [],
-      manufacturingEscalations: [],
+      manufacturingEscalations: (raw.manufacturing_escalations ?? []).map(mapManufacturingEscalation),
       postInstallIssues: [],
     },
-    { deriveStatusFromWindows: false }
+    {
+      deriveStatusFromWindows: false,
+      preEnriched: raw.units_with_open_post_install_issue !== undefined,
+    }
   );
 }
 

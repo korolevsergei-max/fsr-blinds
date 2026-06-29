@@ -274,7 +274,7 @@ async function withLiveUnitStatuses(dataset: AppDataset): Promise<AppDataset> {
 
 export async function finalizeDataset(
   dataset: AppDataset,
-  opts: { deriveStatusFromWindows?: boolean } = {}
+  opts: { deriveStatusFromWindows?: boolean; preEnriched?: boolean } = {}
 ): Promise<AppDataset> {
   // `deriveStatusFromWindows` re-derives each unit's `status` + `currentStage` from the
   // loaded windows/rooms (`withLiveUnitStatuses`). The owner global load passes `false`:
@@ -282,7 +282,18 @@ export async function finalizeDataset(
   // `units.status` is persisted at every mutation by `recomputeUnitStatus` (drift confirmed
   // 0), so re-deriving is redundant. Scoped routes (unit detail, scheduler, installer) keep
   // the default `true` because they display `currentStage` and load their own windows.
-  const { deriveStatusFromWindows = true } = opts;
+  //
+  // `preEnriched` (Phase 11): the dataset already carries `manufacturingEscalations` (open) and
+  // each unit's `hasOpenPostInstallIssue`, because the owner/scheduler dataset RPC folded those
+  // reads in (get_owner_dataset / get_scheduler_dataset). Skip the now-redundant
+  // withPostInstallIssues + withManufacturingEscalations round-trips — they only re-fetch what
+  // the RPC already returned, and the global screens never read the post-install notes/array
+  // that the full withPostInstallIssues also loads. The non-RPC fallback paths leave this
+  // unset, so they keep doing the full enrichment (byte-identical, rollback-safe).
+  const { deriveStatusFromWindows = true, preEnriched = false } = opts;
+  if (preEnriched) {
+    return deriveStatusFromWindows ? withLiveUnitStatuses(dataset) : dataset;
+  }
   const withIssues = await withPostInstallIssues(dataset);
   const withLiveStatuses = deriveStatusFromWindows
     ? await withLiveUnitStatuses(withIssues)
