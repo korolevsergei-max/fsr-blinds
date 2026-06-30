@@ -154,7 +154,8 @@ function ReportPreviewModal({
             style={{ maxWidth: 900, minWidth: 600 }}
           >
             {/* Report Header */}
-            <div className="px-10 pt-10 pb-6 border-b border-zinc-100">
+            <div className="px-10 pt-9 pb-6 border-b border-zinc-100">
+              <FsrLogo className="mb-6" />
               <div className="flex items-start justify-between mb-6">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 mb-1">
@@ -308,6 +309,42 @@ function ReportPreviewModal({
           .print\\:mx-0 { margin-left: 0 !important; margin-right: 0 !important; }
         }
       `}</style>
+    </div>
+  );
+}
+
+/**
+ * FSR brand mark — three charcoal tiles lettered F · S · R. Rendered inline
+ * (vector-crisp in print) with print-color-adjust so the tiles keep their fill
+ * in the saved PDF, where browsers otherwise drop background colors.
+ */
+function FsrLogo({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex items-center gap-[5px] ${className}`}
+      role="img"
+      aria-label="FSR Blinds"
+    >
+      {["F", "S", "R"].map((ch) => (
+        <span
+          key={ch}
+          className="flex items-center justify-center"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 5,
+            backgroundColor: "#4d4d4d",
+            color: "#ffffff",
+            fontSize: 16,
+            fontWeight: 400,
+            lineHeight: 1,
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
+          }}
+        >
+          {ch}
+        </span>
+      ))}
     </div>
   );
 }
