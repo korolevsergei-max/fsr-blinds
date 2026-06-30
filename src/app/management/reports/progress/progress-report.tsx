@@ -1,579 +1,616 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
-import { ArrowLeft, CalendarBlank, ChartLineUp, Printer, Table as TableIcon } from "@phosphor-icons/react";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
-import { PageHeader } from "@/components/ui/page-header";
-import { RefreshButton } from "@/components/ui/refresh-button";
-import type { ProgressReportPdfFilter } from "@/lib/progress-report-pdf";
-import type { ProgressStage } from "@/lib/types";
+import { useState, useMemo, useCallback, useRef } from "react";
+import type { Unit, Client, Building } from "@/lib/types";
+import {
+  CalendarBlank,
+  FunnelSimple,
+  Printer,
+  X,
+  Buildings,
+  User,
+  MapPin,
+  CheckCircle,
+} from "@phosphor-icons/react";
+import { getFloor } from "@/lib/app-dataset";
 
-export type ProgressReportOption = {
-  value: string;
-  label: string;
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+function isoToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+/** First day of the current month, as YYYY-MM-DD — a sensible default "From". */
+function firstOfMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+function formatDate(iso: string): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
+
+/** A floor's completed units plus its bracket totals. */
+type FloorGroup = {
+  floor: string;
+  units: Unit[];
+  unitCount: number;
+  windowTotal: number;
 };
 
-export type ProgressReportBuildingOption = ProgressReportOption & {
-  clientId: string;
-};
+/**
+ * Completed units (status === "installed") whose installation date falls within
+ * [from, to] (inclusive), grouped and sorted by floor. String YYYY-MM-DD
+ * comparisons are lexicographically correct, matching the Status Grid report.
+ */
+function buildFloorGroups(
+  units: Unit[],
+  buildingId: string,
+  from: string,
+  to: string
+): FloorGroup[] {
+  if (!buildingId) return [];
 
-export type ProgressReportRow = {
-  id: string;
-  snapshotDate: string;
-  stage: ProgressStage;
-  unitId: string;
-  buildingId: string;
-  clientId: string;
+  const map = new Map<string, Unit[]>();
+  for (const u of units) {
+    if (u.buildingId !== buildingId) continue;
+    if (u.status !== "installed") continue;
+    if (!u.installationDate || u.installationDate < from || u.installationDate > to) continue;
+
+    const floor = getFloor(u.unitNumber);
+    if (!map.has(floor)) map.set(floor, []);
+    map.get(floor)!.push(u);
+  }
+
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+    .map(([floor, list]) => {
+      list.sort((a, b) =>
+        a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true })
+      );
+      return {
+        floor,
+        units: list,
+        unitCount: list.length,
+        windowTotal: list.reduce((acc, u) => acc + (u.windowCount ?? 0), 0),
+      };
+    });
+}
+
+// ─── Props ─────────────────────────────────────────────────────────────────
+
+interface Props {
+  units: Unit[];
+  clients: Client[];
+  buildings: Building[];
+}
+
+// ─── Report Preview Modal ──────────────────────────────────────────────────
+
+interface ReportPreviewProps {
   clientName: string;
   buildingName: string;
-  unitNumber: string;
-  floor: number | null;
-  expectedBlinds: number;
-  doneBlinds: number;
-  assignedUserIds: string[];
-  assignedDisplay: string | null;
-};
-
-type ProgressReportFilters = {
-  stage: ProgressStage;
+  buildingAddress: string;
   from: string;
   to: string;
-  clients: string[];
-  buildings: string[];
-  installers: string[];
-  schedulers: string[];
-  cutters: string[];
-  assemblers: string[];
-  qcs: string[];
-};
-
-type ProgressReportOptions = {
-  stages: ProgressReportOption[];
-  clients: ProgressReportOption[];
-  buildings: ProgressReportBuildingOption[];
-  installers: ProgressReportOption[];
-  schedulers: ProgressReportOption[];
-  cutters: ProgressReportOption[];
-  assemblers: ProgressReportOption[];
-  qcs: ProgressReportOption[];
-};
-
-type ProgressReportProps = {
-  rows: ProgressReportRow[];
-  initialFilters: ProgressReportFilters;
-  options: ProgressReportOptions;
-};
-
-const FILTER_KEYS = [
-  "stage",
-  "from",
-  "to",
-  "clients",
-  "buildings",
-  "installers",
-  "schedulers",
-  "cutters",
-  "assemblers",
-  "qcs",
-] as const;
-
-function addUtcDays(date: string, days: number): string {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+  groups: FloorGroup[];
+  totalUnits: number;
+  totalWindows: number;
+  onClose: () => void;
 }
 
-function formatDate(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, day)));
-}
+function ReportPreviewModal({
+  clientName,
+  buildingName,
+  buildingAddress,
+  from,
+  to,
+  groups,
+  totalUnits,
+  totalWindows,
+  onClose,
+}: ReportPreviewProps) {
+  const printRef = useRef<HTMLDivElement>(null);
 
-function percent(done: number, expected: number): number {
-  if (expected <= 0) return 0;
-  return Math.round((done / expected) * 100);
-}
-
-function withAll(label: string, options: ProgressReportOption[]) {
-  return [{ value: "all", label }, ...options];
-}
-
-function joinValues(values: string[]) {
-  return values.length > 0 ? values.join(",") : null;
-}
-
-function normalizeRange(from: string, to: string) {
-  let nextFrom = from;
-  let nextTo = to;
-
-  if (nextFrom > nextTo) {
-    [nextFrom, nextTo] = [nextTo, nextFrom];
-  }
-
-  const earliestAllowed = addUtcDays(nextTo, -89);
-  if (nextFrom < earliestAllowed) nextFrom = earliestAllowed;
-
-  return { from: nextFrom, to: nextTo };
-}
-
-function clearIncompatibleBuildingFilters(buildingIds: string[], clientIds: string[], buildings: ProgressReportBuildingOption[]) {
-  if (clientIds.length === 0) return buildingIds;
-  const allowed = new Set(
-    buildings.filter((building) => clientIds.includes(building.clientId)).map((building) => building.value)
-  );
-  return buildingIds.filter((buildingId) => allowed.has(buildingId));
-}
-
-function selectedOptionLabels(values: string[], options: ProgressReportOption[], allLabel: string): string {
-  if (values.length === 0) return allLabel;
-
-  const labels = new Map(options.map((option) => [option.value, option.label]));
-  return values.map((value) => labels.get(value) ?? "Unknown").join(", ");
-}
-
-function slugify(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-export function ProgressReport({ rows, initialFilters, options }: ProgressReportProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [pending, startTransition] = useTransition();
-  const [pdfStatus, setPdfStatus] = useState<"idle" | "generating" | "error">("idle");
-
-  const visibleBuildings = useMemo(() => {
-    if (initialFilters.clients.length === 0) return options.buildings;
-    return options.buildings.filter((building) => initialFilters.clients.includes(building.clientId));
-  }, [initialFilters.clients, options.buildings]);
-
-  const totals = useMemo(
-    () =>
-      rows.reduce(
-        (acc, row) => {
-          acc.done += row.doneBlinds;
-          acc.expected += row.expectedBlinds;
-          return acc;
-        },
-        { done: 0, expected: 0 }
-      ),
-    [rows]
-  );
-
-  const selectedStageLabel =
-    options.stages.find((stage) => stage.value === initialFilters.stage)?.label ?? initialFilters.stage;
-
-  const pdfFilters: ProgressReportPdfFilter[] = useMemo(
-    () => [
-      {
-        label: "Client",
-        value: selectedOptionLabels(initialFilters.clients, options.clients, "All clients"),
-      },
-      {
-        label: "Building",
-        value: selectedOptionLabels(initialFilters.buildings, options.buildings, "All buildings"),
-      },
-      {
-        label: "Installer",
-        value: selectedOptionLabels(initialFilters.installers, options.installers, "All installers"),
-      },
-      {
-        label: "Scheduler",
-        value: selectedOptionLabels(initialFilters.schedulers, options.schedulers, "All schedulers"),
-      },
-      {
-        label: "Cutter",
-        value: selectedOptionLabels(initialFilters.cutters, options.cutters, "All cutters"),
-      },
-      {
-        label: "Assembler",
-        value: selectedOptionLabels(initialFilters.assemblers, options.assemblers, "All assemblers"),
-      },
-      {
-        label: "QC",
-        value: selectedOptionLabels(initialFilters.qcs, options.qcs, "All QC"),
-      },
-    ],
-    [
-      initialFilters.assemblers,
-      initialFilters.buildings,
-      initialFilters.clients,
-      initialFilters.cutters,
-      initialFilters.installers,
-      initialFilters.qcs,
-      initialFilters.schedulers,
-      options.assemblers,
-      options.buildings,
-      options.clients,
-      options.cutters,
-      options.installers,
-      options.qcs,
-      options.schedulers,
-    ]
-  );
-
-  const activeFilterCount =
-    initialFilters.clients.length +
-    initialFilters.buildings.length +
-    initialFilters.installers.length +
-    initialFilters.schedulers.length +
-    initialFilters.cutters.length +
-    initialFilters.assemblers.length +
-    initialFilters.qcs.length;
-
-  function updateFilters(patch: Partial<ProgressReportFilters>) {
-    const next = {
-      ...initialFilters,
-      ...patch,
-    };
-    const range = normalizeRange(next.from, next.to);
-    next.from = range.from;
-    next.to = range.to;
-
-    if (patch.clients) {
-      next.buildings = clearIncompatibleBuildingFilters(next.buildings, patch.clients, options.buildings);
-    }
-
-    const params = new URLSearchParams();
-    for (const key of FILTER_KEYS) {
-      const value = next[key];
-      if (Array.isArray(value)) {
-        const joined = joinValues(value);
-        if (joined) params.set(key, joined);
-      } else {
-        params.set(key, value);
-      }
-    }
-
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
-  }
-
-  async function downloadPdf() {
-    setPdfStatus("generating");
-
-    try {
-      const { buildProgressReportPdf } = await import("@/lib/progress-report-pdf");
-      const blob = await buildProgressReportPdf({
-        rows,
-        stageLabel: selectedStageLabel,
-        from: initialFilters.from,
-        to: initialFilters.to,
-        filters: pdfFilters,
-        totals: {
-          rows: rows.length,
-          done: totals.done,
-          expected: totals.expected,
-          completePercent: percent(totals.done, totals.expected),
-        },
-      });
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      const stageSlug = slugify(selectedStageLabel) || "progress";
-      link.href = url;
-      link.download = `progress-report-${stageSlug}-${dateStamp}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setPdfStatus("idle");
-    } catch (error) {
-      console.error("Progress report PDF generation failed", error);
-      setPdfStatus("error");
-    }
-  }
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f8f8f6]">
-      <PageHeader
-        title="Progress Report"
-        subtitle="Historical daily snapshots by process"
-        backHref="/management/reports"
-        actions={
-          <>
-            <RefreshButton />
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-stretch bg-zinc-900/70 backdrop-blur-sm print-report-root"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="relative flex flex-col w-full h-full bg-[#F8F7F4] overflow-hidden print-report-scroll-area">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-zinc-200 print:hidden shrink-0">
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+            Report Preview
+          </span>
+          <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={downloadPdf}
-              disabled={pdfStatus === "generating"}
-              className={[
-                "inline-flex h-9 items-center justify-center gap-1.5 rounded-[var(--radius-md)] border px-4 text-[13px] font-semibold shadow-[0_1px_2px_rgba(26,26,26,0.04)] transition-all active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60",
-                pdfStatus === "error"
-                  ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-50"
-                  : "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800",
-              ].join(" ")}
-              title={pdfStatus === "error" ? "PDF generation failed. Try again." : "Generate progress report PDF"}
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 bg-zinc-900 text-white text-[12px] font-semibold px-3.5 py-1.5 rounded-[8px] hover:bg-zinc-700 active:scale-95 transition-all"
             >
-              <Printer size={14} weight="bold" />
-              {pdfStatus === "generating" ? "Generating" : pdfStatus === "error" ? "PDF failed" : "Print / Save PDF"}
+              <Printer size={14} />
+              Print / Save PDF
             </button>
-            <Link
-              href="/management/reports"
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-border bg-card px-4 text-[13px] font-semibold text-foreground shadow-[0_1px_2px_rgba(26,26,26,0.04)] transition-all hover:bg-surface active:scale-[0.97]"
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-8 h-8 rounded-[8px] text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition-colors"
             >
-              <ArrowLeft size={14} weight="bold" />
-              Status Grid
-            </Link>
-          </>
-        }
-      />
-
-      <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 py-4 sm:py-5">
-        <section className="border-b border-zinc-200 bg-white/70 px-0 pb-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Process</p>
-              <h2 className="text-[18px] font-semibold tracking-tight text-zinc-950">
-                {options.stages.find((stage) => stage.value === initialFilters.stage)?.label}
-              </h2>
-            </div>
-            {pending ? (
-              <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] font-semibold text-zinc-500">
-                Updating
-              </span>
-            ) : null}
+              <X size={16} />
+            </button>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-4 lg:grid-cols-7">
-            {options.stages.map((stage) => {
-              const active = stage.value === initialFilters.stage;
-              return (
-                <label
-                  key={stage.value}
-                  className={[
-                    "flex min-h-11 cursor-pointer items-center gap-2 rounded-[8px] border px-3 py-2 text-[13px] font-semibold transition-all active:scale-[0.98]",
-                    active
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300",
-                  ].join(" ")}
-                >
-                  <input
-                    type="radio"
-                    name="progress-stage"
-                    value={stage.value}
-                    checked={active}
-                    onChange={() => updateFilters({ stage: stage.value as ProgressStage })}
-                    className="h-3.5 w-3.5 accent-emerald-700"
+        {/* Scrollable report area */}
+        <div className="flex-1 overflow-auto p-6 print:p-0 print:overflow-visible">
+          <div
+            ref={printRef}
+            className="mx-auto bg-white shadow-[0_4px_32px_-8px_rgba(0,0,0,0.12)] rounded-2xl print:shadow-none print:rounded-none print:mx-0"
+            style={{ maxWidth: 900, minWidth: 600 }}
+          >
+            {/* Report Header */}
+            <div className="px-10 pt-10 pb-6 border-b border-zinc-100">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400 mb-1">
+                    Progress Report — Completed Units
+                  </p>
+                  <h1 className="text-[28px] font-bold tracking-tight text-zinc-900 leading-tight">
+                    {buildingName}
+                  </h1>
+                  <p className="text-[14px] text-zinc-500 mt-0.5">{clientName}</p>
+                  {buildingAddress.trim() ? (
+                    <p className="text-[13px] text-zinc-600 mt-2 max-w-xl leading-snug">
+                      {buildingAddress.trim()}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                    Completed in period
+                  </p>
+                  <p className="text-[26px] font-bold text-zinc-900 leading-tight">
+                    {totalUnits}
+                    <span className="text-[14px] font-semibold text-zinc-400"> units</span>
+                  </p>
+                  <p className="text-[13px] font-semibold text-zinc-500">
+                    {totalWindows} windows
+                  </p>
+                </div>
+              </div>
+
+              {/* Metadata row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetaCell
+                  icon={<User size={13} className="text-zinc-400" />}
+                  label="Client"
+                  value={clientName}
+                />
+                <MetaCell
+                  icon={<Buildings size={13} className="text-zinc-400" />}
+                  label="Building"
+                  value={buildingName}
+                />
+                <MetaCell
+                  icon={<CalendarBlank size={13} className="text-zinc-400" />}
+                  label="From"
+                  value={formatDate(from)}
+                  accent
+                />
+                <MetaCell
+                  icon={<CalendarBlank size={13} className="text-zinc-400" />}
+                  label="To"
+                  value={formatDate(to)}
+                  accent
+                />
+              </div>
+              {buildingAddress.trim() ? (
+                <div className="mt-3">
+                  <MetaCell
+                    icon={<MapPin size={13} className="text-zinc-400" />}
+                    label="Address"
+                    value={buildingAddress.trim()}
+                    valueClassName="whitespace-normal break-words"
                   />
-                  <span className="min-w-0 truncate">{stage.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="grid grid-cols-1 gap-3 border-b border-zinc-200 bg-white/70 pb-4 lg:grid-cols-[minmax(280px,360px)_1fr]">
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Date Range</p>
-            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-              <DateField
-                label="From"
-                value={initialFilters.from}
-                min={addUtcDays(initialFilters.to, -89)}
-                max={initialFilters.to}
-                onChange={(value) => updateFilters({ from: value })}
-              />
-              <span className="pb-2.5 text-[12px] font-semibold text-zinc-400">to</span>
-              <DateField
-                label="To"
-                value={initialFilters.to}
-                min={initialFilters.from}
-                max={addUtcDays(initialFilters.from, 89)}
-                onChange={(value) => updateFilters({ to: value })}
-              />
+                </div>
+              ) : null}
             </div>
-            <p className="mt-1.5 text-[11px] text-zinc-500">Ranges are limited to 90 days.</p>
-          </div>
 
+            {/* Floor sections */}
+            <div className="px-10 py-6 space-y-5">
+              {groups.length === 0 ? (
+                <p className="text-[13px] text-zinc-500 py-8 text-center">
+                  No units were completed in this period.
+                </p>
+              ) : (
+                groups.map((g) => (
+                  <div
+                    key={g.floor}
+                    className="rounded-xl border border-zinc-200 overflow-hidden break-inside-avoid"
+                  >
+                    <div className="flex items-baseline justify-between px-4 py-2.5 bg-zinc-50 border-b border-zinc-200">
+                      <p className="text-[14px] font-bold text-zinc-900">
+                        Floor {g.floor}
+                      </p>
+                      <p className="text-[12px] font-semibold text-zinc-500">
+                        {g.unitCount} {g.unitCount === 1 ? "unit" : "units"} ·{" "}
+                        {g.windowTotal} {g.windowTotal === 1 ? "window" : "windows"}
+                      </p>
+                    </div>
+                    <div className="divide-y divide-zinc-100">
+                      {g.units.map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center justify-between px-4 py-2"
+                        >
+                          <span className="text-[13px] font-semibold text-zinc-800">
+                            Unit {u.unitNumber}
+                          </span>
+                          <span className="text-[12px] text-zinc-500">
+                            {u.windowCount}{" "}
+                            {u.windowCount === 1 ? "window" : "windows"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-10 py-5 border-t border-zinc-100 flex items-center justify-between">
+              <p className="text-[10px] text-zinc-400">
+                Generated {new Date().toLocaleString()} — FSR Blinds
+              </p>
+              <p className="text-[10px] text-zinc-400">
+                {formatDate(from)} – {formatDate(to)} · {groups.length} floors ·{" "}
+                {totalUnits} units · {totalWindows} windows
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Print styles injected inline */}
+      <style>{`
+        @media print {
+          body *:not(.print-report-root):not(:has(.print-report-root)):not(.print-report-root *) {
+            display: none !important;
+          }
+          body, html, *:has(.print-report-root) {
+            overflow: visible !important;
+            height: auto !important;
+            position: static !important;
+            transform: none !important;
+            max-width: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+          .print-report-root, .print-report-scroll-area {
+            position: relative !important;
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+          }
+          .break-inside-avoid { break-inside: avoid; }
+          .print\\:hidden { display: none !important; }
+          .print\\:p-0 { padding: 0 !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:rounded-none { border-radius: 0 !important; }
+          .print\\:mx-0 { margin-left: 0 !important; margin-right: 0 !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function MetaCell({
+  icon,
+  label,
+  value,
+  accent,
+  valueClassName,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent?: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-1 px-3 py-2.5 rounded-xl border ${
+        accent ? "bg-emerald-50 border-emerald-200" : "bg-zinc-50 border-zinc-200"
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">
+          {label}
+        </span>
+      </div>
+      <p
+        className={`text-[13px] font-semibold ${valueClassName ?? "truncate"} ${
+          accent ? "text-emerald-800" : "text-zinc-800"
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────
+
+export function ProgressReport({ units, clients, buildings }: Props) {
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
+  const [from, setFrom] = useState<string>(firstOfMonth());
+  const [to, setTo] = useState<string>(isoToday());
+  const [showReport, setShowReport] = useState(false);
+
+  const availableBuildings = useMemo(
+    () =>
+      selectedClientId
+        ? buildings.filter((b) => b.clientId === selectedClientId)
+        : buildings,
+    [selectedClientId, buildings]
+  );
+
+  const groups = useMemo(
+    () => buildFloorGroups(units, selectedBuildingId, from, to),
+    [units, selectedBuildingId, from, to]
+  );
+
+  const totalUnits = useMemo(
+    () => groups.reduce((acc, g) => acc + g.unitCount, 0),
+    [groups]
+  );
+  const totalWindows = useMemo(
+    () => groups.reduce((acc, g) => acc + g.windowTotal, 0),
+    [groups]
+  );
+
+  const selectedClient = clients.find((c) => c.id === selectedClientId);
+  const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId);
+  const rangeInvalid = Boolean(from && to && from > to);
+
+  return (
+    <>
+      <div className="min-h-[100dvh]">
+        {/* Page Header */}
+        <div className="sticky top-0 z-20 bg-card border-b border-border-subtle px-4 pt-12 pb-3 shadow-[0_1px_0_var(--border-subtle)] flex items-end justify-between">
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
-              Filters
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-0.5">
+              Owner Reports
             </p>
-            <div className="flex flex-wrap gap-2">
-              <FilterDropdown
-                label="Client"
-                multiple
-                values={initialFilters.clients}
-                onChange={(clients) => updateFilters({ clients })}
-                options={withAll("All clients", options.clients)}
+            <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
+              Progress Report
+            </h1>
+          </div>
+          <button
+            onClick={() => setShowReport(true)}
+            disabled={!selectedBuildingId}
+            className="flex items-center gap-1.5 bg-zinc-800 text-white text-[12px] font-semibold px-3 py-1.5 rounded-[8px] hover:bg-zinc-700 active:scale-95 transition-all mb-0.5 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Printer size={14} />
+            Produce Report
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="px-4 py-4 space-y-3 border-b border-border-subtle bg-card/60">
+          {/* Client */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-widest text-muted block mb-1.5">
+              Client
+            </label>
+            <div className="relative">
+              <FunnelSimple
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
               />
-              <FilterDropdown
-                label="Building"
-                multiple
-                values={initialFilters.buildings}
-                onChange={(buildings) => updateFilters({ buildings })}
-                options={withAll("All buildings", visibleBuildings)}
-              />
-              <FilterDropdown
-                label="Installer"
-                multiple
-                values={initialFilters.installers}
-                onChange={(installers) => updateFilters({ installers })}
-                options={withAll("All installers", options.installers)}
-              />
-              <FilterDropdown
-                label="Scheduler"
-                multiple
-                values={initialFilters.schedulers}
-                onChange={(schedulers) => updateFilters({ schedulers })}
-                options={withAll("All schedulers", options.schedulers)}
-              />
-              <FilterDropdown
-                label="Cutter"
-                multiple
-                values={initialFilters.cutters}
-                onChange={(cutters) => updateFilters({ cutters })}
-                options={withAll("All cutters", options.cutters)}
-              />
-              <FilterDropdown
-                label="Assembler"
-                multiple
-                values={initialFilters.assemblers}
-                onChange={(assemblers) => updateFilters({ assemblers })}
-                options={withAll("All assemblers", options.assemblers)}
-              />
-              <FilterDropdown
-                label="QC"
-                multiple
-                values={initialFilters.qcs}
-                onChange={(qcs) => updateFilters({ qcs })}
-                options={withAll("All QC", options.qcs)}
-              />
+              <select
+                className="w-full appearance-none surface-card border border-border rounded-[10px] pl-8 pr-4 py-2.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent bg-card"
+                value={selectedClientId}
+                onChange={(e) => {
+                  setSelectedClientId(e.target.value);
+                  setSelectedBuildingId("");
+                }}
+              >
+                <option value="">Select client…</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        </section>
 
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Metric label="Rows" value={rows.length.toLocaleString()} />
-          <Metric label="Blinds" value={`${totals.done.toLocaleString()} / ${totals.expected.toLocaleString()}`} />
-          <Metric label="Complete" value={`${percent(totals.done, totals.expected)}%`} />
-        </section>
+          {/* Building */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-widest text-muted block mb-1.5">
+              Building
+            </label>
+            <div className="relative">
+              <FunnelSimple
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+              />
+              <select
+                className="w-full appearance-none surface-card border border-border rounded-[10px] pl-8 pr-4 py-2.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent bg-card disabled:opacity-50"
+                value={selectedBuildingId}
+                onChange={(e) => setSelectedBuildingId(e.target.value)}
+                disabled={!selectedClientId}
+              >
+                <option value="">Select building…</option>
+                {availableBuildings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-        <section className="overflow-hidden rounded-[8px] border border-zinc-200 bg-white shadow-[0_1px_2px_rgba(24,24,27,0.04)]">
-          <div className="flex items-center justify-between gap-3 border-b border-zinc-200 px-3 py-3 sm:px-4">
-            <div className="flex items-center gap-2">
-              <TableIcon size={16} weight="bold" className="text-zinc-500" />
+          {/* Date range */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted block mb-1.5">
+                From
+              </label>
+              <div className="relative">
+                <CalendarBlank
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                />
+                <input
+                  type="date"
+                  className="w-full surface-card border border-border rounded-[10px] pl-8 pr-3 py-2.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent bg-card"
+                  value={from}
+                  max={to || undefined}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-widest text-muted block mb-1.5">
+                To
+              </label>
+              <div className="relative">
+                <CalendarBlank
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+                />
+                <input
+                  type="date"
+                  className="w-full surface-card border border-border rounded-[10px] pl-8 pr-3 py-2.5 text-[13px] font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent bg-card"
+                  value={to}
+                  min={from || undefined}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted">
+            Shows units fully installed with an installation date in this range
+            (inclusive).
+          </p>
+          {rangeInvalid ? (
+            <p className="text-[11px] font-semibold text-red-500">
+              The “From” date is after the “To” date.
+            </p>
+          ) : null}
+        </div>
+
+        {/* Summary */}
+        {selectedBuildingId && groups.length > 0 && (
+          <div className="px-4 pt-4">
+            <div className="flex items-center gap-2 surface-card border border-border rounded-[12px] px-4 py-3">
+              <CheckCircle size={20} weight="fill" className="text-emerald-500" />
               <div>
-                <h2 className="text-[14px] font-semibold text-zinc-950">Snapshot Rows</h2>
-                <p className="text-[12px] text-zinc-500">
-                  {formatDate(initialFilters.from)} to {formatDate(initialFilters.to)}
-                  {activeFilterCount > 0 ? ` · ${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : ""}
+                <p className="text-[13px] font-semibold text-foreground">
+                  {totalUnits} {totalUnits === 1 ? "unit" : "units"} completed ·{" "}
+                  {totalWindows} {totalWindows === 1 ? "window" : "windows"} installed
+                </p>
+                <p className="text-[11px] text-muted">
+                  Across {groups.length} {groups.length === 1 ? "floor" : "floors"} ·{" "}
+                  {formatDate(from)} – {formatDate(to)}
                 </p>
               </div>
             </div>
           </div>
+        )}
 
-          {rows.length > 0 ? (
-            <div className="overflow-hidden">
-              <table className="w-full table-fixed border-collapse text-left text-[12px] sm:text-[13px]">
-                <colgroup>
-                  <col className="w-[24%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[27%]" />
-                  <col className="w-[21%]" />
-                  <col className="w-[17%]" />
-                </colgroup>
-                <thead className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                  <tr>
-                    <th className="px-1.5 py-2.5 sm:px-3">Date</th>
-                    <th className="px-1.5 py-2.5 sm:px-3">Floor</th>
-                    <th className="px-1.5 py-2.5 sm:px-3">Unit</th>
-                    <th className="px-1.5 py-2.5 sm:px-3">Assigned</th>
-                    <th className="px-1.5 py-2.5 text-right sm:px-3">Blinds</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {rows.map((row) => (
-                    <tr key={row.id} className="transition-colors hover:bg-zinc-50/80">
-                      <td className="truncate px-1.5 py-3 font-medium text-zinc-800 sm:px-3">
-                        {formatDate(row.snapshotDate)}
-                      </td>
-                      <td className="truncate px-1.5 py-3 font-mono text-zinc-600 sm:px-3">
-                        {row.floor ?? "—"}
-                      </td>
-                      <td className="px-1.5 py-3 sm:px-3">
-                        <div className="truncate font-semibold text-zinc-950">{row.unitNumber}</div>
-                        <div className="truncate text-[11px] text-zinc-500">{row.buildingName}</div>
-                      </td>
-                      <td className="truncate px-1.5 py-3 text-zinc-700 sm:px-3">
-                        {row.assignedDisplay?.trim() || "—"}
-                      </td>
-                      <td className="truncate px-1.5 py-3 text-right font-mono text-zinc-800 sm:px-3">
-                        {row.doneBlinds} / {row.expectedBlinds}
-                      </td>
-                    </tr>
+        {/* Empty states */}
+        {!selectedBuildingId && (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-surface flex items-center justify-center mb-3">
+              <FunnelSimple size={24} className="text-muted" />
+            </div>
+            <p className="text-[14px] font-semibold text-foreground mb-1">
+              Select a client and building
+            </p>
+            <p className="text-[12px] text-muted">
+              Completed units, grouped by floor, will appear here once you pick a
+              building.
+            </p>
+          </div>
+        )}
+
+        {selectedBuildingId && groups.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <p className="text-[14px] font-semibold text-foreground mb-1">
+              No completed units in this period
+            </p>
+            <p className="text-[12px] text-muted">
+              No units in this building were fully installed between{" "}
+              {formatDate(from)} and {formatDate(to)}.
+            </p>
+          </div>
+        )}
+
+        {/* Floor list */}
+        {selectedBuildingId && groups.length > 0 && (
+          <div className="px-4 py-4 space-y-4">
+            {groups.map((g) => (
+              <div
+                key={g.floor}
+                className="surface-card border border-border rounded-[12px] overflow-hidden"
+              >
+                <div className="flex items-baseline justify-between px-4 py-2.5 bg-surface border-b border-border-subtle">
+                  <p className="text-[14px] font-bold text-foreground">
+                    Floor {g.floor}
+                  </p>
+                  <p className="text-[12px] font-semibold text-muted">
+                    {g.unitCount} {g.unitCount === 1 ? "unit" : "units"} ·{" "}
+                    {g.windowTotal} {g.windowTotal === 1 ? "window" : "windows"}
+                  </p>
+                </div>
+                <div className="divide-y divide-border-subtle">
+                  {g.units.map((u) => (
+                    <div
+                      key={u.id}
+                      className="flex items-center justify-between px-4 py-2.5"
+                    >
+                      <span className="text-[13px] font-semibold text-foreground">
+                        Unit {u.unitNumber}
+                      </span>
+                      <span className="text-[12px] text-muted">
+                        {u.windowCount} {u.windowCount === 1 ? "window" : "windows"}
+                      </span>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-500">
-                <ChartLineUp size={22} weight="bold" />
+                </div>
               </div>
-              <p className="text-[14px] font-semibold text-zinc-950">No snapshot rows found</p>
-              <p className="mt-1 max-w-md text-[12px] leading-5 text-zinc-500">
-                Try another process, date range, or filter set. Historical rows appear here once the daily snapshot has captured them.
-              </p>
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
-  );
-}
+            ))}
+          </div>
+        )}
+      </div>
 
-function DateField({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  min?: string;
-  max?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold text-zinc-500">{label}</span>
-      <span className="relative block">
-        <CalendarBlank
-          size={14}
-          weight="bold"
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+      {/* Report Preview Modal */}
+      {showReport && selectedBuilding && selectedClient && (
+        <ReportPreviewModal
+          clientName={selectedClient.name}
+          buildingName={selectedBuilding.name}
+          buildingAddress={selectedBuilding.address ?? ""}
+          from={from}
+          to={to}
+          groups={groups}
+          totalUnits={totalUnits}
+          totalWindows={totalWindows}
+          onClose={() => setShowReport(false)}
         />
-        <input
-          type="date"
-          value={value}
-          min={min}
-          max={max}
-          onChange={(event) => onChange(event.target.value)}
-          className="h-10 w-full rounded-[8px] border border-zinc-200 bg-white pl-8 pr-3 text-[13px] font-semibold text-zinc-900 outline-none transition-all focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/10"
-        />
-      </span>
-    </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[8px] border border-zinc-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(24,24,27,0.04)]">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">{label}</p>
-      <p className="mt-1 font-mono text-[20px] font-semibold text-zinc-950">{value}</p>
-    </div>
+      )}
+    </>
   );
 }
