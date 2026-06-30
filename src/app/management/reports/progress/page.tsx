@@ -16,7 +16,7 @@ export default function ProgressReportPage() {
         <div className="flex gap-2 overflow-x-auto no-scrollbar">
           <Link
             href="/management/reports"
-            className="inline-flex h-9 items-center rounded-full border-2 border-border bg-card px-4 text-[13px] font-semibold text-secondary transition-all hover:border-zinc-300 hover:text-foreground active:scale-[0.97]"
+            className="inline-flex h-9 items-center rounded-full border-2 border-accent bg-card px-4 text-[13px] font-semibold text-accent transition-all hover:bg-accent hover:text-white active:scale-[0.97]"
           >
             Status Grid
           </Link>
