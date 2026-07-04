@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { AppDatasetProvider, useDatasetActions } from "@/lib/dataset-context";
+import { AppDatasetProvider, useDatasetActions, useRegisterDatasetRefresh } from "@/lib/dataset-context";
 import { createClient } from "@/lib/supabase/client";
 import { refreshUnitDetail } from "@/app/actions/dataset-queries";
 import type { AppDataset } from "@/lib/app-dataset";
@@ -69,6 +69,12 @@ function ScopedUnitRealtimeBridge({
     refreshRef.current = refreshAction;
   });
 
+  // Back the shared refresh() (RefreshButton) with a single-unit refetch scoped to this provider.
+  useRegisterDatasetRefresh(async () => {
+    const fresh = await refreshRef.current(unitId);
+    if (fresh) setDataRef.current(fresh);
+  });
+
   useEffect(() => {
     const supabase = createClient();
     const channels: RealtimeChannel[] = [];
@@ -88,6 +94,9 @@ function ScopedUnitRealtimeBridge({
       const config = filter
         ? { event: "*", schema: "public", table, filter }
         : { event: "*", schema: "public", table };
+      // On every re-subscribe after the first, the socket dropped and may have missed events
+      // (postgres_changes are not replayed), so refetch this unit to backfill.
+      let hasSubscribed = false;
       const ch = supabase
         .channel(`scoped-unit-${unitId}-${table}`)
         .on(
@@ -95,7 +104,12 @@ function ScopedUnitRealtimeBridge({
           config as unknown as { event: "system" },
           (() => scheduleRefresh()) as unknown as (payload: { [key: string]: unknown }) => void
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            if (hasSubscribed) scheduleRefresh();
+            hasSubscribed = true;
+          }
+        });
       channels.push(ch);
     }
 

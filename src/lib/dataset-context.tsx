@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/shim/with-selector";
 import {
   createDatasetStore,
@@ -59,7 +59,7 @@ export function AppDatasetProvider({
 
 /** Builds the value passed to selectors: the data-only snapshot plus the store's stable actions. */
 function toContextValue(snapshot: DatasetSnapshot, store: DatasetStore): DatasetContextValue {
-  return { ...snapshot, patchData: store.patchData, setData: store.setData };
+  return { ...snapshot, patchData: store.patchData, setData: store.setData, refresh: store.refresh };
 }
 
 /**
@@ -116,7 +116,7 @@ export function useDatasetActions(): DatasetActions {
     throw new Error("useDatasetActions must be used within an AppDatasetProvider");
   }
   return useMemo(
-    () => ({ patchData: store.patchData, setData: store.setData }),
+    () => ({ patchData: store.patchData, setData: store.setData, refresh: store.refresh }),
     [store]
   );
 }
@@ -125,9 +125,31 @@ export function useDatasetActions(): DatasetActions {
 export function useDatasetActionsMaybe(): DatasetActions | null {
   const store = useContext(DatasetContext);
   return useMemo(
-    () => (store ? { patchData: store.patchData, setData: store.setData } : null),
+    () =>
+      store
+        ? { patchData: store.patchData, setData: store.setData, refresh: store.refresh }
+        : null,
     [store]
   );
+}
+
+/**
+ * Registers the scope-correct refetch that `refresh()` (and thus `RefreshButton`) invokes for the
+ * nearest provider. The global list shell registers a full portal refetch; the scoped unit-detail
+ * shell registers a single-unit refetch. Safe outside a provider (no-op). The handler is kept in a
+ * ref so callers can pass an inline closure without re-registering on every render.
+ */
+export function useRegisterDatasetRefresh(handler: () => Promise<void>): void {
+  const store = useContext(DatasetContext);
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  });
+  useEffect(() => {
+    if (!store) return;
+    store.setRefreshHandler(() => handlerRef.current());
+    return () => store.setRefreshHandler(null);
+  }, [store]);
 }
 
 /** One-level shallow equality for selectors that return a composed object/array of slices. */

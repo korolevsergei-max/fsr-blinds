@@ -19,6 +19,13 @@ export type DatasetActions = {
   patchData: (updater: (prev: AppDataset) => AppDataset) => void;
   /** Replace the entire dataset (used after full refetch). */
   setData: (next: AppDataset) => void;
+  /**
+   * Re-fetch authoritative data for this store's scope and replace the dataset. The scope-correct
+   * refetch is registered by the owning shell (global list vs scoped unit detail) via
+   * `setRefreshHandler`; until then this is a no-op. Lets `RefreshButton` re-seed the client store
+   * (the lists render from it, not from RSC props, so `router.refresh()` alone never updates them).
+   */
+  refresh: () => Promise<void>;
 };
 
 /** The full value selectors receive: the current snapshot plus the stable actions. */
@@ -29,6 +36,9 @@ export type DatasetStore = {
   subscribe: (listener: () => void) => () => void;
   patchData: DatasetActions["patchData"];
   setData: DatasetActions["setData"];
+  refresh: DatasetActions["refresh"];
+  /** Registers the scope-correct refetch invoked by `refresh()`. Pass `null` to clear on unmount. */
+  setRefreshHandler: (handler: (() => Promise<void>) | null) => void;
   syncMeta: (user: AppUser, linkedEntityId: string | null) => void;
 };
 
@@ -40,6 +50,7 @@ export type DatasetStore = {
 export function createDatasetStore(initialSnapshot: DatasetSnapshot): DatasetStore {
   let snapshot = initialSnapshot;
   const listeners = new Set<() => void>();
+  let refreshHandler: (() => Promise<void>) | null = null;
 
   const emit = () => {
     listeners.forEach((listener) => listener());
@@ -71,6 +82,12 @@ export function createDatasetStore(initialSnapshot: DatasetSnapshot): DatasetSto
         lastUpdated: Date.now(),
       };
       emit();
+    },
+    refresh: async () => {
+      if (refreshHandler) await refreshHandler();
+    },
+    setRefreshHandler: (handler) => {
+      refreshHandler = handler;
     },
     syncMeta: (nextUser, nextLinkedEntityId) => {
       if (

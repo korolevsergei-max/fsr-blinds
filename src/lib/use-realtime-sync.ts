@@ -311,23 +311,21 @@ export function useRealtimeSync(
       });
     }
 
-    ch.subscribe();
+    // Track (re)subscriptions: postgres_changes are NOT replayed after a dropped socket (common on
+    // mobile when the screen locks or connectivity blips inside a building). On every re-subscribe
+    // after the first, backfill by re-fetching the whole scope so the lists don't stay stale.
+    let hasSubscribed = false;
+    ch.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        if (hasSubscribed) {
+          scheduleDatasetRefresh();
+        }
+        hasSubscribed = true;
+      }
+    });
     channels.push(ch);
 
-    // Re-fetch full dataset when tab returns to foreground after being hidden > 60s
-    let hiddenAt = 0;
-    function onVisibility() {
-      if (document.hidden) {
-        hiddenAt = Date.now();
-      } else if (hiddenAt && Date.now() - hiddenAt > 60_000) {
-        // Channels may have missed events while hidden.
-        // The parent shell handles refresh via its own visibility listener.
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-
     return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
       if (schedulerRefreshTimer !== null) {
         window.clearTimeout(schedulerRefreshTimer);
       }
