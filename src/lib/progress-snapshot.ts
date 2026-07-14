@@ -200,10 +200,13 @@ function parseFloor(unitNumber: string): number | null {
   const match = unitNumber.match(/\d+/);
   if (!match) return null;
 
-  const value = Number(match[0]);
+  const digits = match[0];
+  const value = Number(digits);
   if (!Number.isFinite(value)) return null;
-  if (value < 100) return value;
-  return Math.floor(value / 100);
+  // 3+ digit unit numbers encode floor as the leading digit(s): 001→0, 101→1, 1201→12.
+  // 1–2 digit (flat) numbering has no floor prefix → floor 1.
+  if (digits.length >= 3) return Math.floor(value / 100);
+  return 1;
 }
 
 function normalizeDateKey(value: string | null | undefined): string | null {

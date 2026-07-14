@@ -1,3 +1,5 @@
+import { getFloor } from "./app-dataset";
+
 export type ManufacturingProcessInstallStatusFilter =
   | "all"
   | "installed"
@@ -139,21 +141,6 @@ function clampCompletedCount(totalBlinds: number, count: number): number {
 
 function getProgressValue(completed: number, total: number) {
   return total > 0 ? completed / total : -1;
-}
-
-function getFloor(unitNumber: string): string {
-  const num = parseInt(unitNumber, 10);
-  if (Number.isNaN(num)) return unitNumber[0] ?? "?";
-  if (num < 200) return "1";
-  if (num < 300) return "2";
-  if (num < 400) return "3";
-  if (num < 500) return "4";
-  if (num < 600) return "5";
-  if (num < 700) return "6";
-  if (num < 800) return "7";
-  if (num < 900) return "8";
-  if (num < 1000) return "9";
-  return Math.floor(num / 100).toString();
 }
 
 export function compareManufacturingProcessRows(

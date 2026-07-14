@@ -127,14 +127,9 @@ export function getInitials(name: string): string {
 export function getFloor(unitNumber: string): string {
   const num = parseInt(unitNumber, 10);
   if (isNaN(num)) return unitNumber[0] ?? "?";
-  if (num < 200) return "1";
-  if (num < 300) return "2";
-  if (num < 400) return "3";
-  if (num < 500) return "4";
-  if (num < 600) return "5";
-  if (num < 700) return "6";
-  if (num < 800) return "7";
-  if (num < 900) return "8";
-  if (num < 1000) return "9";
-  return Math.floor(num / 100).toString();
+  // 3+ digit unit numbers encode floor as the leading digit(s): 001→0, 101→1, 1201→12.
+  // 1–2 digit (flat) numbering has no floor prefix → floor 1.
+  const digits = unitNumber.trim().match(/^\d+/)?.[0] ?? "";
+  if (digits.length >= 3) return Math.floor(num / 100).toString();
+  return "1";
 }
