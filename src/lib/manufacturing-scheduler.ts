@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   BlindType,
   ChainSide,
@@ -194,7 +195,13 @@ function mapSchedule(row: ScheduleRow): WindowManufacturingSchedule {
 }
 
 async function getSettingsAndOverrides() {
-  const supabase = await createClient();
+  // Service-role client: the schedule reflow is a facility-wide system computation
+  // (it reads and re-plans the WHOLE production queue) that is triggered from
+  // scoped sessions too — e.g. an installer finishing a measurement. Under the
+  // Phase 2 per-role RLS, a scoped user client would see only that user's units
+  // here and the reflow would silently re-plan the queue from a partial view.
+  // Callers are server actions/RSCs that have already passed app-layer role guards.
+  const supabase = createAdminClient();
   const [settingsRes, overridesRes] = await Promise.all([
     supabase.from("manufacturing_settings").select("*").eq("id", "default").maybeSingle(),
     supabase

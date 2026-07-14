@@ -9,7 +9,8 @@
     "analyze": "ANALYZE=true next build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test src/**/*.test.mts"
+    "test": "node --experimental-strip-types --test src/**/*.test.mts",
+    "check:anon-policies": "node scripts/check-anon-policies.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
