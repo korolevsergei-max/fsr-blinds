@@ -2,17 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentUser } from "@/lib/auth";
+import { requireCutterOrOwner } from "@/lib/auth";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
-
-async function requireCutterOrOwner() {
-  const user = await getCurrentUser();
-  if (!user || !["owner", "cutter"].includes(user.role)) {
-    throw new Error("Unauthorized.");
-  }
-  return user;
-}
 
 /**
  * Move a unit forward from the queue into production by setting

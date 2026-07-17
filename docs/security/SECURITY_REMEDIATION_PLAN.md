@@ -236,6 +236,7 @@ desired. Best done after Phase 2 so auth regression testing happens against the 
 | **Thinking** | `think hard` |
 | **Fixes** | **H2** (`createClient_`, `updateClient`, `createBuilding`, `updateUnit` missing `requireOwner`), **M1** (notification actions trust client-supplied identity), **L1** (`markLabelsPrinted` / `markCutListPrinted` unauthenticated) |
 | **Risk** | medium — small diffs, but easy to under-scope (which role should each action allow?) |
+| **Status** | ✅ done 2026-07-17 on Fable — H2: `requireOwner` added to the four actions (matching sibling delete/bulk guards); M1: `markNotificationRead` / `markAllNotificationsRead` now derive role + linked scheduler/installer id from the session (client-supplied params removed, caller updated); L1: `requireCutterOrOwner` promoted to `src/lib/auth.ts` and applied to both label-print actions (cutter-production-actions deduped to use it). Sweep result: all `src/app/actions/auth/**` account actions guarded via `assertOwnerForAccountActions`; manufacturing actions guarded via `requireManufacturingUser` / explicit role checks; remaining field actions (rooms/windows/photos) run on the user-context client and are scoped by the Phase 2 RLS write policies (justified: multi-role by design, DB backstops). Typecheck + build green. |
 
 - **H2:** add `await requireOwner()` (or `requireOwnerOrScheduler()` where the sibling
   actions use it) to the four unguarded actions in `src/app/actions/management-actions.ts`,

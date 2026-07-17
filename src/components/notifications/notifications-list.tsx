@@ -220,7 +220,7 @@ export function NotificationsList({
       prev.map((item) => (item.id === notif.id ? { ...item, read: true } : item))
     );
     startTransition(async () => {
-      await markNotificationRead(notif.id, recipientRole, recipientId);
+      await markNotificationRead(notif.id);
       if (href) router.push(href);
     });
   };
@@ -228,7 +228,7 @@ export function NotificationsList({
   const handleMarkAllRead = () => {
     setLiveNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
     startTransition(async () => {
-      await markAllNotificationsRead(recipientRole, recipientId);
+      await markAllNotificationsRead();
     });
   };
 

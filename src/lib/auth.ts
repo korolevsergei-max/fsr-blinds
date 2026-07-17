@@ -242,6 +242,14 @@ export async function requireOwnerOrScheduler(): Promise<AppUser> {
   return user;
 }
 
+export async function requireCutterOrOwner(): Promise<AppUser> {
+  const user = await getCurrentUser();
+  if (!user || (user.role !== "owner" && user.role !== "cutter")) {
+    throw new Error("Unauthorized: cutter or owner role required");
+  }
+  return user;
+}
+
 export async function getLinkedSchedulerId(
   authUserId: string
 ): Promise<string | null> {

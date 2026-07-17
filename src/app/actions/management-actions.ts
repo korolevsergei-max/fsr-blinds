@@ -128,6 +128,7 @@ export async function createClient_(
   contactPhone: string
 ): Promise<ActionResult & { id?: string }> {
   try {
+    await requireOwner();
     const supabase = await createClient();
     const id = `client-${crypto.randomUUID().slice(0, 8)}`;
     const { error } = await supabase.from("clients").insert({
@@ -141,7 +142,11 @@ export async function createClient_(
     revalidateClientRoutes(id);
     return { ok: true, id };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to create client" };
+    const msg = e instanceof Error ? e.message : "Failed to create client";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can create a client." };
+    }
+    return { ok: false, error: msg };
   }
 }
 
@@ -153,6 +158,7 @@ export async function updateClient(
   contactPhone: string
 ): Promise<ActionResult> {
   try {
+    await requireOwner();
     const supabase = await createClient();
     const { error } = await supabase
       .from("clients")
@@ -167,7 +173,11 @@ export async function updateClient(
     revalidateClientRoutes(clientId);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to update client" };
+    const msg = e instanceof Error ? e.message : "Failed to update client";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can edit a client." };
+    }
+    return { ok: false, error: msg };
   }
 }
 
@@ -325,6 +335,7 @@ export async function createBuilding(
   address: string
 ): Promise<ActionResult & { id?: string }> {
   try {
+    await requireOwner();
     const supabase = await createClient();
     const id = `bldg-${crypto.randomUUID().slice(0, 8)}`;
     const { error } = await supabase.from("buildings").insert({
@@ -337,7 +348,11 @@ export async function createBuilding(
     revalidateBuildingRoutes(id, clientId);
     return { ok: true, id };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to create building" };
+    const msg = e instanceof Error ? e.message : "Failed to create building";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can create a building." };
+    }
+    return { ok: false, error: msg };
   }
 }
 
@@ -479,6 +494,7 @@ export async function updateUnit(
   priority?: "low" | "medium" | "high" | null
 ): Promise<ActionResult> {
   try {
+    await requireOwner();
     const supabase = await createClient();
     const meta = await loadUnitRouteMeta(supabase, unitId);
     const { error } = await supabase
@@ -494,7 +510,11 @@ export async function updateUnit(
     revalidateUnitRoutes(unitId, meta ?? undefined);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to update unit" };
+    const msg = e instanceof Error ? e.message : "Failed to update unit";
+    if (msg.includes("Unauthorized")) {
+      return { ok: false, error: "Only an owner can edit a unit." };
+    }
+    return { ok: false, error: msg };
   }
 }
 

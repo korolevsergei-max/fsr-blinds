@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { requireCutterOrOwner } from "@/lib/auth";
 import { maybeSetProductionEnteredAt } from "@/lib/production-entered";
 
 export async function markLabelsPrinted(input: {
@@ -9,6 +10,12 @@ export async function markLabelsPrinted(input: {
   kind: "manufacturing" | "packaging";
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (input.windows.length === 0) return { ok: true };
+
+  try {
+    await requireCutterOrOwner();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Unauthorized" };
+  }
 
   const supabase = await createClient();
   const column =
@@ -61,6 +68,12 @@ export async function markCutListPrinted(input: {
   windows: Array<{ windowId: string; unitId: string }>;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (input.windows.length === 0) return { ok: true };
+
+  try {
+    await requireCutterOrOwner();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Unauthorized" };
+  }
 
   const supabase = await createClient();
   const now = new Date().toISOString();
