@@ -330,6 +330,7 @@ refresh still feels instant.
 | **Thinking** | `think` |
 | **Fixes** | **L2** (committed `tmp/*.json` business data), **L3** (`handle_new_user` trusts signup `raw_user_meta_data.role`) |
 | **Risk** | low |
+| **Status** | ✅ done 2026-07-17 on Sonnet — L2: `tmp/` added to `.gitignore`, both tracked `tmp/*.json` backups removed via `git rm --cached`. L3: `handle_new_user` (migration `20260717190000`) no longer reads `NEW.raw_user_meta_data->>'role'`; it always falls back to the owner-count check (first signup → owner, else → installer). Verified safe: every real account-creation path (`signUpOwnerAction` and the admin-created cutter/assembler/installer/qc/scheduler flows) calls `upsertUserProfile` with a server-trusted hardcoded role immediately after auth creation, which upserts `user_profiles` and sets the real `app_metadata.role` claim — so the trigger's own role was always overwritten and is safe to drop. Migration pushed live via `supabase db push`; `npm run typecheck` green. **Noted but out of scope:** `signUpOwnerAction` (public `/login` signup form) unconditionally grants the `owner` role to any self-registered account with no gate on whether an owner already exists — this is a separate, more severe issue than L3 and is not part of this plan; flagging for a follow-up decision (e.g. gate on `owner_count = 0`, or disable public signup after first owner is created).
 
 - **L2:** add `tmp/` to `.gitignore` and `git rm --cached tmp/*.json`. No secrets, but
   production data doesn't belong in the repo.

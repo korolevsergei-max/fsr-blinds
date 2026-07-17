@@ -40,6 +40,7 @@ yarn-error.log*
 # local agent config & db backups (never commit)
 .claude/
 backup/
+tmp/
 
 # typescript
 *.tsbuildinfo
