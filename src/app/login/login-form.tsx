@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ArrowRight, UserPlus } from "@phosphor-icons/react";
 
-export function LoginForm() {
+export function LoginForm({ allowSignup }: { allowSignup: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -47,7 +47,7 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      if (mode === "signup") {
+      if (mode === "signup" && allowSignup) {
         const result = await signUpOwnerAction(name.trim(), email.trim(), password);
 
         if (!result.ok) {
@@ -178,19 +178,21 @@ export function LoginForm() {
         )}
       </Button>
 
-      <button
-        type="button"
-        onClick={() => {
-          setMode(isSignup ? "signin" : "signup");
-          setError("");
-          setInfo("");
-        }}
-        className="text-[12px] text-center text-secondary hover:text-accent transition-colors"
-      >
-        {isSignup
-          ? "Already have an account? Sign in"
-          : "First time? Create an owner account"}
-      </button>
+      {(allowSignup || isSignup) && (
+        <button
+          type="button"
+          onClick={() => {
+            setMode(isSignup ? "signin" : "signup");
+            setError("");
+            setInfo("");
+          }}
+          className="text-[12px] text-center text-secondary hover:text-accent transition-colors"
+        >
+          {isSignup
+            ? "Already have an account? Sign in"
+            : "First time? Create an owner account"}
+        </button>
+      )}
     </form>
   );
 }

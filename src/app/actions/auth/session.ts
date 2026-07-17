@@ -12,6 +12,7 @@ import {
   findAuthUserIdByEmail,
   getAuthRedirectBaseUrl,
   isAlreadyRegisteredAuthError,
+  ownerAccountExists,
   upsertUserProfile,
 } from "./helpers";
 
@@ -78,6 +79,13 @@ export async function signUpOwnerAction(
   password: string
 ): Promise<AuthFlowResult> {
   try {
+    if (await ownerAccountExists()) {
+      return {
+        ok: false,
+        error: "Owner sign-up is closed. Ask an existing owner to invite you.",
+      };
+    }
+
     const supabase = await createClient();
     const normalizedEmail = email.trim().toLowerCase();
     const displayName = name.trim();

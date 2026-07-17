@@ -30,6 +30,19 @@ export async function assertOwnerOrSchedulerForInstallerActions(): Promise<Actio
   }
 }
 
+/** True once any owner account exists — used to close public owner self-signup. */
+export async function ownerAccountExists(): Promise<boolean> {
+  const admin = createAdminClient();
+  const { count, error } = await admin
+    .from("user_profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "owner");
+
+  // Fail closed: if we can't verify, don't allow a new owner to self-register.
+  if (error) return true;
+  return (count ?? 0) > 0;
+}
+
 export function isMissingColumnError(error: unknown, table: string, column: string): boolean {
   if (!error || typeof error !== "object") return false;
   const maybeMessage = "message" in error ? error.message : undefined;

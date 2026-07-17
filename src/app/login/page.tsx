@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { homePathForRole } from "@/lib/role-routes";
+import { ownerAccountExists } from "@/app/actions/auth/helpers";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage() {
@@ -9,6 +10,8 @@ export default async function LoginPage() {
     const nextPath = homePathForRole(user.role);
     redirect(nextPath === "/" ? "/management" : nextPath);
   }
+
+  const ownerExists = await ownerAccountExists();
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
@@ -29,7 +32,7 @@ export default async function LoginPage() {
 
         {/* Form surface */}
         <div className="surface-card p-6 my-10">
-          <LoginForm />
+          <LoginForm allowSignup={!ownerExists} />
         </div>
 
         {/* Footer note */}
