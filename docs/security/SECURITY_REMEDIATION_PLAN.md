@@ -290,6 +290,7 @@ still connects; avatars still render.
 | **Thinking** | `think` (none needed beyond confirming nothing breaks) |
 | **Fixes** | **M3** (`ws` high-severity advisories, transitive) |
 | **Risk** | low — non-breaking `npm audit fix` |
+| **Status** | ✅ done 2026-07-17 on Sonnet — `npm audit fix` (non-force) cleared `ws` (uninitialized memory disclosure + memory-exhaustion DoS), plus three advisories not in the original scope that surfaced since: `dompurify` (multiple XSS/pollution advisories, transitive via an unrelated dep), `js-yaml` (quadratic-complexity DoS), `picomatch` (ReDoS + method injection, transitive via `tinyglobby`). `package.json` untouched — every fix landed within existing semver ranges (only `package-lock.json` changed). Typecheck + `next build` both green. **Remaining, explicitly out of scope for this phase (need `--force` / no fix exists, so not "non-breaking hygiene"):** `postcss <8.5.10` moderate XSS — flagged only via `next`'s own bundled copy; the suggested fix path is downgrading `next` itself to `9.3.3`, which would revert Phase 3's H1 fix, so left alone. `xlsx` high (prototype pollution + ReDoS) — no upstream fix available at all; would require replacing the library, tracked separately, not attempted here. |
 
 - Run `npm audit fix` (updates `ws` within range; the second copy is dev-only via
   `webpack-bundle-analyzer`).
