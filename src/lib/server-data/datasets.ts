@@ -52,8 +52,8 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       manufacturing_escalations?: ManufacturingEscalationRow[];
       units_with_open_post_install_issue?: string[];
     };
-    console.log(
-      `[owner-load] management units=${raw.units?.length ?? 0} rooms=0 windows=0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
+    console.warn(
+      `[perf][owner-load] management units=${raw.units?.length ?? 0} rooms=0 windows=0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
     );
     // preEnriched: the RPC already returned manufacturingEscalations + each unit's
     // hasOpenPostInstallIssue, so skip the redundant finalizeDataset round-trips.
@@ -83,8 +83,8 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
     // rooms/windows — the two largest tables — are read only by the already-scoped
     // unit-detail routes, which load their own via loadUnitDetail. Drop them from the client
     // payload and trust persisted units.status (drift confirmed 0). See DATA_SCOPING_PLAN.md.
-    console.log(
-      `[full-load] management units=${raw.units?.length ?? 0} rooms=${raw.rooms?.length ?? 0}→0 windows=${raw.windows?.length ?? 0}→0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
+    console.warn(
+      `[perf][full-load] management units=${raw.units?.length ?? 0} rooms=${raw.rooms?.length ?? 0}→0 windows=${raw.windows?.length ?? 0}→0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
     );
     return finalizeDataset(buildDatasetFromRaw({ ...raw, rooms: [], windows: [] }), {
       deriveStatusFromWindows: false,
@@ -285,8 +285,8 @@ export async function loadSchedulerDataset(
     const raw = rpcData as SchedulerDatasetRaw;
     if (!raw.units || raw.units.length === 0) return emptyDataset();
     const dataset = await buildSchedulerDataset(raw, schedulerId);
-    console.log(
-      `[scoped-load] scheduler=${schedulerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
+    console.warn(
+      `[perf][scoped-load] scheduler=${schedulerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
     );
     return dataset;
   }
@@ -373,8 +373,8 @@ export async function loadSchedulerDataset(
     schedulerId
   );
 
-  console.log(
-    `[scoped-load] scheduler=${schedulerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
+  console.warn(
+    `[perf][scoped-load] scheduler=${schedulerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
   );
 
   return dataset;
@@ -432,8 +432,8 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     const raw = rpcData as InstallerDatasetRaw;
     if (!raw.units || raw.units.length === 0) return emptyDataset();
     const dataset = await buildInstallerDataset(raw);
-    console.log(
-      `[scoped-load] installer=${installerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
+    console.warn(
+      `[perf][scoped-load] installer=${installerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
     );
     return dataset;
   }
@@ -506,8 +506,8 @@ export async function loadInstallerDataset(installerId: string): Promise<AppData
     schedule_entries: scheduleRows,
   });
 
-  console.log(
-    `[scoped-load] installer=${installerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
+  console.warn(
+    `[perf][scoped-load] installer=${installerId} units=${dataset.units.length} rooms=${dataset.rooms.length} windows=${dataset.windows.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
   );
 
   return dataset;

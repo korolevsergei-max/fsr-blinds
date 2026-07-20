@@ -72,84 +72,10 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
   };
 }
 
-/** Units where at least one window is in 'cut' or 'assembled' status (ready for assembler). */
-export async function loadAssemblerDataset(): Promise<{ units: AssemblerUnit[] }> {
-  const supabase = await createClient();
-
-  // Get all window_production_status rows to find units with cut/assembled windows
-  const { data: prodRows } = await supabase
-    .from("window_production_status")
-    .select("unit_id, status");
-
-  if (!prodRows || prodRows.length === 0) return { units: [] };
-
-  // Find unit IDs that have at least one window in any production state (keep units visible through QC)
-  const unitIdsReady = [
-    ...new Set(
-      prodRows
-        .filter((r) => r.status === "cut" || r.status === "assembled" || r.status === "qc_approved")
-        .map((r) => r.unit_id)
-    ),
-  ];
-
-  if (unitIdsReady.length === 0) return { units: [] };
-
-  type UnitRow = {
-    id: string;
-    unit_number: string;
-    building_name: string;
-    client_name: string;
-    installation_date: string | null;
-    window_count: number | null;
-    manufacturing_risk_flag: string | null;
-  };
-  const units = await selectInChunks<UnitRow>(unitIdsReady, (chunk) =>
-    supabase
-      .from("units")
-      .select(
-        "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag"
-      )
-      .in("id", chunk)
-      .order("installation_date", { ascending: true, nullsFirst: false })
-      .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
-  );
-
-  // Build counts per unit
-  const cutMap = new Map<string, number>();
-  const assembledMap = new Map<string, number>();
-  const qcMap = new Map<string, number>();
-  for (const row of prodRows) {
-    if (row.status === "cut" || row.status === "assembled" || row.status === "qc_approved") {
-      cutMap.set(row.unit_id, (cutMap.get(row.unit_id) ?? 0) + 1);
-    }
-    if (row.status === "assembled" || row.status === "qc_approved") {
-      assembledMap.set(row.unit_id, (assembledMap.get(row.unit_id) ?? 0) + 1);
-    }
-    if (row.status === "qc_approved") {
-      qcMap.set(row.unit_id, (qcMap.get(row.unit_id) ?? 0) + 1);
-    }
-  }
-
-  return {
-    units: units.map((u) => ({
-      id: u.id,
-      unitNumber: u.unit_number,
-      buildingName: u.building_name,
-      clientName: u.client_name,
-      installationDate: u.installation_date ?? null,
-      windowCount: u.window_count ?? 0,
-      manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
-      cutCount: cutMap.get(u.id) ?? 0,
-      assembledCount: assembledMap.get(u.id) ?? 0,
-      qcApprovedCount: qcMap.get(u.id) ?? 0,
-    })),
-  };
-}
-
 export async function loadAssemblerUnitDetail(unitId: string): Promise<AssemblerUnitDetail | null> {
   const supabase = await createClient();
 
-  const [unitRes, roomsRes, windowsRes, productionRes] = await Promise.all([
+  const [unitRes, roomsRes, productionRes] = await Promise.all([
     supabase
       .from("units")
       .select(
@@ -162,12 +88,6 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
       .select("id, unit_id, name")
       .eq("unit_id", unitId)
       .order("name"),
-    supabase
-      .from("windows")
-      .select(
-        "id, room_id, label, blind_type, chain_side, width, height, depth, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, notes"
-      )
-      .order("label"),
     supabase
       .from("window_production_status")
       .select("*")
@@ -183,12 +103,38 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
     name: r.name,
   }));
 
-  const roomIds = new Set(rooms.map((r) => r.id));
+  const roomIds = rooms.map((r) => r.id);
   const productionMap = new Map<string, WindowProductionStatus>(
     (productionRes.data ?? []).map((p) => [
       p.window_id,
       mapProductionStatus(p as unknown as Record<string, unknown>),
     ])
+  );
+
+  type WindowRow = {
+    id: string;
+    room_id: string;
+    label: string;
+    blind_type: string;
+    chain_side: string | null;
+    width: number | null;
+    height: number | null;
+    depth: number | null;
+    window_installation: string | null;
+    wand_chain: string | null;
+    fabric_adjustment_side: string | null;
+    fabric_adjustment_inches: number | null;
+    notes: string | null;
+  };
+  const windowRows = await selectInChunks<WindowRow>(roomIds, (chunk) =>
+    supabase
+      .from("windows")
+      .select(
+        "id, room_id, label, blind_type, chain_side, width, height, depth, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, notes"
+      )
+      .in("room_id", chunk)
+      .order("label")
+      .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error }))
   );
 
   const cutCount = [...productionMap.values()].filter(
@@ -214,8 +160,7 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
     qcApprovedCount,
   };
 
-  const windows: AssemblerWindow[] = (windowsRes.data ?? [])
-    .filter((w) => roomIds.has(w.room_id))
+  const windows: AssemblerWindow[] = windowRows
     .map((w) => ({
       id: w.id,
       roomId: w.room_id,

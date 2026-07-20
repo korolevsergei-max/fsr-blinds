@@ -1,0 +1,12 @@
+{
+  "date": "2026-07-19",
+  "commit": "2acd458",
+  "sharedBaseKb": 168.4,
+  "routes": {
+    "/management/units": 301.7,
+    "/management/schedule": 292.8,
+    "/scheduler/units": 291.6,
+    "/management": 287.1,
+    "/cutter/queue": 223.8
+  }
+}

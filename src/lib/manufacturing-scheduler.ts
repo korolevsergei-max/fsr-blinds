@@ -583,6 +583,7 @@ export async function buildManufacturingCalendarMonth(
 export async function loadPersistedRoleSchedule(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingRoleSchedule> {
+  const startedAt = performance.now();
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
@@ -751,6 +752,10 @@ export async function loadPersistedRoleSchedule(
 
     items.push(item);
   }
+
+  console.warn(
+    `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} ${(performance.now() - startedAt).toFixed(0)}ms`
+  );
 
   return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
 }

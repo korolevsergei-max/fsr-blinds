@@ -145,9 +145,14 @@ async function loadUnitsForManufacturingProcess(scope: ManufacturingProcessScope
 }
 
 async function loadAllManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+  const startedAt = performance.now();
   const scope: ManufacturingProcessScope = { role: "owner" };
   const units = await loadUnitsForManufacturingProcess(scope);
-  return loadManufacturingProcessRowsForUnits(units, scope);
+  const rows = await loadManufacturingProcessRowsForUnits(units, scope);
+  console.warn(
+    `[perf][process-rows] units=${units.length} rows=${rows.length} ${(performance.now() - startedAt).toFixed(0)}ms`
+  );
+  return rows;
 }
 
 export async function loadOwnerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {

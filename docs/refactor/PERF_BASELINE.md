@@ -453,3 +453,31 @@ Notes:
 - Parity verified on live prod: open-escalation IDs and units-with-open-PI sets match an independent
   re-read of the old enrichment for the owner (all units) and the prod scheduler (460 units) —
   `0=0` escalations, `23=23` PI units. Validators deleted after use per the workflow.
+
+---
+
+## Phase 0 — production observability floor (2026-07-19)
+
+`compiler.removeConsole` now excludes `error` and `warn` (was `error` only), and every
+`[owner-load]`/`[full-load]`/`[scoped-load]` loader timing line (plus the new
+`loadPersistedRoleSchedule` and `loadAllManufacturingProcessRows` lines) now logs via
+`console.warn` with a `[perf]` prefix so it survives prod builds — verified present in
+`.next/server` after `npm run build`. `npm run perf-budget` (script:
+`scripts/perf-budget.mjs`, baseline: `scripts/perf-budget.baseline.json`) reads
+`build-manifest.json` + each route's `page_client-reference-manifest.js` to compute gz size
+of the shared base and 5 tracked heaviest routes, failing if the shared base exceeds 175 kB
+gz or any tracked route grows >10% over baseline. 2026-07-19 baseline: shared base 168.4 kB;
+`/management/units` 301.7 kB, `/management/schedule` 292.8 kB, `/scheduler/units` 291.6 kB,
+`/management` 287.1 kB, `/cutter/queue` 223.8 kB.
+
+### RUM ritual
+
+Vercel Speed Insights is mounted (`@vercel/speed-insights`) but there is no read API — p75
+LCP/INP/TTFB must be read manually from the Vercel dashboard (Project → Speed Insights) per
+route. No baseline captured yet (needs 24h+ of real traffic post-deploy to populate).
+Re-capture after every phase of `docs/refactor/WORLD_CLASS_ROADMAP_2026H2.md` and append a
+dated row below.
+
+| Date | Route | p75 LCP | p75 INP | p75 TTFB | Notes |
+|---|---|---|---|---|---|
+| _pending first capture_ | /management, /scheduler, /installer, /cutter | — | — | — | capture manually from Speed Insights dashboard 24h+ after this phase deploys |

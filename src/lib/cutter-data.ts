@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus, WindowInstallation, WandChain, FabricAdjustmentSide } from "@/lib/types";
+import { selectInChunks } from "@/lib/supabase-chunking";
 
 export interface CutterUnit {
   id: string;
@@ -75,51 +76,13 @@ function mapProductionStatus(p: Record<string, unknown>): WindowProductionStatus
   };
 }
 
-/** All units ready for cutting (measured/bracketed) with no production entry — the cutting queue. */
-export async function loadCutterDataset(): Promise<CutterDataset> {
-  const supabase = await createClient();
-
-  const [unitsRes, productionCountRes] = await Promise.all([
-    supabase
-      .from("units")
-      .select(
-        "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
-      )
-      .in("status", ["measured", "bracketed"])
-      .is("production_entered_at", null)
-      .order("installation_date", { ascending: true, nullsFirst: false }),
-    supabase
-      .from("units")
-      .select("id", { count: "exact", head: true })
-      .not("production_entered_at", "is", null),
-  ]);
-
-  if (unitsRes.error || !unitsRes.data) {
-    return { units: [], productionUnitCount: productionCountRes.count ?? 0 };
-  }
-
-  return {
-    units: unitsRes.data.map((u) => ({
-      id: u.id,
-      unitNumber: u.unit_number,
-      buildingName: u.building_name,
-      clientName: u.client_name,
-      installationDate: u.installation_date ?? null,
-      status: u.status as UnitStatus,
-      windowCount: u.window_count ?? 0,
-      manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
-    })),
-    productionUnitCount: productionCountRes.count ?? 0,
-  };
-}
-
 /** Full detail for one unit: rooms, windows, and production statuses. */
 export async function loadCutterUnitDetail(
   unitId: string
 ): Promise<CutterUnitDetail | null> {
   const supabase = await createClient();
 
-  const [unitRes, roomsRes, windowsRes, productionRes] = await Promise.all([
+  const [unitRes, roomsRes, productionRes] = await Promise.all([
     supabase
       .from("units")
       .select(
@@ -132,12 +95,6 @@ export async function loadCutterUnitDetail(
       .select("id, unit_id, name, window_count")
       .eq("unit_id", unitId)
       .order("name"),
-    supabase
-      .from("windows")
-      .select(
-        "id, room_id, label, blind_type, chain_side, width, height, depth, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, notes"
-      )
-      .order("label"),
     supabase
       .from("window_production_status")
       .select("*")
@@ -165,7 +122,7 @@ export async function loadCutterUnitDetail(
     windowCount: r.window_count ?? 0,
   }));
 
-  const roomIds = new Set(rooms.map((r) => r.id));
+  const roomIds = rooms.map((r) => r.id);
   const productionMap = new Map<string, WindowProductionStatus>(
     (productionRes.data ?? []).map((p) => [
       p.window_id,
@@ -173,8 +130,33 @@ export async function loadCutterUnitDetail(
     ])
   );
 
-  const windows: CutterWindow[] = (windowsRes.data ?? [])
-    .filter((w) => roomIds.has(w.room_id))
+  type WindowRow = {
+    id: string;
+    room_id: string;
+    label: string;
+    blind_type: string;
+    chain_side: string | null;
+    width: number | null;
+    height: number | null;
+    depth: number | null;
+    window_installation: string | null;
+    wand_chain: string | null;
+    fabric_adjustment_side: string | null;
+    fabric_adjustment_inches: number | null;
+    notes: string | null;
+  };
+  const windowRows = await selectInChunks<WindowRow>(roomIds, (chunk) =>
+    supabase
+      .from("windows")
+      .select(
+        "id, room_id, label, blind_type, chain_side, width, height, depth, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, notes"
+      )
+      .in("room_id", chunk)
+      .order("label")
+      .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error }))
+  );
+
+  const windows: CutterWindow[] = windowRows
     .map((w) => ({
       id: w.id,
       roomId: w.room_id,

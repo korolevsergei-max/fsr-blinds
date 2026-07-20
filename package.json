@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test src/**/*.test.mts",
-    "check:anon-policies": "node scripts/check-anon-policies.mjs"
+    "check:anon-policies": "node scripts/check-anon-policies.mjs",
+    "perf-budget": "node scripts/perf-budget.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
