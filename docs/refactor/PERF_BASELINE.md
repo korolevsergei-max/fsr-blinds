@@ -481,3 +481,35 @@ dated row below.
 | Date | Route | p75 LCP | p75 INP | p75 TTFB | Notes |
 |---|---|---|---|---|---|
 | _pending first capture_ | /management, /scheduler, /installer, /cutter | — | — | — | capture manually from Speed Insights dashboard 24h+ after this phase deploys |
+
+---
+
+## Phase 1 — Function region → `pdx1` (2026-07-19)
+
+Vercel Dashboard → Settings → Functions → Function Region flipped from `iad1` to `pdx1`
+(Portland, next to Supabase's `us-west-2`), then redeployed. Confirmed via
+`curl -sI https://fsr-blinds.vercel.app/login`: `x-vercel-id` now shows `yul1::pdx1::...`
+(was `iad1`).
+
+No rigorous BEFORE/AFTER pair was captured with the same tool from the same vantage point —
+the dashboard change was made directly rather than through the two-step "capture before,
+then change" sequence, so there's nothing to diff against. AFTER-only numbers, curled from
+this session's environment (not Ontario — treat as directional, not the real user-facing
+number):
+
+| Route | TTFB | Total |
+|---|---:|---:|
+| /login (attempt 1) | 630 ms | 678 ms |
+| /login (attempt 2) | 445 ms | 446 ms |
+| /login (attempt 3) | 476 ms | 476 ms |
+
+These are cold/edge-variable and from an unknown-latency vantage point, so they're not a
+substitute for real RUM. The number that actually matters — p75 TTFB from Ontario traffic —
+will show up in Speed Insights over the next 24h+; capture it in the RUM ritual table above
+once available. Expected direction per the original assessment: `[perf]` loader lines (now
+surviving prod builds per Phase 0) should show materially lower ms on multi-round-trip paths
+(auth read + dataset RPC + action reads no longer pay the iad1↔us-west-2 ~60-75ms tax per
+hop); end-user TTFB from Toronto may grow slightly (one longer edge→pdx1 hop) but total
+request time should still drop since it no longer pays that cost N times.
+
+**Rollback:** Vercel Dashboard → Settings → Functions → Function Region → back to `iad1`, redeploy.
