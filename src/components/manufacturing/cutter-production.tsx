@@ -17,6 +17,7 @@ import { markWindowCut } from "@/app/actions/production-actions";
 import { undoWindowCut } from "@/app/actions/manufacturing-actions";
 import { moveUnitBackToQueue } from "@/app/actions/cutter-production-actions";
 import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
+import { useManufacturingFreshness } from "@/hooks/use-manufacturing-freshness";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
@@ -151,6 +152,8 @@ export function CutterProduction({
 }) {
   const router = useRouter();
   const scheduleRefresh = useCoalescedRefresh();
+  // Live freshness for the idle bench tablet (MF2).
+  useManufacturingFreshness(scheduleRefresh);
   const [, startMoveBackTransition] = useTransition();
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
@@ -203,22 +206,8 @@ export function CutterProduction({
   const [draftSortLevels, setDraftSortLevels] = useState<CutterUnitSortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
 
-  const isFirstFilterRun = useRef(true);
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      return;
-    }
-    const id = setTimeout(() => router.refresh(), 400);
-    return () => clearTimeout(id);
-  }, [
-    router,
-    search,
-    buildingFilter,
-    floorFilter,
-    fabricTypeFilter,
-    componentFilter,
-  ]);
+  // Filter-change router.refresh() removed (MF2): client-side filtering + the
+  // realtime subscription above cover it; a filter tweak no longer refetches.
 
   useEffect(() => {
     const node = headerRef.current;

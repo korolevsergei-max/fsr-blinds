@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { moveUnitToProduction } from "@/app/actions/cutter-production-actions";
 import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
+import { useManufacturingFreshness } from "@/hooks/use-manufacturing-freshness";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
@@ -103,6 +104,9 @@ export function CutterQueue({
 }) {
   const router = useRouter();
   const scheduleRefresh = useCoalescedRefresh();
+  // Live freshness for the idle bench tablet (MF2): production/schedule changes
+  // from upstream stages feed the same coalesced refresh as this screen's marks.
+  useManufacturingFreshness(scheduleRefresh);
   const [, startTransition] = useTransition();
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
@@ -151,22 +155,9 @@ export function CutterQueue({
   const [draftSortLevels, setDraftSortLevels] = useState<CutterUnitSortLevel[]>([]);
   const [sortModalOpen, setSortModalOpen] = useState(false);
 
-  const isFirstFilterRun = useRef(true);
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      return;
-    }
-    const id = setTimeout(() => router.refresh(), 400);
-    return () => clearTimeout(id);
-  }, [
-    router,
-    search,
-    buildingFilter,
-    floorFilter,
-    fabricTypeFilter,
-    componentFilter,
-  ]);
+  // The 400 ms filter-change router.refresh() is gone (MF2): filtering is purely
+  // client-side over already-loaded items, and freshness now comes from the
+  // realtime subscription above, so a filter tweak no longer refetches the route.
 
   useEffect(() => {
     const node = headerRef.current;

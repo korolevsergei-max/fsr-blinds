@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
+import { useManufacturingFreshness } from "@/hooks/use-manufacturing-freshness";
 import {
   ArrowLeft,
   CheckCircle,
@@ -136,6 +137,8 @@ export function ManufacturingRoleQueue({
 }) {
   const router = useRouter();
   const scheduleRefresh = useCoalescedRefresh();
+  // Live freshness for the idle bench tablet (MF2).
+  useManufacturingFreshness(scheduleRefresh);
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -163,15 +166,8 @@ export function ManufacturingRoleQueue({
     setLocalItems(flattenScheduleWindows(schedule));
   }
 
-  const isFirstFilterRun = useRef(true);
-  useEffect(() => {
-    if (isFirstFilterRun.current) {
-      isFirstFilterRun.current = false;
-      return;
-    }
-    const id = setTimeout(() => router.refresh(), 400);
-    return () => clearTimeout(id);
-  }, [router, search, buildingFilter, floorFilter, fabricTypeFilter]);
+  // Filter-change router.refresh() removed (MF2): client-side filtering + the
+  // realtime subscription above cover it; a filter tweak no longer refetches.
 
   useEffect(() => {
     if (!errorMsg) return;
