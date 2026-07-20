@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
 import {
   ArrowLeft,
   CheckCircle,
@@ -134,6 +135,7 @@ export function ManufacturingRoleQueue({
   userName?: string;
 }) {
   const router = useRouter();
+  const scheduleRefresh = useCoalescedRefresh();
   const [busyWindowId, setBusyWindowId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -199,7 +201,6 @@ export function ManufacturingRoleQueue({
     task: () => Promise<QueueActionResult>,
     options?: {
       optimisticUpdate?: (current: ManufacturingWindowItem[]) => ManufacturingWindowItem[];
-      refreshOnSuccess?: boolean;
     }
   ) => {
     const previousItems = localItems;
@@ -218,10 +219,12 @@ export function ManufacturingRoleQueue({
         setBusyWindowId(null);
         return;
       }
-      if (options?.refreshOnSuccess) {
-        router.refresh();
-      }
       setBusyWindowId(null);
+      // Reconcile with server truth once the burst settles: a run of marks/undos/
+      // pushbacks yields ONE coalesced refetch, which re-seeds localItems from the
+      // fresh schedule (the syncedSchedule guard above). The optimistic update
+      // already gave instant feedback. (B1 / roadmap Phase 2.)
+      scheduleRefresh();
     });
   };
 
@@ -242,7 +245,11 @@ export function ManufacturingRoleQueue({
       target.direction === "qc_to_assembler"
         ? () => returnWindowToAssembler(target.item.windowId, reason, notes)
         : () => returnWindowToCutter(target.item.windowId, reason, notes);
-    runWindowAction(target.item.windowId, action, { refreshOnSuccess: true });
+    // Optimistic: the returned window leaves this role's queue immediately and the
+    // dialog closes; on failure runWindowAction restores it and shows the error.
+    runWindowAction(target.item.windowId, action, {
+      optimisticUpdate: (current) => removeWindow(current, target.item.windowId),
+    });
     setPushbackTarget(null);
   };
 

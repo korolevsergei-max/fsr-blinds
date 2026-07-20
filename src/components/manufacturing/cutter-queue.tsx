@@ -13,6 +13,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { moveUnitToProduction } from "@/app/actions/cutter-production-actions";
+import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
@@ -59,11 +60,12 @@ function getMissingLabels(windows: ManufacturingWindowItem[]): string[] {
 function MoveToProductionButton({
   unitId,
   missingLabels,
+  onMove,
 }: {
   unitId: string;
   missingLabels: string[];
+  onMove: (unitId: string) => void;
 }) {
-  const [pending, startTransition] = useTransition();
   const hasMissing = missingLabels.length > 0;
 
   function handleClick() {
@@ -71,19 +73,15 @@ function MoveToProductionButton({
       ? `This unit hasn't passed the auto-gate yet — missing: ${missingLabels.join(", ")}.\n\nAre you sure you want to move it to Production anyway?`
       : "Move this unit to Production?";
     if (!globalThis.window.confirm(message)) return;
-    startTransition(async () => {
-      const res = await moveUnitToProduction(unitId);
-      if (!res.ok) {
-        globalThis.window.alert(res.error ?? "Failed to move unit to production.");
-      }
-    });
+    // Optimistic: the parent drops the unit from the queue immediately, so there
+    // is no "Moving…" pending state to show — the card is gone on tap.
+    onMove(unitId);
   }
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      disabled={pending}
       className={[
         "inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 py-1 text-[11px] font-semibold text-white transition-opacity active:opacity-80 disabled:opacity-50",
         hasMissing ? "bg-amber-600" : "bg-accent",
@@ -91,7 +89,7 @@ function MoveToProductionButton({
       title={hasMissing ? `Missing: ${missingLabels.join(", ")}` : undefined}
     >
       <ArrowRight size={12} weight="bold" />
-      {pending ? "Moving…" : "Move to Production"}
+      Move to Production
     </button>
   );
 }
@@ -104,8 +102,39 @@ export function CutterQueue({
   userName?: string;
 }) {
   const router = useRouter();
+  const scheduleRefresh = useCoalescedRefresh();
+  const [, startTransition] = useTransition();
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
+
+  // Units optimistically moved to production: hidden from the queue instantly on
+  // tap and reconciled on the next fresh schedule (server truth then carries
+  // productionEnteredAt, so they stay gone). Reset whenever a new schedule
+  // arrives so a rolled-back/foreign change can't be masked. (B1)
+  const [movedUnitIds, setMovedUnitIds] = useState<Set<string>>(new Set());
+  const [syncedSchedule, setSyncedSchedule] = useState(schedule);
+  if (syncedSchedule !== schedule) {
+    setSyncedSchedule(schedule);
+    setMovedUnitIds(new Set());
+  }
+
+  const handleMoveToProduction = (unitId: string) => {
+    setMovedUnitIds((prev) => new Set(prev).add(unitId));
+    startTransition(async () => {
+      const res = await moveUnitToProduction(unitId);
+      if (!res.ok) {
+        setMovedUnitIds((prev) => {
+          const next = new Set(prev);
+          next.delete(unitId);
+          return next;
+        });
+        globalThis.window.alert(res.error ?? "Failed to move unit to production.");
+        return;
+      }
+      scheduleRefresh();
+    });
+  };
+
   const [search, setSearch] = useSessionStorage<string>("cutter-queue-search", "");
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
   const [floorFilter, setFloorFilter] = useState<string[]>([]);
@@ -231,6 +260,7 @@ export function CutterQueue({
     const groups = new Map<string, CutterUnitGroup>();
     for (const item of schedule.allItems) {
       if (item.productionEnteredAt != null) continue;
+      if (movedUnitIds.has(item.unitId)) continue;
       if (unitsWithStartedCutting.has(item.unitId)) continue;
 
       // Filters applied per-window
@@ -297,6 +327,7 @@ export function CutterQueue({
     return sortedGroups;
   }, [
     schedule.allItems,
+    movedUnitIds,
     unitsWithStartedCutting,
     buildingFilter,
     floorFilter,
@@ -574,6 +605,7 @@ export function CutterQueue({
                   <MoveToProductionButton
                     unitId={unit.unitId}
                     missingLabels={getMissingLabels(unit.windows)}
+                    onMove={handleMoveToProduction}
                   />
                 )
               }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
 import { CheckCircle, FunnelSimple, SignOut, X } from "@phosphor-icons/react";
 import { signOut } from "@/app/actions/auth-actions";
 import {
@@ -202,6 +203,7 @@ export function ManufacturingRoleCompletedScreen({
   userName?: string;
 }) {
   const router = useRouter();
+  const scheduleRefresh = useCoalescedRefresh();
   const [signingOut, startSignOut] = useTransition();
   const [actionPending, startActionTransition] = useTransition();
   const [buildingFilter, setBuildingFilter] = useState<string[]>([]);
@@ -329,7 +331,7 @@ export function ManufacturingRoleCompletedScreen({
         );
         return;
       }
-      router.refresh();
+      scheduleRefresh();
     });
     setPushbackTarget(null);
   };
@@ -341,7 +343,7 @@ export function ManufacturingRoleCompletedScreen({
         globalThis.window.alert(result.error ?? "Failed to undo cut.");
         return;
       }
-      router.refresh();
+      scheduleRefresh();
     });
   };
 
@@ -352,7 +354,7 @@ export function ManufacturingRoleCompletedScreen({
         globalThis.window.alert(result.error ?? "Failed to undo assembly.");
         return;
       }
-      router.refresh();
+      scheduleRefresh();
     });
   };
 

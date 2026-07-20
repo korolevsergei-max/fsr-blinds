@@ -16,6 +16,7 @@ import {
 import { markWindowCut } from "@/app/actions/production-actions";
 import { undoWindowCut } from "@/app/actions/manufacturing-actions";
 import { moveUnitBackToQueue } from "@/app/actions/cutter-production-actions";
+import { useCoalescedRefresh } from "@/hooks/use-coalesced-refresh";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
@@ -117,27 +118,26 @@ function WindowCutActions({
   return null;
 }
 
-function MoveBackToQueueButton({ unitId }: { unitId: string }) {
-  const [pending, startTransition] = useTransition();
-
+function MoveBackToQueueButton({
+  unitId,
+  onMoveBack,
+}: {
+  unitId: string;
+  onMoveBack: (unitId: string) => void;
+}) {
   function handleClick() {
     if (!globalThis.window.confirm("Move this unit back to the queue? This will clear its production entry date.")) return;
-    startTransition(async () => {
-      const res = await moveUnitBackToQueue(unitId);
-      if (!res.ok) {
-        globalThis.window.alert(res.error ?? "Failed to move unit back to queue.");
-      }
-    });
+    // Optimistic: the parent drops the unit from production instantly on tap.
+    onMoveBack(unitId);
   }
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      disabled={pending}
       className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-secondary transition-colors hover:bg-surface disabled:opacity-50"
     >
-      {pending ? "Moving…" : "Move back to Queue"}
+      Move back to Queue
     </button>
   );
 }
@@ -150,8 +150,36 @@ export function CutterProduction({
   userName?: string;
 }) {
   const router = useRouter();
+  const scheduleRefresh = useCoalescedRefresh();
+  const [, startMoveBackTransition] = useTransition();
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [stickyTop, setStickyTop] = useState(188);
+
+  // Units optimistically moved back to the queue: hidden from production instantly
+  // and reconciled on the next fresh schedule. Reset when a new schedule arrives.
+  const [movedBackUnitIds, setMovedBackUnitIds] = useState<Set<string>>(new Set());
+  const [syncedSchedule, setSyncedSchedule] = useState(schedule);
+  if (syncedSchedule !== schedule) {
+    setSyncedSchedule(schedule);
+    setMovedBackUnitIds(new Set());
+  }
+
+  const handleMoveBackToQueue = (unitId: string) => {
+    setMovedBackUnitIds((prev) => new Set(prev).add(unitId));
+    startMoveBackTransition(async () => {
+      const res = await moveUnitBackToQueue(unitId);
+      if (!res.ok) {
+        setMovedBackUnitIds((prev) => {
+          const next = new Set(prev);
+          next.delete(unitId);
+          return next;
+        });
+        globalThis.window.alert(res.error ?? "Failed to move unit back to queue.");
+        return;
+      }
+      scheduleRefresh();
+    });
+  };
 
   // Filter state — mirrors CutterQueue
   const [search, setSearch] = useSessionStorage<string>("cutter-production-search", "");
@@ -238,9 +266,11 @@ export function CutterProduction({
     () =>
       items.filter(
         (item) =>
-          item.productionEnteredAt != null && unitsStillCutting.has(item.unitId)
+          item.productionEnteredAt != null &&
+          unitsStillCutting.has(item.unitId) &&
+          !movedBackUnitIds.has(item.unitId)
       ),
-    [items, unitsStillCutting]
+    [items, unitsStillCutting, movedBackUnitIds]
   );
 
   const buildingOptions = useMemo(() => [
@@ -425,7 +455,11 @@ export function CutterProduction({
       m.set(windowId, next);
       return m;
     });
-    router.refresh();
+    // Coalesce reconciliation: a batch of mark-cut/undo taps yields ONE refetch
+    // after the burst settles instead of one full route re-render per tap. The
+    // status override already gave instant feedback (and drops the unit from the
+    // view once every window is cut). (B1 / roadmap Phase 2, finding 1.1.)
+    scheduleRefresh();
   }
 
   return (
@@ -658,7 +692,10 @@ export function CutterProduction({
                 }
                 headerAction={
                   selectMode ? null : (
-                    <MoveBackToQueueButton unitId={unit.unitId} />
+                    <MoveBackToQueueButton
+                      unitId={unit.unitId}
+                      onMoveBack={handleMoveBackToQueue}
+                    />
                   )
                 }
                 renderWindowActions={(item) =>

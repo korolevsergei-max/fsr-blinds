@@ -1,10 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireCutterOrOwner } from "@/lib/auth";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+// Revalidate the cutter queue/production layouts AFTER the response is sent, so
+// the action returns in one auth-check + one UPDATE. The client updates the unit
+// optimistically at the call site; the next navigation (or the coalesced
+// refresh) picks up server truth. Revalidating synchronously here would re-run
+// the multi-second queue read inside the action response (B1 / roadmap Phase 2).
+function revalidateCutterQueuesAfterResponse() {
+  after(() => {
+    revalidatePath("/cutter/queue", "layout");
+    revalidatePath("/cutter/production", "layout");
+  });
+}
 
 /**
  * Move a unit forward from the queue into production by setting
@@ -23,8 +36,7 @@ export async function moveUnitToProduction(unitId: string): Promise<ActionResult
 
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/cutter/queue", "layout");
-    revalidatePath("/cutter/production", "layout");
+    revalidateCutterQueuesAfterResponse();
 
     return { ok: true };
   } catch (e) {
@@ -68,8 +80,7 @@ export async function moveUnitBackToQueue(unitId: string): Promise<ActionResult>
 
     if (error) return { ok: false, error: error.message };
 
-    revalidatePath("/cutter/queue", "layout");
-    revalidatePath("/cutter/production", "layout");
+    revalidateCutterQueuesAfterResponse();
 
     return { ok: true };
   } catch (e) {

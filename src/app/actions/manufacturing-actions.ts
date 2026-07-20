@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import { addWorkingDays } from "@/lib/manufacturing-calendar";
@@ -27,12 +28,36 @@ type ActionResult =
   | { ok: false; error: string; needsConfirmation?: boolean; targetDate?: string; overBy?: number };
 
 function revalidateManufacturingPaths() {
-  revalidatePath("/management/settings", "page");
+  // Paths a pushback/undo actually changes: the three factory queues (a window
+  // moves between them), the schedule view (reflow reorders it), and the owner
+  // dashboard (derived manufacturing counts). NOT /management/settings — that is
+  // manufacturing capacity/workday config, untouched by a status change (B1).
   revalidatePath("/management/schedule", "page");
   revalidatePath("/cutter", "layout");
   revalidatePath("/assembler", "layout");
   revalidatePath("/qc", "layout");
   revalidatePath("/management", "layout");
+}
+
+// Run the schedule reflow (and optional unit-status recompute) AFTER the response
+// is sent, then revalidate. The status change itself is already committed before
+// the action returns, so the client's optimistic update is authoritative for the
+// window; reflow only reorders the schedule and never changes what was written.
+// This mirrors the mark path's scheduleManufacturingFollowUp (production-actions)
+// and takes the multi-second reflow off the interaction's critical path (B1/M5).
+// No scheduling-math change — only WHEN reflow runs.
+function scheduleManufacturingReflow(
+  reason: string,
+  options?: { recomputeUnitStatusFor?: string | null }
+) {
+  after(async () => {
+    const supabase = await createClient();
+    if (options?.recomputeUnitStatusFor) {
+      await recomputeUnitStatus(supabase, options.recomputeUnitStatusFor);
+    }
+    await reflowManufacturingSchedules(reason);
+    revalidateManufacturingPaths();
+  });
 }
 
 function overrideMap(overrides: ManufacturingCalendarOverride[]): Map<string, ManufacturingCalendarOverride> {
@@ -385,8 +410,7 @@ export async function markWindowManufacturingIssue(
       if (error) return { ok: false, error: error.message };
     }
 
-    await reflowManufacturingSchedules("issue_opened");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("issue_opened");
     return { ok: true };
   } catch (error) {
     return {
@@ -409,8 +433,7 @@ export async function resolveWindowManufacturingIssue(windowId: string): Promise
       .eq("window_id", windowId);
     if (error) return { ok: false, error: error.message };
 
-    await reflowManufacturingSchedules("issue_resolved");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("issue_resolved");
     return { ok: true };
   } catch (error) {
     return {
@@ -508,8 +531,7 @@ export async function returnWindowToCutter(
       notes: trimmedNotes,
     });
 
-    await reflowManufacturingSchedules("pushback_to_cutter");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("pushback_to_cutter");
     return { ok: true };
   } catch (error) {
     return {
@@ -579,9 +601,7 @@ export async function returnWindowToAssembler(
       notes: trimmedNotes,
     });
 
-    await recomputeUnitStatus(supabase, unitId);
-    await reflowManufacturingSchedules("pushback_to_assembler");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("pushback_to_assembler", { recomputeUnitStatusFor: unitId });
     return { ok: true };
   } catch (error) {
     return {
@@ -609,9 +629,7 @@ export async function undoWindowCut(windowId: string): Promise<ActionResult> {
       .eq("window_id", windowId);
     if (error) return { ok: false, error: error.message };
 
-    await recomputeUnitStatus(supabase, row.unit_id);
-    await reflowManufacturingSchedules("undo_cut");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("undo_cut", { recomputeUnitStatusFor: row.unit_id });
     return { ok: true };
   } catch (error) {
     return {
@@ -639,9 +657,7 @@ export async function undoWindowAssembly(windowId: string): Promise<ActionResult
       .eq("window_id", windowId);
     if (error) return { ok: false, error: error.message };
 
-    await recomputeUnitStatus(supabase, row.unit_id);
-    await reflowManufacturingSchedules("undo_assembly");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("undo_assembly", { recomputeUnitStatusFor: row.unit_id });
     return { ok: true };
   } catch (error) {
     return {
@@ -669,9 +685,7 @@ export async function undoWindowQC(windowId: string): Promise<ActionResult> {
       .eq("window_id", windowId);
     if (error) return { ok: false, error: error.message };
 
-    await recomputeUnitStatus(supabase, row.unit_id);
-    await reflowManufacturingSchedules("undo_qc");
-    revalidateManufacturingPaths();
+    scheduleManufacturingReflow("undo_qc", { recomputeUnitStatusFor: row.unit_id });
     return { ok: true };
   } catch (error) {
     return {
