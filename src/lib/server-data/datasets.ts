@@ -24,6 +24,8 @@ import {
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import { assertRpcArrays } from "@/lib/contract";
+import { queryTimeoutSignal } from "@/lib/query-timeout";
 import { mapManufacturingEscalation } from "@/lib/manufacturing-escalations";
 import { buildDatasetFromRaw, emptyDataset } from "./build";
 import { finalizeDataset } from "./enrichment";
@@ -35,7 +37,9 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
 
   // Owner fast path: single RPC call that never builds raw rooms/windows server-side.
   // get_full_dataset remains below as the rollback / pre-migration fallback.
-  const { data: ownerRpcData, error: ownerRpcError } = await supabase.rpc("get_owner_dataset");
+  const { data: ownerRpcData, error: ownerRpcError } = await supabase
+    .rpc("get_owner_dataset")
+    .abortSignal(queryTimeoutSignal());
   if (!ownerRpcError && ownerRpcData) {
     const raw = ownerRpcData as {
       clients: ClientRow[];
@@ -52,6 +56,11 @@ export const loadFullDataset = cache(async (): Promise<AppDataset> => {
       manufacturing_escalations?: ManufacturingEscalationRow[];
       units_with_open_post_install_issue?: string[];
     };
+    assertRpcArrays("get_owner_dataset", raw, [
+      "clients", "buildings", "units", "installers", "schedule_entries",
+      "cutters", "schedulers", "scheduler_unit_assignments",
+      "manufacturing_escalations", "units_with_open_post_install_issue",
+    ]);
     console.warn(
       `[perf][owner-load] management units=${raw.units?.length ?? 0} rooms=0 windows=0 schedule=${raw.schedule_entries?.length ?? 0} ${(performance.now() - startedAt).toFixed(0)}ms`
     );

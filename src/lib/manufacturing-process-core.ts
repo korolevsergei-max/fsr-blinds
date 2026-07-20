@@ -1,4 +1,4 @@
-import { getFloor } from "./app-dataset";
+import { getFloor } from "./app-dataset.ts";
 
 export type ManufacturingProcessInstallStatusFilter =
   | "all"

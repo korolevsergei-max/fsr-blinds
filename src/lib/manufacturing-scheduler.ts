@@ -24,6 +24,8 @@ import {
   type ManufacturingEscalationDbRow,
 } from "@/lib/manufacturing-escalations";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import { assertRpcArrays } from "@/lib/contract";
+import { queryTimeoutSignal } from "@/lib/query-timeout";
 import {
   buildRoleScheduleOutput,
   countQueueReadyWindows,
@@ -744,10 +746,12 @@ export async function loadPersistedRoleSchedule(
   // rooms + all escalations in one scan). get_role_schedule migration
   // 20260720130000 (archive union added 20260720140000); the chunked path below
   // is the pre-migration / rollback fallback.
-  const { data: rpcData, error: rpcError } = await supabase.rpc("get_role_schedule", {
-    p_date_column: dateColumn,
-    p_include_archived: includeArchived,
-  });
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("get_role_schedule", {
+      p_date_column: dateColumn,
+      p_include_archived: includeArchived,
+    })
+    .abortSignal(queryTimeoutSignal());
   if (!rpcError && rpcData) {
     const raw = rpcData as {
       schedule_rows: ScheduleRow[];
@@ -757,6 +761,9 @@ export async function loadPersistedRoleSchedule(
       rooms: Array<{ id: string; name: string }>;
       escalations: ManufacturingEscalationDbRow[];
     };
+    assertRpcArrays("get_role_schedule", raw, [
+      "schedule_rows", "units", "windows", "production", "rooms", "escalations",
+    ]);
     const { openByWindow, historyByWindow } = buildEscalationMapsByWindow(raw.escalations ?? []);
     const { items, allItems } = assembleRoleScheduleItems(role, {
       schedules: raw.schedule_rows ?? [],

@@ -10,7 +10,7 @@ import type {
   Window,
   WindowManufacturingEscalation,
   WindowPostInstallIssue,
-} from "./types";
+} from "./types.ts";
 
 export type AppDataset = {
   clients: Client[];
