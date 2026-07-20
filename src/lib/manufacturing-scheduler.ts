@@ -702,9 +702,22 @@ function assembleRoleScheduleItems(
   return { items, allItems };
 }
 
+export type RoleScheduleOptions = {
+  /**
+   * Include archived (fully-installed) schedule rows in the read. Default false
+   * (the factory queue/dashboard/production perf win — active table only). The
+   * completed views and the management schedule pass true so their completed
+   * history/counts stay whole after C1's archive move runs. While the archive
+   * is empty, true and false are identical.
+   */
+  includeArchived?: boolean;
+};
+
 export async function loadPersistedRoleSchedule(
-  role: "cutter" | "assembler" | "qc"
+  role: "cutter" | "assembler" | "qc",
+  options: RoleScheduleOptions = {}
 ): Promise<ManufacturingRoleSchedule> {
+  const includeArchived = options.includeArchived ?? false;
   const startedAt = performance.now();
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
@@ -729,10 +742,11 @@ export async function loadPersistedRoleSchedule(
   // Fast path: one RPC round-trip returns the whole schedule graph (schedule
   // rows ordered by the role's date column + joined units/windows/production/
   // rooms + all escalations in one scan). get_role_schedule migration
-  // 20260720130000; the chunked path below is the pre-migration / rollback
-  // fallback.
+  // 20260720130000 (archive union added 20260720140000); the chunked path below
+  // is the pre-migration / rollback fallback.
   const { data: rpcData, error: rpcError } = await supabase.rpc("get_role_schedule", {
     p_date_column: dateColumn,
+    p_include_archived: includeArchived,
   });
   if (!rpcError && rpcData) {
     const raw = rpcData as {
@@ -761,18 +775,27 @@ export async function loadPersistedRoleSchedule(
 
   // Fallback: paginate through all schedule rows — the PostgREST default caps at
   // 1000 rows so we must page until exhausted rather than issuing a single
-  // unbounded query.
-  const allScheduleRows: ScheduleRow[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
-      .from("window_manufacturing_schedule")
-      .select("*")
-      .order(dateColumn, { ascending: true, nullsFirst: false })
-      .range(from, from + PAGE - 1);
-    if (!data || data.length === 0) break;
-    allScheduleRows.push(...(data as ScheduleRow[]));
-    if (data.length < PAGE) break;
+  // unbounded query. When includeArchived, page the archive table too (C1); the
+  // downstream joins/assembly are identical for both sources.
+  const pageTable = async (table: string): Promise<ScheduleRow[]> => {
+    const rows: ScheduleRow[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
+        .from(table)
+        .select("*")
+        .order(dateColumn, { ascending: true, nullsFirst: false })
+        .range(from, from + PAGE - 1);
+      if (!data || data.length === 0) break;
+      rows.push(...(data as ScheduleRow[]));
+      if (data.length < PAGE) break;
+    }
+    return rows;
+  };
+
+  const allScheduleRows = await pageTable("window_manufacturing_schedule");
+  if (includeArchived) {
+    allScheduleRows.push(...(await pageTable("window_manufacturing_schedule_archive")));
   }
 
   const schedules = allScheduleRows;
@@ -833,12 +856,13 @@ export async function loadPersistedRoleSchedule(
 }
 
 export async function loadManufacturingRoleSchedule(
-  role: "cutter" | "assembler" | "qc"
+  role: "cutter" | "assembler" | "qc",
+  options: RoleScheduleOptions = {}
 ): Promise<ManufacturingRoleSchedule> {
   // Pure read: the persisted schedule is kept current by mutation-triggered
   // reflows, so neither the queue nor the completed views need to recompute
   // the facility on every load.
-  return loadPersistedRoleSchedule(role);
+  return loadPersistedRoleSchedule(role, options);
 }
 
 function getRoleCompletedAt(
@@ -888,7 +912,9 @@ function compareCompletedItems(a: ManufacturingCompletedWindowItem, b: Manufactu
 export async function loadManufacturingCompletedRoleData(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingCompletedRoleData> {
-  const schedule = await loadManufacturingRoleSchedule(role);
+  // C1: completed history includes fully-installed units whose schedule rows
+  // have been archived out of the active table — read active∪archive.
+  const schedule = await loadManufacturingRoleSchedule(role, { includeArchived: true });
 
   // M4: loadPersistedRoleSchedule already attaches each item's full escalation
   // history (item.escalationHistory), so `...item` carries it forward — no need
