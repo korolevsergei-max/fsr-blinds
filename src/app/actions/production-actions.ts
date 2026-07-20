@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import {
+  getCurrentUser,
   requireCutter,
   requireAssembler,
   requireQc,
@@ -321,6 +322,17 @@ export async function markWindowQCApproved(
  */
 export async function computeAndUpdateManufacturingRisk(): Promise<void> {
   try {
+    // Authz backstop (security finding S1 family, ACTION_AUTHZ_MATRIX.md): this
+    // is a "use server" export, so it is also an anonymous POST endpoint that
+    // writes risk flags and emits notifications. Its only legitimate callers are
+    // the authenticated cutter/assembler/qc dashboard renders (in after()). Gate
+    // it to the manufacturing roles so an anonymous caller cannot trigger the
+    // facility-wide scan/write. (Phase C2 removes it from the action surface.)
+    const actor = await getCurrentUser();
+    if (!actor || !["owner", "cutter", "assembler", "qc"].includes(actor.role)) {
+      return;
+    }
+
     const supabase = await createClient();
     const { settings, overrides } = await loadManufacturingSettings();
     const overridesByDate = new Map(overrides.map((override) => [override.workDate, override]));

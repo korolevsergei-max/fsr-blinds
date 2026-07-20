@@ -1,5 +1,12 @@
-"use server";
-
+// NOT a "use server" module. These are internal revalidation helpers called
+// server-to-server from guarded action modules (management-actions.ts,
+// fsr-data/*). They must NOT be exposed as server-action POST endpoints:
+// with "use server" every export becomes an unauthenticated endpoint, and
+// revalidateAllPortalData() invalidates every portal layout — a cheap
+// anonymous cache-bust/DoS lever (security finding S1, ACTION_AUTHZ_MATRIX.md).
+// A role guard is the wrong fix (these run under owner AND scheduler paths);
+// removing the network boundary entirely is correct. revalidatePath is
+// server-only, so importing this from a client component fails the build.
 import { revalidatePath } from "next/cache";
 
 type UnitRouteOptions = {
