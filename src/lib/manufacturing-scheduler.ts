@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   BlindType,
@@ -20,8 +19,9 @@ import {
   listMonthDays,
 } from "@/lib/manufacturing-calendar";
 import {
-  loadManufacturingEscalationHistoryByWindow,
-  loadOpenManufacturingEscalationsByWindow,
+  buildEscalationMapsByWindow,
+  loadManufacturingEscalationMapsByWindow,
+  type ManufacturingEscalationDbRow,
 } from "@/lib/manufacturing-escalations";
 import { selectInChunks } from "@/lib/supabase-chunking";
 import {
@@ -124,6 +124,32 @@ type ProductionRow = {
   issue_status: ManufacturingIssueStatus;
   issue_reason: string | null;
   issue_notes: string | null;
+};
+
+type ProductionStatusRow = {
+  window_id: string;
+  status: ProductionStatus;
+  issue_status: ManufacturingIssueStatus;
+  issue_reason: string | null;
+  issue_notes: string | null;
+  cut_at: string | null;
+  assembled_at: string | null;
+  qc_approved_at: string | null;
+  manufacturing_label_printed_at: string | null;
+  packaging_label_printed_at: string | null;
+  cut_list_printed_at: string | null;
+};
+
+/** Raw graph the role-schedule read assembles into queue items — same shape
+ *  whether it comes from the get_role_schedule RPC or the chunked fallback. */
+type RoleScheduleSource = {
+  schedules: ScheduleRow[];
+  units: UnitRow[];
+  windows: WindowRow[];
+  production: ProductionStatusRow[];
+  rooms: Array<{ id: string; name: string }>;
+  openByWindow: Map<string, WindowManufacturingEscalation>;
+  historyByWindow: Map<string, WindowManufacturingEscalation[]>;
 };
 
 export type ManufacturingCalendarDay = {
@@ -580,105 +606,25 @@ export async function buildManufacturingCalendarMonth(
   }));
 }
 
-export async function loadPersistedRoleSchedule(
-  role: "cutter" | "assembler" | "qc"
-): Promise<ManufacturingRoleSchedule> {
-  const startedAt = performance.now();
-  const { supabase, settings, overrides } = await getSettingsAndOverrides();
-  const currentWorkDate = getCurrentWorkDate(settings, overrides);
+/**
+ * Assembles the role queue items from the raw schedule graph. This is the single
+ * source of mapping/filter logic shared by the get_role_schedule RPC fast path
+ * and the chunked fallback, so both produce byte-identical output (the p9/p11
+ * "shared builder, two sources" pattern). `schedules` order is preserved into
+ * `allItems` (the caller supplies them ordered by the role's date column).
+ */
+function assembleRoleScheduleItems(
+  role: "cutter" | "assembler" | "qc",
+  source: RoleScheduleSource
+): { items: ManufacturingWindowItem[]; allItems: ManufacturingWindowItem[] } {
+  const { schedules, units, windows, production, rooms, openByWindow, historyByWindow } = source;
 
-  // NOTE: this is a pure read. Correctness of the persisted schedule (every
-  // zone window has a row) is now guaranteed by the mutations that create
-  // unscheduled windows — moving a unit into the zone (recomputeUnitStatus)
-  // and adding a window to a unit already in the zone (addWindow*) both
-  // trigger reflowManufacturingSchedules. We deliberately do NOT self-heal
-  // inline here: under concurrent load that turned every queue view into a
-  // facility-wide reflow + upsert storm (the 2026-06-23 pool-exhaustion
-  // shape). Out-of-band writes (SQL seeds/backfills/direct DB edits) must
-  // call reflowManufacturingSchedules() themselves.
-
-  const dateColumn =
-    role === "cutter"
-      ? "scheduled_cut_date"
-      : role === "assembler"
-        ? "scheduled_assembly_date"
-        : "scheduled_qc_date";
-
-  // Paginate through all schedule rows — the PostgREST default caps at 1000 rows
-  // so we must page until exhausted rather than issuing a single unbounded query.
-  const allScheduleRows: ScheduleRow[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
-      .from("window_manufacturing_schedule")
-      .select("*")
-      .order(dateColumn, { ascending: true, nullsFirst: false })
-      .range(from, from + PAGE - 1);
-    if (!data || data.length === 0) break;
-    allScheduleRows.push(...(data as ScheduleRow[]));
-    if (data.length < PAGE) break;
-  }
-
-  const schedules = allScheduleRows;
-  const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
-  const windowIds = [...new Set(schedules.map((row) => row.window_id))];
-
-  type ProductionStatusRow = {
-    window_id: string;
-    status: ProductionStatus;
-    issue_status: ManufacturingIssueStatus;
-    issue_reason: string | null;
-    issue_notes: string | null;
-    cut_at: string | null;
-    assembled_at: string | null;
-    qc_approved_at: string | null;
-    manufacturing_label_printed_at: string | null;
-    packaging_label_printed_at: string | null;
-    cut_list_printed_at: string | null;
-  };
-
-  const [unitData, windowData, productionData, escalationByWindow, escalationHistoryByWindow] = await Promise.all([
-    selectInChunks<UnitRow>(unitIds, (chunk) =>
-      supabase
-        .from("units")
-        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at")
-        .in("id", chunk)
-        .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
-    ),
-    selectInChunks<WindowRow>(windowIds, (chunk) =>
-      supabase
-        .from("windows")
-        .select("id, room_id, label, blind_type, width, height, depth, notes, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, chain_side")
-        .in("id", chunk)
-        .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
-    ),
-    selectInChunks<ProductionStatusRow>(windowIds, (chunk) =>
-      supabase
-        .from("window_production_status")
-        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at, cut_list_printed_at")
-        .in("window_id", chunk)
-        .then((res) => ({ data: res.data as ProductionStatusRow[] | null, error: res.error })),
-    ),
-    loadOpenManufacturingEscalationsByWindow(supabase, windowIds),
-    loadManufacturingEscalationHistoryByWindow(supabase, windowIds),
-  ]);
-
-  const windows = windowData;
-  const roomIds = [...new Set(windows.map((window) => window.room_id))];
-  const roomData = await selectInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
-    supabase
-      .from("rooms")
-      .select("id, name")
-      .in("id", chunk)
-      .then((res) => ({ data: res.data as Array<{ id: string; name: string }> | null, error: res.error })),
-  );
+  const unitsById = new Map(units.map((unit) => [unit.id, unit]));
+  const windowsById = new Map(windows.map((window) => [window.id, window]));
+  const roomsById = new Map(rooms.map((room) => [room.id, room]));
+  const productionByWindow = new Map(production.map((row) => [row.window_id, row]));
 
   const items: ManufacturingWindowItem[] = [];
-  const unitsById = new Map(unitData.map((unit) => [unit.id, unit]));
-  const windowsById = new Map(windows.map((window) => [window.id, window]));
-  const roomsById = new Map(roomData.map((room) => [room.id, room]));
-  const productionByWindow = new Map(productionData.map((production) => [production.window_id, production]));
-
   const allItems: ManufacturingWindowItem[] = [];
   for (const row of schedules) {
     const unit = unitsById.get(row.unit_id);
@@ -688,8 +634,8 @@ export async function loadPersistedRoleSchedule(
     const roomName = roomsById.get(window.room_id)?.name ?? "Room";
     const productionStatus = production?.status ?? "pending";
     const issueStatus = production?.issue_status ?? "none";
-    const escalation = escalationByWindow.get(row.window_id) ?? null;
-    const history = escalationHistoryByWindow.get(row.window_id) ?? [];
+    const escalation = openByWindow.get(row.window_id) ?? null;
+    const history = historyByWindow.get(row.window_id) ?? [];
     const latestEscalation = escalation ?? history[0] ?? null;
     const wasReworkInCycle = history.length > 0;
 
@@ -753,8 +699,134 @@ export async function loadPersistedRoleSchedule(
     items.push(item);
   }
 
+  return { items, allItems };
+}
+
+export async function loadPersistedRoleSchedule(
+  role: "cutter" | "assembler" | "qc"
+): Promise<ManufacturingRoleSchedule> {
+  const startedAt = performance.now();
+  const { supabase, settings, overrides } = await getSettingsAndOverrides();
+  const currentWorkDate = getCurrentWorkDate(settings, overrides);
+
+  // NOTE: this is a pure read. Correctness of the persisted schedule (every
+  // zone window has a row) is now guaranteed by the mutations that create
+  // unscheduled windows — moving a unit into the zone (recomputeUnitStatus)
+  // and adding a window to a unit already in the zone (addWindow*) both
+  // trigger reflowManufacturingSchedules. We deliberately do NOT self-heal
+  // inline here: under concurrent load that turned every queue view into a
+  // facility-wide reflow + upsert storm (the 2026-06-23 pool-exhaustion
+  // shape). Out-of-band writes (SQL seeds/backfills/direct DB edits) must
+  // call reflowManufacturingSchedules() themselves.
+
+  const dateColumn =
+    role === "cutter"
+      ? "scheduled_cut_date"
+      : role === "assembler"
+        ? "scheduled_assembly_date"
+        : "scheduled_qc_date";
+
+  // Fast path: one RPC round-trip returns the whole schedule graph (schedule
+  // rows ordered by the role's date column + joined units/windows/production/
+  // rooms + all escalations in one scan). get_role_schedule migration
+  // 20260720130000; the chunked path below is the pre-migration / rollback
+  // fallback.
+  const { data: rpcData, error: rpcError } = await supabase.rpc("get_role_schedule", {
+    p_date_column: dateColumn,
+  });
+  if (!rpcError && rpcData) {
+    const raw = rpcData as {
+      schedule_rows: ScheduleRow[];
+      units: UnitRow[];
+      windows: WindowRow[];
+      production: ProductionStatusRow[];
+      rooms: Array<{ id: string; name: string }>;
+      escalations: ManufacturingEscalationDbRow[];
+    };
+    const { openByWindow, historyByWindow } = buildEscalationMapsByWindow(raw.escalations ?? []);
+    const { items, allItems } = assembleRoleScheduleItems(role, {
+      schedules: raw.schedule_rows ?? [],
+      units: raw.units ?? [],
+      windows: raw.windows ?? [],
+      production: raw.production ?? [],
+      rooms: raw.rooms ?? [],
+      openByWindow,
+      historyByWindow,
+    });
+    console.warn(
+      `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
+    );
+    return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
+  }
+
+  // Fallback: paginate through all schedule rows — the PostgREST default caps at
+  // 1000 rows so we must page until exhausted rather than issuing a single
+  // unbounded query.
+  const allScheduleRows: ScheduleRow[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("window_manufacturing_schedule")
+      .select("*")
+      .order(dateColumn, { ascending: true, nullsFirst: false })
+      .range(from, from + PAGE - 1);
+    if (!data || data.length === 0) break;
+    allScheduleRows.push(...(data as ScheduleRow[]));
+    if (data.length < PAGE) break;
+  }
+
+  const schedules = allScheduleRows;
+  const unitIds = [...new Set(schedules.map((row) => row.unit_id))];
+  const windowIds = [...new Set(schedules.map((row) => row.window_id))];
+
+  const [unitData, windowData, productionData, escalationMaps] = await Promise.all([
+    selectInChunks<UnitRow>(unitIds, (chunk) =>
+      supabase
+        .from("units")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at")
+        .in("id", chunk)
+        .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
+    ),
+    selectInChunks<WindowRow>(windowIds, (chunk) =>
+      supabase
+        .from("windows")
+        .select("id, room_id, label, blind_type, width, height, depth, notes, window_installation, wand_chain, fabric_adjustment_side, fabric_adjustment_inches, chain_side")
+        .in("id", chunk)
+        .then((res) => ({ data: res.data as WindowRow[] | null, error: res.error })),
+    ),
+    selectInChunks<ProductionStatusRow>(windowIds, (chunk) =>
+      supabase
+        .from("window_production_status")
+        .select("window_id, status, issue_status, issue_reason, issue_notes, cut_at, assembled_at, qc_approved_at, manufacturing_label_printed_at, packaging_label_printed_at, cut_list_printed_at")
+        .in("window_id", chunk)
+        .then((res) => ({ data: res.data as ProductionStatusRow[] | null, error: res.error })),
+    ),
+    // One scan of all escalations, split into open-per-window + history maps
+    // (folds the old double scan of the same table).
+    loadManufacturingEscalationMapsByWindow(supabase, windowIds),
+  ]);
+
+  const roomIds = [...new Set(windowData.map((window) => window.room_id))];
+  const roomData = await selectInChunks<{ id: string; name: string }>(roomIds, (chunk) =>
+    supabase
+      .from("rooms")
+      .select("id, name")
+      .in("id", chunk)
+      .then((res) => ({ data: res.data as Array<{ id: string; name: string }> | null, error: res.error })),
+  );
+
+  const { items, allItems } = assembleRoleScheduleItems(role, {
+    schedules,
+    units: unitData,
+    windows: windowData,
+    production: productionData,
+    rooms: roomData,
+    openByWindow: escalationMaps.openByWindow,
+    historyByWindow: escalationMaps.historyByWindow,
+  });
+
   console.warn(
-    `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} ${(performance.now() - startedAt).toFixed(0)}ms`
+    `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
   );
 
   return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
@@ -817,15 +889,14 @@ export async function loadManufacturingCompletedRoleData(
   role: "cutter" | "assembler" | "qc"
 ): Promise<ManufacturingCompletedRoleData> {
   const schedule = await loadManufacturingRoleSchedule(role);
-  const supabase = await createClient();
-  const windowIds = schedule.allItems.map((item) => item.windowId);
-  const escalationHistoryByWindow = await loadManufacturingEscalationHistoryByWindow(supabase, windowIds);
 
+  // M4: loadPersistedRoleSchedule already attaches each item's full escalation
+  // history (item.escalationHistory), so `...item` carries it forward — no need
+  // to re-scan window_manufacturing_escalations over all ~2,000 window ids again.
   const items = schedule.allItems
     .filter((item) => isCompletedForRole(role, item))
     .map((item) => ({
       ...item,
-      escalationHistory: escalationHistoryByWindow.get(item.windowId) ?? [],
       roleCompletedAt: getRoleCompletedAt(role, item),
     }))
     .sort(compareCompletedItems);

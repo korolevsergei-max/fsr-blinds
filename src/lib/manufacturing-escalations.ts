@@ -4,7 +4,7 @@ import { selectInChunks } from "@/lib/supabase-chunking";
 
 type DbLikeClient = SupabaseClient;
 
-type EscalationRow = {
+export type ManufacturingEscalationDbRow = {
   id: string;
   window_id: string;
   unit_id: string;
@@ -20,6 +20,8 @@ type EscalationRow = {
   resolved_at: string | null;
   created_at: string;
 };
+
+type EscalationRow = ManufacturingEscalationDbRow;
 
 export function mapManufacturingEscalation(
   row: EscalationRow
@@ -181,4 +183,56 @@ export async function loadManufacturingEscalationHistoryByWindow(
     byWindow.set(row.window_id, list);
   }
   return byWindow;
+}
+
+/**
+ * Splits one opened_at-DESC escalation array into (a) the latest open escalation
+ * per window and (b) the full per-window history — the shape the role-schedule
+ * loader needs. Folds what used to be two separate scans of the same 10-row
+ * table (loadOpen… + loadHistory…) into one. `rows` MUST be ordered opened_at
+ * DESC so the first open row seen per window is the latest, matching the old
+ * per-scan ordering.
+ */
+export function buildEscalationMapsByWindow(rows: ManufacturingEscalationDbRow[]): {
+  openByWindow: Map<string, WindowManufacturingEscalation>;
+  historyByWindow: Map<string, WindowManufacturingEscalation[]>;
+} {
+  const openByWindow = new Map<string, WindowManufacturingEscalation>();
+  const historyByWindow = new Map<string, WindowManufacturingEscalation[]>();
+  for (const row of rows) {
+    const mapped = mapManufacturingEscalation(row);
+    if (row.status === "open" && !openByWindow.has(row.window_id)) {
+      openByWindow.set(row.window_id, mapped);
+    }
+    const list = historyByWindow.get(row.window_id) ?? [];
+    list.push(mapped);
+    historyByWindow.set(row.window_id, list);
+  }
+  return { openByWindow, historyByWindow };
+}
+
+/**
+ * Chunked fallback source for buildEscalationMapsByWindow: one scan of all
+ * escalations (any status) for the given windows, opened_at DESC. Replaces the
+ * loadOpen… + loadHistory… double scan on the role-schedule fallback path.
+ */
+export async function loadManufacturingEscalationMapsByWindow(
+  supabase: DbLikeClient,
+  windowIds: string[]
+): Promise<{
+  openByWindow: Map<string, WindowManufacturingEscalation>;
+  historyByWindow: Map<string, WindowManufacturingEscalation[]>;
+}> {
+  if (windowIds.length === 0) {
+    return { openByWindow: new Map(), historyByWindow: new Map() };
+  }
+  const rows = await selectInChunks<EscalationRow>(windowIds, (chunk) =>
+    supabase
+      .from("window_manufacturing_escalations")
+      .select("*")
+      .in("window_id", chunk)
+      .order("opened_at", { ascending: false })
+      .then((res) => ({ data: res.data as EscalationRow[] | null, error: res.error })),
+  );
+  return buildEscalationMapsByWindow(rows);
 }
