@@ -8,9 +8,18 @@ const supabaseOrigin = new URL(
 const supabaseWsOrigin = supabaseOrigin.replace(/^http/, "ws");
 const dicebearOrigin = "https://api.dicebear.com";
 
-// Report-only for now (Phase 5): logs violations without blocking anything, so a
-// gap in this allowlist can't break the app. Flip to `Content-Security-Policy`
-// once a production pass shows zero console violations across every portal.
+// ENFORCED (Phase A5r, 2026-07-19). Soaked as Report-Only since `67ea9fd`
+// (2026-07-17); a static audit of every external resource the app loads
+// confirmed the allowlist is complete: the only cross-origin host referenced in
+// src/ is api.dicebear.com (in img-src); no dangerouslySetInnerHTML, no
+// `javascript:` URIs, no external <script>/<link>/<iframe> (the one next/script
+// is the same-origin /cookie-purge.js); SpeedInsights + the Supabase realtime
+// socket are covered by 'self' / the supabase origins. 'unsafe-inline' is
+// required by Next's inline bootstrap script and Tailwind/framer inline styles
+// (no nonce pipeline). BEFORE MERGING to main (auto-deploys to prod): confirm a
+// clean browser-console soak across all six portals — owner, scheduler,
+// installer, cutter, assembler, qc. Rollback = change the header key below back
+// to `Content-Security-Policy-Report-Only`.
 const contentSecurityPolicy = [
   `default-src 'self'`,
   `script-src 'self' 'unsafe-inline'`,
@@ -35,7 +44,7 @@ const nextConfig: NextConfig = {
       {
         source: "/(.*)",
         headers: [
-          { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
+          { key: "Content-Security-Policy", value: contentSecurityPolicy },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
