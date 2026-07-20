@@ -41,11 +41,21 @@ END $$;
 
 ALTER TABLE public.window_manufacturing_schedule_archive ENABLE ROW LEVEL SECURITY;
 
+-- Mirror the source table's Phase 2 read scope (wms_select_staff): staff roles
+-- read archived rows through the completed views. No authenticated write
+-- policies at all — archive rows are inert; the only writer is the SECURITY
+-- DEFINER move function below (table owner bypasses RLS), and rollback
+-- re-inserts run as service_role.
 DROP POLICY IF EXISTS "authenticated_all_window_manufacturing_schedule_archive"
   ON public.window_manufacturing_schedule_archive;
-CREATE POLICY "authenticated_all_window_manufacturing_schedule_archive"
+DROP POLICY IF EXISTS wms_archive_select_staff
+  ON public.window_manufacturing_schedule_archive;
+CREATE POLICY wms_archive_select_staff
   ON public.window_manufacturing_schedule_archive
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  FOR SELECT TO authenticated
+  USING (
+    (SELECT public.get_user_role()) IN ('owner', 'installer', 'scheduler', 'cutter', 'assembler', 'qc')
+  );
 
 CREATE INDEX IF NOT EXISTS idx_wms_archive_unit_id
   ON public.window_manufacturing_schedule_archive (unit_id);
@@ -94,8 +104,14 @@ BEGIN
 END;
 $$;
 
+-- service_role only: the app never invokes the move as a signed-in user — it
+-- runs from the runbook's manual activation step, a SQL cron, or an admin-client
+-- after() hook. Granting it to authenticated would let any logged-in role
+-- trigger the archive move.
+REVOKE EXECUTE ON FUNCTION public.move_completed_schedules_to_archive()
+  FROM PUBLIC, authenticated;
 GRANT EXECUTE ON FUNCTION public.move_completed_schedules_to_archive()
-  TO authenticated, service_role;
+  TO service_role;
 
 -- ── get_role_schedule: add optional archive union ───────────────────────────
 -- Default (p_include_archived = false) reads the active table only — the
