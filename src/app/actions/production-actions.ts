@@ -5,7 +5,6 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { recomputeUnitStatus } from "@/lib/unit-progress";
 import {
-  getCurrentUser,
   requireCutter,
   requireAssembler,
   requireQc,
@@ -14,15 +13,11 @@ import {
   getLinkedQcId,
 } from "@/lib/auth";
 import { emitNotification } from "@/lib/emit-notification";
-import {
-  NOTIF_MFG_BEHIND_SCHEDULE,
-  NOTIF_MFG_PUSHBACK_RESOLVED,
-} from "@/lib/notification-types";
-import { loadManufacturingSettings, reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
-import { addWorkingDays } from "@/lib/manufacturing-calendar";
+import { NOTIF_MFG_PUSHBACK_RESOLVED } from "@/lib/notification-types";
+import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
+import { recomputeManufacturingRiskFlags } from "@/lib/manufacturing-risk";
 import {
   buildManufacturingPushbackResolvedBody,
-  buildManufacturingRiskNotificationBody,
   type UnitNotificationContext,
 } from "@/lib/notification-copy";
 import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-escalations";
@@ -54,6 +49,15 @@ function scheduleManufacturingFollowUp(args: {
 
     await recomputeUnitStatus(followUpSupabase, args.unitId);
     await reflowManufacturingSchedules(args.scheduleReason);
+
+    // C2: qc-approve is the manufacturing event that changes a risk input (the
+    // unit's qc_approved count → possibly 'complete'). Recompute set-based here
+    // so the flag/notification refresh promptly; time-based drift is covered by
+    // the daily /api/cron/manufacturing-risk tick.
+    if (args.scheduleReason === "mark_qc") {
+      await recomputeManufacturingRiskFlags();
+    }
+
     revalidatePath(REVALIDATE_PATH_BY_REASON[args.scheduleReason], "layout");
   });
 }
@@ -310,119 +314,3 @@ export async function markWindowQCApproved(
   }
 }
 
-/**
- * Compute and update manufacturing_risk_flag for all units with an installation_date.
- * Called server-side on cutter/assembler dashboard load.
- *
- * Risk logic (per unit):
- *   - If all windows qc_approved → complete (checkmark, green)
- *   - If installation_date - today <= 0 days → red (not ready by install day)
- *   - If installation_date - today <= 2 days → yellow (1-2 day buffer)
- *   - Otherwise (3+ days) → green (on track)
- */
-export async function computeAndUpdateManufacturingRisk(): Promise<void> {
-  try {
-    // Authz backstop (security finding S1 family, ACTION_AUTHZ_MATRIX.md): this
-    // is a "use server" export, so it is also an anonymous POST endpoint that
-    // writes risk flags and emits notifications. Its only legitimate callers are
-    // the authenticated cutter/assembler/qc dashboard renders (in after()). Gate
-    // it to the manufacturing roles so an anonymous caller cannot trigger the
-    // facility-wide scan/write. (Phase C2 removes it from the action surface.)
-    const actor = await getCurrentUser();
-    if (!actor || !["owner", "cutter", "assembler", "qc"].includes(actor.role)) {
-      return;
-    }
-
-    const supabase = await createClient();
-    const { settings, overrides } = await loadManufacturingSettings();
-    const overridesByDate = new Map(overrides.map((override) => [override.workDate, override]));
-
-    // Load all measured units that have an installation date
-    const { data: units } = await supabase
-      .from("units")
-      .select("id, installation_date, window_count, client_name, building_name, unit_number")
-      .in("status", ["measured", "bracketed", "manufactured"])
-      .not("installation_date", "is", null);
-
-    if (!units || units.length === 0) return;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (const unit of units) {
-      if (!unit.installation_date || unit.window_count === 0) continue;
-
-      const targetReadyDate = addWorkingDays(
-        unit.installation_date,
-        -3,
-        settings,
-        overridesByDate
-      );
-      const readyDate = new Date(targetReadyDate);
-      readyDate.setHours(0, 0, 0, 0);
-      const daysUntil = Math.floor(
-        (readyDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      // Count production statuses for this unit's windows
-      const { data: statuses } = await supabase
-        .from("window_production_status")
-        .select("status")
-        .eq("unit_id", unit.id);
-
-      const qcApprovedCount = statuses?.filter(
-        (s) => s.status === "qc_approved"
-      ).length ?? 0;
-
-      const totalWindows = unit.window_count;
-      const allQCApproved = qcApprovedCount >= totalWindows;
-
-      let flag: "green" | "yellow" | "red" | "complete" = "green";
-      if (allQCApproved) {
-        flag = "complete";
-      } else if (daysUntil <= 0) {
-        flag = "red";
-      } else if (daysUntil <= 2) {
-        flag = "yellow";
-      }
-
-      const { data: prevRow } = await supabase
-        .from("units")
-        .select("manufacturing_risk_flag")
-        .eq("id", unit.id)
-        .maybeSingle();
-      const prevFlag = prevRow?.manufacturing_risk_flag ?? "green";
-
-      await supabase
-        .from("units")
-        .update({ manufacturing_risk_flag: flag })
-        .eq("id", unit.id);
-
-      // Emit scheduler notification when risk escalates inside the 2-day install buffer.
-      if ((flag === "yellow" || flag === "red") && flag !== prevFlag && daysUntil <= 2) {
-        const { data: assignment } = await supabase
-          .from("scheduler_unit_assignments")
-          .select("scheduler_id")
-          .eq("unit_id", unit.id)
-          .maybeSingle();
-        if (assignment?.scheduler_id) {
-          const context: UnitNotificationContext = {
-            clientName: unit.client_name ?? "",
-            buildingName: unit.building_name ?? "",
-            unitNumber: unit.unit_number ?? "",
-          };
-          await emitNotification({
-            recipientRole: "scheduler",
-            recipientId: assignment.scheduler_id,
-            type: NOTIF_MFG_BEHIND_SCHEDULE,
-            title: flag === "red" ? "🔴 Blinds at risk for install" : "🟡 Manufacturing behind schedule",
-            body: buildManufacturingRiskNotificationBody(context, daysUntil),
-            relatedUnitId: unit.id,
-          });
-        }
-      }
-    }
-  } catch {
-    // Non-fatal — risk flags are best-effort
-  }
-}
