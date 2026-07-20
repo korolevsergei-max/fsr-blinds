@@ -108,9 +108,28 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   const userId = claims.sub;
   const userEmail = claims.email ?? "";
-  const appMetadataRole = (claims.app_metadata as Record<string, unknown> | undefined)?.role;
+  const appMetadata = claims.app_metadata as Record<string, unknown> | undefined;
+  const appMetadataRole = appMetadata?.role;
+  const appMetadataName = appMetadata?.display_name;
   const userMetadataName = (claims.user_metadata as Record<string, unknown> | undefined)?.display_name;
   const fallbackDisplayName = deriveDisplayName(userMetadataName, userEmail);
+
+  // Fast path (C3): when the trusted app_metadata claim already carries BOTH the
+  // role and a display name, everything AppUser needs is in the token — return
+  // without the per-navigation user_profiles read. Authorization still comes only
+  // from app_metadata.role (the existing trust model middleware already relies on);
+  // display_name is cosmetic. Users whose app_metadata predates this (no
+  // display_name) fall through to the DB path below, which re-stamps it, so the
+  // fast path engages on their next token refresh — no behavior change until then.
+  const claimRole = normalizeUserRole(appMetadataRole);
+  if (claimRole && typeof appMetadataName === "string" && appMetadataName) {
+    return {
+      id: userId,
+      email: userEmail,
+      role: claimRole,
+      displayName: appMetadataName,
+    };
+  }
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
@@ -120,15 +139,19 @@ export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
 
   // Profile exists — happy path
   if (profile) {
-    // Organic backfill: keep the secure `app_metadata.role` claim in sync with the
-    // DB so middleware can authorize from the token alone (no per-navigation DB read).
-    // Best-effort and only when stale/missing, so steady-state cost is zero. Runs in
-    // RSC/layouts (never middleware), so using the admin client here is safe.
-    if (profile.role && appMetadataRole !== profile.role) {
+    // Organic backfill: keep the secure `app_metadata` claim (role + display_name)
+    // in sync with the DB so middleware can authorize from the token alone and the
+    // fast path above can serve future requests without this read. Best-effort and
+    // only when stale/missing, so steady-state cost is zero. Runs in RSC/layouts
+    // (never middleware), so using the admin client here is safe.
+    if (
+      (profile.role && appMetadataRole !== profile.role) ||
+      (profile.display_name && appMetadataName !== profile.display_name)
+    ) {
       try {
         const admin = createAdminClient();
         await admin.auth.admin.updateUserById(userId, {
-          app_metadata: { role: profile.role },
+          app_metadata: { role: profile.role, display_name: profile.display_name },
         });
       } catch {
         /* non-fatal: middleware DB fallback still covers this user */
