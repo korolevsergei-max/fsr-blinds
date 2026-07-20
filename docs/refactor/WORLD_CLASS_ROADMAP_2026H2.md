@@ -275,6 +275,8 @@ Rollback: set the region back to iad1 and redeploy.
 ### Phase 2 — Instant queue actions
 
 > **Model:** Opus 4.8 / high. Client interaction semantics + action timing; realtime correctness must be preserved (missed updates are worse than slow ones).
+>
+> **⚠ Amended 2026-07-19** ([MANUFACTURING_PERF_ASSESSMENT_2026-07-19.md](../MANUFACTURING_PERF_ASSESSMENT_2026-07-19.md) M2/M5): do **NOT** execute task 3 (deleting the filter/search `router.refresh()` effects) in this phase — the factory portals have no realtime or polling, so those effects are their only in-place freshness; the deletion moves to phase MF2 (factory freshness) in DEEP_ASSESSMENT_2026H2. Additionally, extend this phase's treatment to the pushback/undo actions (they `await reflowManufacturingSchedules` inline + revalidate six paths) and the completed-screen/unit-detail handlers.
 
 ```
 Make the FSR Blinds manufacturing queue actions feel instant. Today every
