@@ -165,12 +165,6 @@ export async function updateSession(request: NextRequest) {
     claims = null;
   }
 
-  // Login page: token cleanup ran above (clears stale cookies so LoginPage's
-  // getCurrentUser() won't see an invalid token), but no redirect logic needed.
-  if (pathname === "/login") {
-    return finish(supabaseResponse, authInvalidated);
-  }
-
   const redirectTo = (path: string) =>
     finish(
       applyAuthCookieDeletions(
@@ -196,6 +190,17 @@ export async function updateSession(request: NextRequest) {
       .maybeSingle();
     return profile?.role ?? null;
   };
+
+  // Login page: token cleanup already ran above (clears stale cookies). Signed-in
+  // users are routed to their portal here, in middleware — so the login page
+  // itself renders as a static shell (no per-request getCurrentUser / DB read).
+  if (pathname === "/login") {
+    if (claims) {
+      const home = homePathForRole(await resolveRole());
+      return redirectTo(home === "/" ? "/management" : home);
+    }
+    return finish(supabaseResponse, authInvalidated);
+  }
 
   if (pathname === "/") {
     if (claims) {

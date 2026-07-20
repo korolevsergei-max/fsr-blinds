@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   signInWithPasswordAction,
@@ -11,7 +11,26 @@ import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ArrowRight, UserPlus } from "@phosphor-icons/react";
 
-export function LoginForm({ allowSignup }: { allowSignup: boolean }) {
+export function LoginForm({ allowSignup: allowSignupProp }: { allowSignup?: boolean } = {}) {
+  // When the (static) login shell renders without a server-computed prop, fetch
+  // the first-owner-signup gate client-side. Default closed (no signup) until it
+  // resolves — the live system always has an owner, so this is the steady state;
+  // signUpOwnerAction enforces the rule server-side regardless.
+  const [allowSignup, setAllowSignup] = useState(allowSignupProp ?? false);
+  useEffect(() => {
+    if (allowSignupProp !== undefined) return;
+    let cancelled = false;
+    fetch("/api/owner-exists")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setAllowSignup(!d.ownerExists);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [allowSignupProp]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
