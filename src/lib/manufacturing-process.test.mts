@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   aggregateManufacturingProcessRows,
   buildManufacturingProcessRows,
+  buildManufacturingProcessRowsFromCounts,
   filterManufacturingProcessRows,
   getManufacturingProcessFilterOptions,
   scopeManufacturingProcessUnits,
@@ -436,4 +437,73 @@ test("sortManufacturingProcessRows sorts grouped floor rows deterministically wi
     sorted.map((row) => `${row.clientId}:${row.buildingName}:${row.floor}`),
     ["client-1:Alpha:2", "client-1:Beta:2"]
   );
+});
+
+// ── M6: SQL-aggregate path must agree with the per-row path ──────────────────
+// Parity is by construction (both funnel into deriveProcessRows), so these
+// assertions guard the *adapter*: that the RPC's four integers are mapped onto
+// the same count maps the row-by-row path builds.
+
+function countsFromProductionRows(
+  units: ManufacturingProcessUnitInput[],
+  productionRows: Array<{ unitId: string; status: string }>,
+  installedWindowUnitIds: string[]
+) {
+  return units.map((unit) => {
+    const rows = productionRows.filter((r) => r.unitId === unit.id);
+    return {
+      unitId: unit.id,
+      cutCount: rows.filter((r) => ["cut", "assembled", "qc_approved"].includes(r.status)).length,
+      assembledCount: rows.filter((r) => ["assembled", "qc_approved"].includes(r.status)).length,
+      qcApprovedCount: rows.filter((r) => r.status === "qc_approved").length,
+      installedCount: installedWindowUnitIds.filter((id) => id === unit.id).length,
+    };
+  });
+}
+
+test("buildManufacturingProcessRowsFromCounts matches the per-row builder", () => {
+  const units = [
+    createUnit({ id: "unit-1", unitNumber: "101", totalBlinds: 3 }),
+    createUnit({ id: "unit-2", unitNumber: "102", totalBlinds: 4 }),
+    createUnit({ id: "unit-3", unitNumber: "201", totalBlinds: 2 }),
+    createUnit({ id: "unit-4", unitNumber: "202", totalBlinds: 5 }),
+  ];
+
+  const productionRows = [
+    // unit-1: partial cut + one assembled
+    { unitId: "unit-1", status: "cut" as const },
+    { unitId: "unit-1", status: "assembled" as const },
+    // unit-2: fully qc approved
+    { unitId: "unit-2", status: "qc_approved" as const },
+    { unitId: "unit-2", status: "qc_approved" as const },
+    { unitId: "unit-2", status: "qc_approved" as const },
+    { unitId: "unit-2", status: "qc_approved" as const },
+    // unit-3: nothing but pending
+    { unitId: "unit-3", status: "pending" as const },
+    { unitId: "unit-3", status: "pending" as const },
+    // unit-4: no production rows at all
+  ];
+
+  // unit-4 fully installed with no QC rows — the legacy installed fallback.
+  const installedWindowUnitIds = [
+    "unit-1",
+    "unit-4", "unit-4", "unit-4", "unit-4", "unit-4",
+  ];
+
+  const fromRows = buildManufacturingProcessRows(units, productionRows, installedWindowUnitIds);
+  const fromCounts = buildManufacturingProcessRowsFromCounts(
+    units,
+    countsFromProductionRows(units, productionRows, installedWindowUnitIds)
+  );
+
+  assert.deepStrictEqual(fromCounts, fromRows);
+});
+
+test("buildManufacturingProcessRowsFromCounts defaults missing units to zero", () => {
+  // The RPC returns a row per in-scope unit, but a unit absent from the result
+  // must still render as all-zero rather than vanish.
+  const units = [createUnit({ id: "unit-1", totalBlinds: 3 })];
+  const [fromCounts] = buildManufacturingProcessRowsFromCounts(units, []);
+  const [fromRows] = buildManufacturingProcessRows(units, [], []);
+  assert.deepStrictEqual(fromCounts, fromRows);
 });

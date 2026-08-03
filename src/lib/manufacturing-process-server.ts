@@ -4,6 +4,7 @@ import { getSchedulerScopedUnitIds } from "./scheduler-scope";
 import type { ProductionStatus } from "./types";
 import {
   buildManufacturingProcessRows,
+  buildManufacturingProcessRowsFromCounts,
   scopeManufacturingProcessUnits,
   type ManufacturingProcessRow,
   type ManufacturingProcessScope,
@@ -30,6 +31,14 @@ type RoomRow = {
 
 type InstalledWindowRow = {
   room_id: string;
+};
+
+type ProcessCountRow = {
+  unit_id: string;
+  cut_count: number;
+  assembled_count: number;
+  qc_approved_count: number;
+  installed_count: number;
 };
 
 type ProductionRow = {
@@ -62,6 +71,32 @@ async function loadManufacturingProcessRowsForUnits(
 
   const unitIds = scopedUnits.map((unit) => unit.id);
   const supabase = await createClient();
+
+  // M6 fast path: one set-based read instead of the rooms -> installed-windows
+  // -> production fan-out below. Falls through to that fan-out on any error, so
+  // an unapplied migration or an RPC failure degrades to the old behaviour
+  // rather than an empty screen.
+  const { data: countRows, error: countsError } = await supabase.rpc(
+    "get_manufacturing_process_counts",
+    { p_unit_ids: unitIds },
+  );
+
+  if (!countsError && Array.isArray(countRows)) {
+    return buildManufacturingProcessRowsFromCounts(
+      scopedUnits,
+      (countRows as ProcessCountRow[]).map((row) => ({
+        unitId: row.unit_id,
+        cutCount: row.cut_count,
+        assembledCount: row.assembled_count,
+        qcApprovedCount: row.qc_approved_count,
+        installedCount: row.installed_count,
+      })),
+    );
+  }
+
+  console.warn(
+    `[perf][process-rows] counts RPC unavailable, using chunked fallback: ${countsError?.message ?? "non-array result"}`,
+  );
 
   const [roomRows, productionRows] = await Promise.all([
     selectInChunks<RoomRow>(unitIds, (chunk) =>

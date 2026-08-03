@@ -222,6 +222,25 @@ export function scopeManufacturingProcessUnits(
   return units.filter((unit) => unit.assignedInstallerId === scope.installerId);
 }
 
+/**
+ * Per-unit tallies, as returned by the `get_manufacturing_process_counts` RPC
+ * (M6). Same semantics as the counts the row-by-row path derives in JS.
+ */
+export interface ManufacturingProcessCountsInput {
+  unitId: string;
+  cutCount: number;
+  assembledCount: number;
+  qcApprovedCount: number;
+  installedCount: number;
+}
+
+type CountMaps = {
+  cutCountMap: Map<string, number>;
+  assembledCountMap: Map<string, number>;
+  qcApprovedCountMap: Map<string, number>;
+  installedCountMap: Map<string, number>;
+};
+
 export function buildManufacturingProcessRows(
   units: ManufacturingProcessUnitInput[],
   productionRows: ManufacturingProcessProductionInput[],
@@ -248,6 +267,54 @@ export function buildManufacturingProcessRows(
     incrementCount(installedCountMap, unitId);
   }
 
+  return deriveProcessRows(units, {
+    cutCountMap,
+    assembledCountMap,
+    qcApprovedCountMap,
+    installedCountMap,
+  });
+}
+
+/**
+ * Same rows, from SQL-side aggregates instead of per-window rows (M6).
+ *
+ * Parity with buildManufacturingProcessRows is by CONSTRUCTION, not by
+ * assertion: both funnel into deriveProcessRows, so the clamping, the
+ * installed-implies-qc rule and the sort can never drift between the two.
+ */
+export function buildManufacturingProcessRowsFromCounts(
+  units: ManufacturingProcessUnitInput[],
+  counts: ManufacturingProcessCountsInput[]
+): ManufacturingProcessRow[] {
+  const cutCountMap = new Map<string, number>();
+  const assembledCountMap = new Map<string, number>();
+  const qcApprovedCountMap = new Map<string, number>();
+  const installedCountMap = new Map<string, number>();
+
+  for (const row of counts) {
+    cutCountMap.set(row.unitId, row.cutCount);
+    assembledCountMap.set(row.unitId, row.assembledCount);
+    qcApprovedCountMap.set(row.unitId, row.qcApprovedCount);
+    installedCountMap.set(row.unitId, row.installedCount);
+  }
+
+  return deriveProcessRows(units, {
+    cutCountMap,
+    assembledCountMap,
+    qcApprovedCountMap,
+    installedCountMap,
+  });
+}
+
+function deriveProcessRows(
+  units: ManufacturingProcessUnitInput[],
+  {
+    cutCountMap,
+    assembledCountMap,
+    qcApprovedCountMap,
+    installedCountMap,
+  }: CountMaps
+): ManufacturingProcessRow[] {
   return units
     .map((unit) => {
       const totalBlinds = unit.totalBlinds;
