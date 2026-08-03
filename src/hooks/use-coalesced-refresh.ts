@@ -13,9 +13,10 @@ import { useRouter } from "next/navigation";
  * The pending timer is cleared on unmount so a refresh can never fire against a
  * torn-down route.
  */
-export function useCoalescedRefresh(delayMs = 1500) {
+export function useCoalescedRefresh(delayMs = 1500, maxWaitMs = 5000) {
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstCallAtRef = useRef<number | null>(null);
 
   useEffect(
     () => () => {
@@ -25,10 +26,29 @@ export function useCoalescedRefresh(delayMs = 1500) {
   );
 
   return useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
+    const now = Date.now();
+    if (firstCallAtRef.current === null) firstCallAtRef.current = now;
+
+    const fire = () => {
       timerRef.current = null;
+      firstCallAtRef.current = null;
       router.refresh();
-    }, delayMs);
-  }, [router, delayMs]);
+    };
+
+    // Pure trailing debounce starves under a sustained burst: a facility reflow
+    // rewrites ~2,000 window_manufacturing_schedule rows, and every resulting
+    // realtime event resets the timer, so the tablet can sit stale for the whole
+    // write. Cap the total wait — the refresh still coalesces, it just can't be
+    // deferred indefinitely.
+    const waitedFor = now - firstCallAtRef.current;
+    const remaining = Math.max(0, maxWaitMs - waitedFor);
+    if (remaining === 0) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      fire();
+      return;
+    }
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(fire, Math.min(delayMs, remaining));
+  }, [router, delayMs, maxWaitMs]);
 }
