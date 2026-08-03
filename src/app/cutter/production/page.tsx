@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { loadPersistedRoleSchedule } from "@/lib/manufacturing-scheduler";
+import {
+  logFactoryPayload,
+  selectFactoryScheduleView,
+} from "@/lib/manufacturing-role-projection";
 import { CutterProduction } from "@/components/manufacturing/cutter-production";
 
 export default async function CutterProductionPage() {
@@ -8,7 +12,9 @@ export default async function CutterProductionPage() {
   if (!user) redirect("/login");
 
   // Pure read — the schedule is reflowed by mutations, never by views.
-  const schedule = await loadPersistedRoleSchedule("cutter");
+  const full = await loadPersistedRoleSchedule("cutter");
+  const schedule = selectFactoryScheduleView("cutter", full);
+  logFactoryPayload("cutter", schedule, full.allItems.length);
 
   return <CutterProduction schedule={schedule} userName={user.displayName} />;
 }

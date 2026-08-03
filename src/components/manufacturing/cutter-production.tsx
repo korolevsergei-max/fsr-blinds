@@ -21,9 +21,9 @@ import { useManufacturingFreshness } from "@/hooks/use-manufacturing-freshness";
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
-  ManufacturingRoleSchedule,
   ManufacturingWindowItem,
 } from "@/lib/manufacturing-scheduler";
+import type { FactoryScheduleView } from "@/lib/manufacturing-role-projection";
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { getFloor } from "@/lib/app-dataset";
@@ -147,7 +147,7 @@ export function CutterProduction({
   schedule,
   userName,
 }: {
-  schedule: ManufacturingRoleSchedule;
+  schedule: FactoryScheduleView;
   userName?: string;
 }) {
   const router = useRouter();

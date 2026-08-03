@@ -8,7 +8,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
-import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
+import type { FactoryScheduleView } from "@/lib/manufacturing-role-projection";
 import {
   buildManufacturingDashboardState,
   type ManufacturingDashboardCategory,
@@ -213,7 +213,7 @@ export function ManufacturingRolePipelineDashboard({
   unitHrefBase,
 }: {
   role: ManufacturingRole;
-  schedule: ManufacturingRoleSchedule;
+  schedule: FactoryScheduleView;
   unitHrefBase: string;
 }) {
   const [activeCategory, setActiveCategory] = useState<ManufacturingDashboardCategory | null>(null);

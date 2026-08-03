@@ -2,6 +2,10 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { loadPersistedRoleSchedule } from "@/lib/manufacturing-scheduler";
+import {
+  logFactoryPayload,
+  selectFactoryScheduleView,
+} from "@/lib/manufacturing-role-projection";
 import { ManufacturingRoleShell } from "@/components/manufacturing/manufacturing-role-dashboard";
 import { ManufacturingRolePipelineDashboard } from "@/components/manufacturing/manufacturing-role-pipeline-dashboard";
 import { ManufacturingPipelineSkeleton } from "@/components/manufacturing/manufacturing-dashboard-skeleton";
@@ -22,7 +26,9 @@ export default async function CutterPage() {
 }
 
 async function CutterPipeline() {
-  const schedule = await loadPersistedRoleSchedule("cutter");
+  const full = await loadPersistedRoleSchedule("cutter");
+  const schedule = selectFactoryScheduleView("cutter", full);
+  logFactoryPayload("cutter", schedule, full.allItems.length);
   return (
     <ManufacturingRolePipelineDashboard
       role="cutter"
