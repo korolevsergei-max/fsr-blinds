@@ -33,7 +33,13 @@ export function useManufacturingFreshness(scheduleRefresh: () => void) {
       `manufacturing-freshness-${Math.random().toString(36).slice(2)}`
     );
 
-    const onChange = () => scheduleRefresh();
+    // A hidden tab must not pay for a refresh it cannot show: the RSC refetch is
+    // the expensive part of this path. Dropping the event is safe because the
+    // visibilitychange handler below refreshes unconditionally on return.
+    const onChange = () => {
+      if (document.visibilityState === "hidden") return;
+      scheduleRefresh();
+    };
 
     // `postgres_changes` is typed narrowly in the SDK; the app's realtime layer
     // uses the same cast (see use-realtime-sync.ts).
@@ -56,7 +62,11 @@ export function useManufacturingFreshness(scheduleRefresh: () => void) {
     });
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") scheduleRefresh();
+      if (document.visibilityState !== "visible") return;
+      // Unconditional: postgres_changes are not replayed after a dropped socket,
+      // and onChange drops events while hidden, so returning to the tab always
+      // warrants exactly one refetch.
+      scheduleRefresh();
     };
     document.addEventListener("visibilitychange", onVisibility);
 

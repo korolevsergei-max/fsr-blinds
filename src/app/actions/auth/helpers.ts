@@ -145,12 +145,17 @@ export async function upsertUserProfile(
     email: email.trim(),
   });
 
-  // Write the authorization claim. app_metadata is service-role-only writable
-  // (unlike user_metadata, which the user can edit), so middleware can trust it
-  // as the role source without a per-navigation user_profiles query. Best-effort:
-  // if this fails, middleware falls back to the DB and getCurrentUser self-heals.
+  // Write the authorization claim + display name. app_metadata is
+  // service-role-only writable (unlike user_metadata, which the user can edit),
+  // so middleware can trust `role` as the authorization source without a
+  // per-navigation user_profiles query, and getCurrentUser (C3) can serve
+  // display_name from the token too — skipping the profile read entirely.
+  // Best-effort: if this fails, middleware falls back to the DB and
+  // getCurrentUser self-heals + re-stamps on the next request.
   try {
-    await admin.auth.admin.updateUserById(authUserId, { app_metadata: { role } });
+    await admin.auth.admin.updateUserById(authUserId, {
+      app_metadata: { role, display_name: displayName.trim() || email.trim() },
+    });
   } catch {
     /* non-fatal: middleware DB fallback + getCurrentUser self-heal cover this */
   }

@@ -1,18 +1,9 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { homePathForRole } from "@/lib/role-routes";
-import { ownerAccountExists } from "@/app/actions/auth/helpers";
 import { LoginForm } from "./login-form";
 
-export default async function LoginPage() {
-  const user = await getCurrentUser();
-  if (user) {
-    const nextPath = homePathForRole(user.role);
-    redirect(nextPath === "/" ? "/management" : nextPath);
-  }
-
-  const ownerExists = await ownerAccountExists();
-
+// Static shell (C3): the signed-in redirect moved to middleware and the
+// first-owner-signup gate is fetched client-side (/api/owner-exists), so this
+// page reads nothing per-request and prerenders / CDN-caches.
+export default function LoginPage() {
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
       <div className="flex-1 flex flex-col justify-between px-6 py-14 max-w-md mx-auto w-full">
@@ -32,7 +23,7 @@ export default async function LoginPage() {
 
         {/* Form surface */}
         <div className="surface-card p-6 my-10">
-          <LoginForm allowSignup={!ownerExists} />
+          <LoginForm />
         </div>
 
         {/* Footer note */}

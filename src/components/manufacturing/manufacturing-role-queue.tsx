@@ -16,9 +16,9 @@ import {
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { matchesQueueSearch } from "@/lib/queue-search";
 import type {
-  ManufacturingRoleSchedule,
   ManufacturingWindowItem,
 } from "@/lib/manufacturing-scheduler";
+import type { RoleQueueView } from "@/lib/manufacturing-role-projection";
 import { formatStoredDateLongEnglish } from "@/lib/created-date";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { getFloor } from "@/lib/app-dataset";
@@ -104,7 +104,7 @@ function sortFlatItems(
 }
 
 function flattenScheduleWindows(
-  schedule: ManufacturingRoleSchedule
+  schedule: RoleQueueView
 ): ManufacturingWindowItem[] {
   return schedule.buckets.flatMap((b) =>
     b.units.flatMap((u) => u.blindTypeGroups.flatMap((g) => g.windows))
@@ -132,7 +132,7 @@ export function ManufacturingRoleQueue({
   userName,
 }: {
   role: "assembler" | "qc";
-  schedule: ManufacturingRoleSchedule;
+  schedule: RoleQueueView;
   userName?: string;
 }) {
   const router = useRouter();

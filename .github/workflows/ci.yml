@@ -1,0 +1,41 @@
+name: CI
+
+# Quality floor (D2): every PR and every push to main runs the same gate the
+# per-phase checklist runs locally — lint, typecheck, tests, build, perf budget.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Placeholders: the app creates Supabase clients per-request, not at
+          # build time, so the production build only needs these to be present.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-publishable-key
+
+      - name: Perf budget
+        run: npm run perf-budget

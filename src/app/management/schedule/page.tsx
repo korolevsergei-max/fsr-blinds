@@ -9,10 +9,13 @@ export default function SchedulePage() {
   // "installer" tab (which reads the already-loaded dataset from context) paint
   // immediately; the manufacturing tab unwraps this promise behind its own Suspense
   // boundary, so these reads no longer block first paint on every visit.
+  // includeArchived: the management schedule's completed count reads qc_approved
+  // items across all-time history (schedule-view-model), so it must include
+  // archived (fully-installed) rows once C1's archive move runs.
   const manufacturingSchedulesPromise = Promise.all([
-    loadPersistedRoleSchedule("cutter"),
-    loadPersistedRoleSchedule("assembler"),
-    loadPersistedRoleSchedule("qc"),
+    loadPersistedRoleSchedule("cutter", { includeArchived: true }),
+    loadPersistedRoleSchedule("assembler", { includeArchived: true }),
+    loadPersistedRoleSchedule("qc", { includeArchived: true }),
   ]).then(([cutter, assembler, qc]) => ({ cutter, assembler, qc }));
 
   return <ScheduleScreen manufacturingSchedulesPromise={manufacturingSchedulesPromise} />;

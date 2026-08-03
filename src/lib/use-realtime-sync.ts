@@ -266,10 +266,18 @@ export function useRealtimeSync(
     });
 
     on("window_post_install_issues", () => {
+      // Owner/scheduler global screens render only the per-unit "has an open
+      // issue" boolean (units_with_open_post_install_issue), which any
+      // open/resolve toggles — so they must still refetch on issue changes.
       scheduleDatasetRefresh();
     });
 
     on("window_post_install_issue_notes", () => {
+      // D1: notes are rendered only on unit-detail (loads its own) and installer
+      // scopes. The owner/scheduler global datasets carry no post-install issues
+      // or notes (postInstallIssues: [] after the Phase 11 enrichment fold), so a
+      // note change can't affect anything they render — skip the 509 KB refetch.
+      if (loaderKind === "full" || loaderKind === "scheduler") return;
       scheduleDatasetRefresh();
     });
 

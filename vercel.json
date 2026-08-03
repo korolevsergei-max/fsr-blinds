@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/daily-snapshot",
       "schedule": "5 5 * * *"
+    },
+    {
+      "path": "/api/cron/manufacturing-risk",
+      "schedule": "0 6 * * *"
     }
   ]
 }

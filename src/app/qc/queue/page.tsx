@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { loadPersistedRoleSchedule } from "@/lib/manufacturing-scheduler";
+import { selectRoleQueueView } from "@/lib/manufacturing-role-projection";
 import { ManufacturingRoleQueue } from "@/components/manufacturing/manufacturing-role-queue";
 
 export default async function QcQueuePage() {
@@ -8,7 +9,9 @@ export default async function QcQueuePage() {
   if (!user) redirect("/login");
 
   // Pure read — the schedule is reflowed by mutations, never by views.
-  const schedule = await loadPersistedRoleSchedule("qc");
+  const schedule = selectRoleQueueView(
+    await loadPersistedRoleSchedule("qc"),
+  );
 
   return <ManufacturingRoleQueue role="qc" schedule={schedule} userName={user.displayName} />;
 }

@@ -418,7 +418,11 @@ export function buildManufacturingScheduleState(args: {
 }
 
 export function buildManufacturingDashboardState(args: {
-  schedule: ManufacturingRoleSchedule;
+  // Only these two fields are read (currentWorkDate + allItems), so the factory
+  // dashboards can pass the narrowed FactoryScheduleView instead of the whole
+  // all-time schedule. buildManufacturingScheduleState above still takes the
+  // full shape — it reads `buckets`.
+  schedule: Pick<ManufacturingRoleSchedule, "allItems" | "currentWorkDate">;
   role: "cutter" | "assembler" | "qc";
   today: Date;
   clientFilter: string[];
