@@ -299,6 +299,23 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
   }
 
   const unitIds = units.map((unit) => unit.id);
+
+  // Pull any archived rows for these units back into the active table BEFORE
+  // reading `schedules` below (C1, 20260721120000). units.status is derived, so
+  // a unit can re-enter the manufacturing zone after being archived — e.g. a
+  // window is added to an installed unit. Without the restore, `existing` is
+  // null for every one of its windows and reflow mints fresh rows, silently
+  // discarding is_schedule_locked / lock_reason / manual_priority / moved_at.
+  // No-op (and cheap) while the archive is empty or holds nothing for them.
+  const { error: restoreError } = await supabase.rpc("restore_schedules_from_archive", {
+    p_unit_ids: unitIds,
+  });
+  if (restoreError) {
+    // Non-fatal: the reflow below is still correct for units that were never
+    // archived, which is every unit until the operator activates the archive.
+    console.warn("[mfg] restore_schedules_from_archive failed:", restoreError.message);
+  }
+
   const rooms = await selectInChunks<RoomRow>(unitIds, (chunk) =>
     supabase
       .from("rooms")
@@ -802,7 +819,13 @@ export async function loadPersistedRoleSchedule(
 
   const allScheduleRows = await pageTable("window_manufacturing_schedule");
   if (includeArchived) {
-    allScheduleRows.push(...(await pageTable("window_manufacturing_schedule_archive")));
+    // Active wins over archive on window_id — mirrors the NOT EXISTS guard in
+    // get_role_schedule (20260721120000). A unit that re-enters the zone after
+    // being archived gets fresh active rows while the archived ones remain, so
+    // without this the completed views would show two items per window.
+    const activeWindowIds = new Set(allScheduleRows.map((row) => row.window_id));
+    const archived = await pageTable("window_manufacturing_schedule_archive");
+    allScheduleRows.push(...archived.filter((row) => !activeWindowIds.has(row.window_id)));
   }
 
   const schedules = allScheduleRows;
