@@ -5,6 +5,7 @@
 import type {
   Building,
   Client,
+  CurrentStage,
   Cutter,
   Installer,
   Room,
@@ -55,12 +56,28 @@ export type UnitRow = {
   building_name: string;
   unit_number: string;
   status: UnitStatus;
+  /**
+   * Pipeline stage derived from production truth (windows + window_production_status)
+   * by the `unit_current_stages` view, returned by the owner/scheduler dataset RPCs.
+   * `units.status` cannot express cutting/assembling, so without this the dashboards
+   * count in-manufacturing units as Measured/Bracketed. Absent on the pre-migration
+   * and chunked fallback paths — mapUnit then leaves `currentStage` unset and
+   * getUnitCurrentStage() falls back to the status mapping.
+   */
+  current_stage?: CurrentStage | null;
   risk_flag: RiskFlag;
   assigned_installer_id: string | null;
   assigned_installer_name: string | null;
   measurement_date: string | null;
   bracketing_date: string | null;
   installation_date: string | null;
+  /**
+   * Day the unit actually became fully installed. Distinct from
+   * installation_date, which is the SCHEDULED date. Optional because the
+   * scheduler/installer dataset RPCs do not project it — only the owner
+   * dataset does, and the Progress Report is owner-only.
+   */
+  installed_at?: string | null;
   earliest_bracketing_date: string | null;
   earliest_installation_date?: string | null;
   complete_by_date?: string | null;
@@ -188,6 +205,9 @@ export function mapUnit(
     buildingName: r.building_name,
     unitNumber: r.unit_number,
     status: r.status,
+    // Only present on the RPC paths that select it; omitted (not undefined) otherwise
+    // so the mapped shape stays identical on the fallback paths.
+    ...(r.current_stage ? { currentStage: r.current_stage } : {}),
     assignedInstallerId: r.assigned_installer_id || (schedulerId ? `sch-${schedulerId}` : null),
     assignedInstallerName: r.assigned_installer_name || (schedulerName ? `SC: ${schedulerName}` : null),
     assignedSchedulerId: schedulerId ?? null,
@@ -195,6 +215,7 @@ export function mapUnit(
     measurementDate: r.measurement_date || null,
     bracketingDate: r.bracketing_date,
     installationDate: r.installation_date || null,
+    installedAt: r.installed_at || null,
     earliestBracketingDate: r.earliest_bracketing_date,
     earliestInstallationDate: r.earliest_installation_date || null,
     completeByDate: r.complete_by_date || null,

@@ -60,6 +60,26 @@ test("owner stage counts: an open post-install issue beats the status-derived st
   assert.equal(stageCounts.assembling, 0);
 });
 
+// Guards the 2026-08-05 bug: the Cut/Assembled buckets were structurally always 0
+// because both the TS bucketing and the SQL CASE derived the stage from `units.status`,
+// which stays `measured` all the way through manufacturing. The stage now arrives as
+// `currentStage` (unit_current_stages view → mapUnit); the SQL
+// get_owner_dashboard_counts must bucket by the same value.
+test("owner stage counts: cutting/assembling units are counted by their derived stage", () => {
+  const units = [
+    makeUnit({ id: "a", status: "measured", currentStage: "cutting" }),
+    makeUnit({ id: "b", status: "measured", currentStage: "cutting" }),
+    makeUnit({ id: "c", status: "measured", currentStage: "assembling" }),
+    makeUnit({ id: "d", status: "measured", currentStage: "measurement" }),
+  ];
+
+  const { stageCounts } = computeOwnerDashboardCounts(units, TODAY, new Set());
+
+  assert.equal(stageCounts.cutting, 2);
+  assert.equal(stageCounts.assembling, 1);
+  assert.equal(stageCounts.measurement, 1);
+});
+
 test("owner issue counts: missing installation date is flagged; escalations come from the id set", () => {
   const units = [makeUnit({ id: "m", status: "measured", installationDate: null })];
 

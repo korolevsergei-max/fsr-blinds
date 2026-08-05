@@ -3,6 +3,7 @@ import { getUnitMilestoneCoverageWithClient } from "@/lib/unit-milestones";
 import type { UnitStatus } from "@/lib/types";
 import { deriveUnitStatusFromCounts } from "@/lib/unit-status-helpers";
 import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
+import { todayInToronto } from "@/lib/progress-snapshot";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -26,7 +27,15 @@ export async function recomputeUnitStatus(
   const newStatus = deriveStatusFromCoverage(coverage);
 
   if (newStatus !== current?.status) {
-    await supabase.from("units").update({ status: newStatus }).eq("id", unitId);
+    // installed_at is the completion fact the owner Progress Report reports on —
+    // stamped here because this is the only writer of units.status, and cleared
+    // on the way out so an undone install leaves no stale completion date.
+    // (installation_date stays the SCHEDULED date; it is not touched.)
+    const patch: { status: UnitStatus; installed_at?: string | null } = { status: newStatus };
+    if (newStatus === "installed") patch.installed_at = todayInToronto();
+    else if (current?.status === "installed") patch.installed_at = null;
+
+    await supabase.from("units").update(patch).eq("id", unitId);
     await logStatusChange(
       supabase,
       unitId,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeScheduleEntries } from "./dataset-mappers.ts";
+import { mapUnit, normalizeScheduleEntries, type UnitRow } from "./dataset-mappers.ts";
 import type { ScheduleEntry, Unit } from "./types";
 
 function createUnit(overrides: Partial<Unit> = {}): Unit {
@@ -47,6 +47,39 @@ function createScheduleEntry(taskType: ScheduleEntry["taskType"]): ScheduleEntry
     status: "not_started",
   };
 }
+
+function createUnitRow(overrides: Partial<UnitRow> = {}): UnitRow {
+  return {
+    id: "unit-1",
+    building_id: "building-1",
+    client_id: "client-1",
+    client_name: "Client One",
+    building_name: "Building One",
+    unit_number: "101",
+    status: "measured",
+    risk_flag: "green",
+    assigned_installer_id: null,
+    assigned_installer_name: null,
+    measurement_date: null,
+    bracketing_date: null,
+    installation_date: null,
+    earliest_bracketing_date: null,
+    room_count: 2,
+    window_count: 8,
+    photos_uploaded: 0,
+    notes_count: 0,
+    created_at: null,
+    ...overrides,
+  };
+}
+
+test("mapUnit carries the RPC-derived current_stage so cut units aren't read as measured", () => {
+  assert.equal(mapUnit(createUnitRow({ current_stage: "cutting" })).currentStage, "cutting");
+});
+
+test("mapUnit omits currentStage when the row has none (fallback paths keep the old shape)", () => {
+  assert.equal("currentStage" in mapUnit(createUnitRow()), false);
+});
 
 test("normalizeScheduleEntries uses the live unit status instead of stale schedule entry status", () => {
   const unit = createUnit();

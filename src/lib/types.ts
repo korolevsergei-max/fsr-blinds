@@ -195,7 +195,14 @@ export interface Unit {
   assignedSchedulerName?: string | null;
   measurementDate: string | null;
   bracketingDate: string | null;
+  /** SCHEDULED install date, set at assignment or by CSV import. Not a completion fact. */
   installationDate: string | null;
+  /**
+   * Day (America/Toronto) every window in the unit was installed — the completion
+   * fact the owner Progress Report buckets by. Stamped by recomputeUnitStatus.
+   * Null only on dataset paths that do not project it (scheduler/installer).
+   */
+  installedAt?: string | null;
   earliestBracketingDate: string | null;
   earliestInstallationDate?: string | null;
   /** Static client deadline set by owner or scheduler; does not drive status or flags. */

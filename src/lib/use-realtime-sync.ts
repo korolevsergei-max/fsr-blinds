@@ -205,7 +205,16 @@ export function useRealtimeSync(
           const units = remove(prev.units, id);
           return { ...prev, units, schedule: normalizeScheduleEntries(units, prev.schedule) };
         }
-        const units = upsert(prev.units, mapUnit(p.new as UnitRow));
+        // postgres_changes ships raw `units` columns only; `current_stage` is derived
+        // (unit_current_stages view) and comes in with the RSC payload. Carry the loaded
+        // value forward so a unit that is cut/assembled isn't downgraded to its
+        // status-derived stage — `units.status` cannot express those two stages.
+        const mapped = mapUnit(p.new as UnitRow);
+        const known = prev.units.find((u) => u.id === mapped.id)?.currentStage;
+        const units = upsert(
+          prev.units,
+          !mapped.currentStage && known ? { ...mapped, currentStage: known } : mapped
+        );
         return { ...prev, units, schedule: normalizeScheduleEntries(units, prev.schedule) };
       });
     });

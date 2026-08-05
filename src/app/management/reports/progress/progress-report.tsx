@@ -40,31 +40,74 @@ type FloorGroup = {
   windowTotal: number;
 };
 
+type ReportData = {
+  groups: FloorGroup[];
+  /**
+   * Units in the building that ARE fully installed but carry no completion date,
+   * so they fall outside every period. Surfaced rather than dropped: silently
+   * omitting them is what made this report disagree with the Manufacturing
+   * Process screen by 69 units / 477 blinds before installedAt existed.
+   */
+  undatedUnits: Unit[];
+  /** Every fully-installed unit in the building, dated or not — the reconciliation base. */
+  completedTotal: { units: number; windows: number };
+};
+
+const EMPTY_REPORT: ReportData = {
+  groups: [],
+  undatedUnits: [],
+  completedTotal: { units: 0, windows: 0 },
+};
+
+function sumWindows(units: Unit[]): number {
+  return units.reduce((acc, u) => acc + (u.windowCount ?? 0), 0);
+}
+
 /**
- * Completed units (status === "installed") whose installation date falls within
- * [from, to] (inclusive), grouped and sorted by floor. String YYYY-MM-DD
+ * Completed units grouped and sorted by floor.
+ *
+ * "Completed" is `status === "installed"`, i.e. every window in the unit is
+ * installed — the same predicate the Manufacturing Process screen uses for its
+ * Installed filter, so the two screens tie by construction.
+ *
+ * The period filter uses `installedAt` (the day the unit actually finished), NOT
+ * `installationDate` (the date it was SCHEDULED for). String YYYY-MM-DD
  * comparisons are lexicographically correct, matching the Status Grid report.
  */
-function buildFloorGroups(
+function buildReportData(
   units: Unit[],
   buildingId: string,
   from: string,
   to: string
-): FloorGroup[] {
-  if (!buildingId) return [];
+): ReportData {
+  if (!buildingId) return EMPTY_REPORT;
 
   const map = new Map<string, Unit[]>();
+  const undatedUnits: Unit[] = [];
+  const completed: Unit[] = [];
+
   for (const u of units) {
     if (u.buildingId !== buildingId) continue;
     if (u.status !== "installed") continue;
-    if (!u.installationDate || u.installationDate < from || u.installationDate > to) continue;
+    completed.push(u);
+
+    const completedOn = u.installedAt;
+    if (!completedOn) {
+      undatedUnits.push(u);
+      continue;
+    }
+    if (completedOn < from || completedOn > to) continue;
 
     const floor = getFloor(u.unitNumber);
     if (!map.has(floor)) map.set(floor, []);
     map.get(floor)!.push(u);
   }
 
-  return [...map.entries()]
+  undatedUnits.sort((a, b) =>
+    a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true })
+  );
+
+  const groups = [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
     .map(([floor, list]) => {
       list.sort((a, b) =>
@@ -74,9 +117,15 @@ function buildFloorGroups(
         floor,
         units: list,
         unitCount: list.length,
-        windowTotal: list.reduce((acc, u) => acc + (u.windowCount ?? 0), 0),
+        windowTotal: sumWindows(list),
       };
     });
+
+  return {
+    groups,
+    undatedUnits,
+    completedTotal: { units: completed.length, windows: sumWindows(completed) },
+  };
 }
 
 // ─── Props ─────────────────────────────────────────────────────────────────
@@ -402,8 +451,8 @@ export function ProgressReport({ units, clients, buildings }: Props) {
     [selectedClientId, buildings]
   );
 
-  const groups = useMemo(
-    () => buildFloorGroups(units, selectedBuildingId, from, to),
+  const { groups, undatedUnits, completedTotal } = useMemo(
+    () => buildReportData(units, selectedBuildingId, from, to),
     [units, selectedBuildingId, from, to]
   );
 
@@ -415,6 +464,7 @@ export function ProgressReport({ units, clients, buildings }: Props) {
     () => groups.reduce((acc, g) => acc + g.windowTotal, 0),
     [groups]
   );
+  const undatedWindows = useMemo(() => sumWindows(undatedUnits), [undatedUnits]);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId);
   const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId);
@@ -539,8 +589,8 @@ export function ProgressReport({ units, clients, buildings }: Props) {
             </div>
           </div>
           <p className="text-[11px] text-muted">
-            Shows units fully installed with an installation date in this range
-            (inclusive).
+            Shows units whose every window was installed, by the day the unit was
+            completed, in this range (inclusive).
           </p>
           {rangeInvalid ? (
             <p className="text-[11px] font-semibold text-red-500">
@@ -568,6 +618,45 @@ export function ProgressReport({ units, clients, buildings }: Props) {
           </div>
         )}
 
+        {/* Reconciliation against the building's full completed total. Shown
+            whenever the period does not account for every completed unit, so a
+            gap versus the Manufacturing Process screen is always explained on
+            screen instead of being discovered by hand. */}
+        {selectedBuildingId && completedTotal.units > totalUnits && (
+          <div className="px-4 pt-3">
+            <div className="surface-card border border-border rounded-[12px] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted mb-1.5">
+                Reconciliation
+              </p>
+              <p className="text-[12px] text-foreground">
+                This building has {completedTotal.units} completed{" "}
+                {completedTotal.units === 1 ? "unit" : "units"} ·{" "}
+                {completedTotal.windows} windows in total.
+              </p>
+              <ul className="mt-1.5 space-y-1 text-[12px] text-muted">
+                <li>
+                  {totalUnits} {totalUnits === 1 ? "unit" : "units"} · {totalWindows} windows
+                  completed in this period
+                </li>
+                {completedTotal.units - totalUnits - undatedUnits.length > 0 && (
+                  <li>
+                    {completedTotal.units - totalUnits - undatedUnits.length} units ·{" "}
+                    {completedTotal.windows - totalWindows - undatedWindows} windows
+                    completed outside this period
+                  </li>
+                )}
+                {undatedUnits.length > 0 && (
+                  <li className="text-amber-600 font-semibold">
+                    {undatedUnits.length} {undatedUnits.length === 1 ? "unit" : "units"} ·{" "}
+                    {undatedWindows} windows with no completion date on record —{" "}
+                    {undatedUnits.map((u) => u.unitNumber).join(", ")}
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {/* Empty states */}
         {!selectedBuildingId && (
           <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
@@ -590,8 +679,8 @@ export function ProgressReport({ units, clients, buildings }: Props) {
               No completed units in this period
             </p>
             <p className="text-[12px] text-muted">
-              No units in this building were fully installed between{" "}
-              {formatDate(from)} and {formatDate(to)}.
+              No units in this building were completed between {formatDate(from)}{" "}
+              and {formatDate(to)}.
             </p>
           </div>
         )}
