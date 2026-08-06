@@ -17,7 +17,15 @@ export default function UnitsPage() {
     shallowEqual
   );
   const schedulers = useDatasetSelector((value) => value.data.schedulers);
+  const partners = useDatasetSelector((value) => value.data.manufacturingPartners);
   const userRole = useDatasetSelector((value) => value.user.role);
 
-  return <UnitsList data={data} schedulers={schedulers} userRole={userRole} />;
+  return (
+    <UnitsList
+      data={data}
+      schedulers={schedulers}
+      partners={partners}
+      userRole={userRole}
+    />
+  );
 }

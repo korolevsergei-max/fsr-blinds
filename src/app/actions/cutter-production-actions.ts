@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireCutterOrOwner } from "@/lib/auth";
@@ -27,6 +28,23 @@ export async function moveUnitToProduction(unitId: string): Promise<ActionResult
   try {
     await requireCutterOrOwner();
     const supabase = await createClient();
+
+    // Exclusivity: a subcontracted unit must never enter the in-house production
+    // floor. The queue no longer lists them, so reaching here means a stale tab.
+    const { data: unitRow } = await supabase
+      .from("units")
+      .select("manufacturing_partner_id, unit_number")
+      .eq("id", unitId)
+      .maybeSingle();
+    const unit = unitRow as
+      | { manufacturing_partner_id: string | null; unit_number: string }
+      | null;
+    if (unit && (unit.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== INTERNAL_PARTNER_ID) {
+      return {
+        ok: false,
+        error: `Unit ${unit.unit_number} is manufactured by a subcontractor. Refresh — it has left the in-house queue.`,
+      };
+    }
 
     const { error } = await supabase
       .from("units")

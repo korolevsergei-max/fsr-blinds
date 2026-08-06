@@ -11,6 +11,7 @@ import {
   mapWindow,
   mapSchedule,
   mapCutter,
+  mapManufacturingPartner,
   mapScheduler,
   normalizeScheduleEntries,
   type ClientRow,
@@ -21,6 +22,7 @@ import {
   type WindowRow,
   type ScheduleRow,
   type CutterRow,
+  type ManufacturingPartnerRow,
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
 
@@ -39,6 +41,10 @@ export function buildDatasetFromRaw(raw: {
   cutters: CutterRow[];
   schedulers: SchedulerRow[];
   scheduler_unit_assignments: { unit_id: string; scheduler_id: string; assigned_at: string }[];
+  // Present on the owner dataset RPC (20260806120000). Absent on the fallback and
+  // scoped paths, which yield an empty list — every unit then reads as internal,
+  // which is the DB default and so the safe assumption.
+  manufacturing_partners?: ManufacturingPartnerRow[];
   // Phase 11: optional pre-enrichment folded into the owner dataset RPC. When present, callers
   // pass `preEnriched: true` to finalizeDataset so it skips the redundant enrichment round-trips.
   // Absent on the fallback paths (the legacy multi-query / get_full_dataset), which enrich in TS.
@@ -88,6 +94,7 @@ export function buildDatasetFromRaw(raw: {
     schedule,
     cutters: (raw.cutters ?? []).map(mapCutter),
     schedulers,
+    manufacturingPartners: (raw.manufacturing_partners ?? []).map(mapManufacturingPartner),
     manufacturingEscalations: (raw.manufacturing_escalations ?? []).map(mapManufacturingEscalation),
     postInstallIssues: [],
   };
@@ -126,6 +133,7 @@ export function emptyDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingPartners: [],
     manufacturingEscalations: [],
     postInstallIssues: [],
   };

@@ -9,6 +9,7 @@ import {
   CalendarBlank,
   CalendarCheck,
   CheckSquare,
+  Factory,
   FunnelSimple,
   MagnifyingGlass,
   Square,
@@ -37,7 +38,9 @@ import {
 } from "@/lib/created-date";
 import { getFloor } from "@/lib/app-dataset";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
-import type { Scheduler } from "@/lib/types";
+import type { ManufacturingPartner, Scheduler } from "@/lib/types";
+import { BulkAssignManufacturerSheet } from "@/components/units/bulk-assign-manufacturer-sheet";
+import { INTERNAL_PARTNER_ID, partnerNameFor, sortPartners } from "@/lib/manufacturing-partners";
 
 /** Dataset slices the management units list reads. */
 export type UnitsListData = Pick<
@@ -48,10 +51,12 @@ export type UnitsListData = Pick<
 export function UnitsList({
   data,
   schedulers = [],
+  partners = [],
   userRole,
 }: {
   data: UnitsListData;
   schedulers?: Scheduler[];
+  partners?: ManufacturingPartner[];
   userRole?: string;
 }) {
   const { units, clients, buildings, installers } = data;
@@ -63,6 +68,7 @@ export function UnitsList({
   const [statusFilter, setStatusFilter] = useSessionStorage<string[]>("management-statusFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("management-installerFilter", []);
   const [schedulerFilter, setSchedulerFilter] = useSessionStorage<string[]>("management-schedulerFilter", []);
+  const [manufacturerFilter, setManufacturerFilter] = useSessionStorage<string[]>("management-manufacturerFilter", []);
   const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("management-floorFilter", []);
   const [dateAddedFilter, setDateAddedFilter] = useSessionStorage<AddedDateFilter>("management-dateAddedFilter", "all");
   const [completeByFilter, setCompleteByFilter] = useSessionStorage<AddedDateFilter>("management-completeByFilter", "all");
@@ -76,25 +82,35 @@ export function UnitsList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkSheet, setShowBulkSheet] = useState(false);
   const [showSchedulerSheet, setShowSchedulerSheet] = useState(false);
+  const [showManufacturerSheet, setShowManufacturerSheet] = useState(false);
   const [showDatesSheet, setShowDatesSheet] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  function openBulkAssignInstaller() {
+  function closeAllSheets() {
+    setShowBulkSheet(false);
     setShowSchedulerSheet(false);
+    setShowManufacturerSheet(false);
     setShowDatesSheet(false);
+  }
+
+  function openBulkAssignInstaller() {
+    closeAllSheets();
     setShowBulkSheet(true);
   }
 
   function openBulkAssignScheduler() {
-    setShowBulkSheet(false);
-    setShowDatesSheet(false);
+    closeAllSheets();
     setShowSchedulerSheet(true);
   }
 
+  function openBulkAssignManufacturer() {
+    closeAllSheets();
+    setShowManufacturerSheet(true);
+  }
+
   function openBulkSetDates() {
-    setShowBulkSheet(false);
-    setShowSchedulerSheet(false);
+    closeAllSheets();
     setShowDatesSheet(true);
   }
 
@@ -254,6 +270,13 @@ export function UnitsList({
         if (!matchUnassigned && !matchSpecific) return false;
       }
       
+      if (
+        manufacturerFilter.length > 0 &&
+        !manufacturerFilter.includes(u.manufacturingPartnerId ?? INTERNAL_PARTNER_ID)
+      ) {
+        return false;
+      }
+
       if (floorFilter.length > 0 && !floorFilter.includes(getFloor(u.unitNumber))) return false;
       if (dateAddedFilter !== "all" && !isCreatedOnLocalDay(u.createdAt, dateAddedFilter)) return false;
       if (completeByFilter === "not_set") { if (u.completeByDate) return false; }
@@ -276,6 +299,7 @@ export function UnitsList({
     statusFilter,
     installerFilter,
     schedulerFilter,
+    manufacturerFilter,
     floorFilter,
     dateAddedFilter,
     completeByFilter,
@@ -315,6 +339,7 @@ export function UnitsList({
     statusFilter.length > 0,
     installerFilter.length > 0,
     schedulerFilter.length > 0,
+    manufacturerFilter.length > 0,
     floorFilter.length > 0,
     dateAddedFilter !== "all",
     completeByFilter !== "all",
@@ -400,6 +425,11 @@ export function UnitsList({
     ...schedulers.map((s) => ({ value: s.id, label: s.name })),
   ];
 
+  const manufacturerOptions = [
+    { value: "all", label: "All manufacturers" },
+    ...sortPartners(partners).map((p) => ({ value: p.id, label: p.name })),
+  ];
+
   const sortOptions = [
     { value: "none", label: "Default" },
     { value: "newest", label: "Added (Newest)" },
@@ -478,6 +508,7 @@ export function UnitsList({
                 <FilterDropdown multiple label="Status" values={statusFilter} options={statusOptions} onChange={setStatusFilter} />
                 <FilterDropdown multiple label="Installer" values={installerFilter} options={installerOptions} onChange={setInstallerFilter} />
                 <FilterDropdown multiple label="Scheduler" values={schedulerFilter} options={schedulerOptions} onChange={setSchedulerFilter} />
+                <FilterDropdown multiple label="Manufacturer" values={manufacturerFilter} options={manufacturerOptions} onChange={setManufacturerFilter} />
                 <CreatedDateFilter
                   value={dateAddedFilter}
                   onChange={setDateAddedFilter}
@@ -526,6 +557,7 @@ export function UnitsList({
                       setStatusFilter([]);
                       setInstallerFilter([]);
                       setSchedulerFilter([]);
+                      setManufacturerFilter([]);
                       setFloorFilter([]);
                       setDateAddedFilter("all");
                       setCompleteByFilter("all");
@@ -579,6 +611,12 @@ export function UnitsList({
           const isSelected = selectedIds.has(unit.id);
           const schedulerId = unit.assignedSchedulerId;
           const schedulerName = unit.assignedSchedulerName || (schedulerId ? schedulers.find((s) => s.id === schedulerId)?.name : null);
+          // Only surfaced when the unit is subcontracted — in-house is the norm and
+          // a chip on every card would be noise.
+          const externalPartnerName =
+            unit.manufacturingPartnerId && unit.manufacturingPartnerId !== INTERNAL_PARTNER_ID
+              ? partnerNameFor(unit.manufacturingPartnerId, partners)
+              : null;
           return (
             <div
               key={unit.id}
@@ -640,6 +678,12 @@ export function UnitsList({
                           SC: {schedulerName}
                         </span>
                       )}
+                      {externalPartnerName && (
+                        <span className="flex items-center gap-1 text-[12px] font-medium text-amber-600">
+                          <Factory size={14} />
+                          MFG: {externalPartnerName}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -686,6 +730,12 @@ export function UnitsList({
                           <span className="flex items-center gap-1 text-[12px] text-secondary">
                             <CalendarCheck size={14} />
                             SC: {schedulerName}
+                          </span>
+                        )}
+                        {externalPartnerName && (
+                          <span className="flex items-center gap-1 text-[12px] font-medium text-amber-600">
+                            <Factory size={14} />
+                            MFG: {externalPartnerName}
                           </span>
                         )}
                       </div>
@@ -757,6 +807,15 @@ export function UnitsList({
                 <Button
                   size="sm"
                   type="button"
+                  onClick={openBulkAssignManufacturer}
+                  className="!bg-amber-500 !text-white hover:!bg-amber-600 shrink-0 text-[12px] h-8"
+                >
+                  <Factory size={14} className="shrink-0" />
+                  Assign Manufacturer
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
                   onClick={openBulkSetDates}
                   className="!bg-zinc-800 !text-white border border-white/15 hover:!bg-zinc-700 shrink-0 text-[12px] h-8"
                 >
@@ -790,6 +849,17 @@ export function UnitsList({
             onSuccess={exitSelectMode}
             showCompleteBy
             variant="datesOnly"
+          />
+        )}
+
+      {/* Bulk assign manufacturer */}
+        {showManufacturerSheet && (
+          <BulkAssignManufacturerSheet
+            key="bulk-assign-manufacturer"
+            unitIds={[...selectedIds]}
+            partners={partners}
+            onClose={() => setShowManufacturerSheet(false)}
+            onSuccess={exitSelectMode}
           />
         )}
 

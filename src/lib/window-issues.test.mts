@@ -17,6 +17,7 @@ function createDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingPartners: [],
     postInstallIssues: [],
     manufacturingEscalations: [
       {

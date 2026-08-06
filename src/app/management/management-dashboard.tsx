@@ -30,6 +30,7 @@ import { useSessionStorage } from "@/hooks/use-session-storage";
 import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
 import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
 import type { OwnerDashboardCounts } from "@/lib/owner-dashboard-counts";
+import { INTERNAL_PARTNER_ID, sortPartners } from "@/lib/manufacturing-partners";
 
 function ownerStageCountsToMap(counts: OwnerDashboardCounts) {
   return new Map<CurrentStage, number>(
@@ -58,6 +59,7 @@ export function ManagementDashboard({
     | "buildings"
     | "installers"
     | "schedulers"
+    | "manufacturingPartners"
     | "rooms"
     | "windows"
     | "manufacturingEscalations"
@@ -67,7 +69,7 @@ export function ManagementDashboard({
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
-  const { units, clients, buildings, installers, schedulers } = data;
+  const { units, clients, buildings, installers, schedulers, manufacturingPartners } = data;
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -76,6 +78,7 @@ export function ManagementDashboard({
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("management-dashboard-buildingFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("management-dashboard-installerFilter", []);
   const [schedulerFilter, setSchedulerFilter] = useSessionStorage<string[]>("management-dashboard-schedulerFilter", []);
+  const [manufacturerFilter, setManufacturerFilter] = useSessionStorage<string[]>("management-dashboard-manufacturerFilter", []);
   const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("management-dashboard-floorFilter", []);
   const [yearFilter, setYearFilter] = useSessionStorage<string>("management-dashboard-yearFilter", "all");
   const [monthFilter, setMonthFilter] = useSessionStorage<string>("management-dashboard-monthFilter", "all");
@@ -115,10 +118,16 @@ export function ManagementDashboard({
         const matchSpecific = u.assignedSchedulerId && schedulerFilter.includes(u.assignedSchedulerId);
         if (!matchUnassigned && !matchSpecific) return false;
       }
+      if (
+        manufacturerFilter.length > 0 &&
+        !manufacturerFilter.includes(u.manufacturingPartnerId ?? INTERNAL_PARTNER_ID)
+      ) {
+        return false;
+      }
       if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
     });
-  }, [units, clientFilter, buildingFilter, installerFilter, schedulerFilter, yearFilter, monthFilter]);
+  }, [units, clientFilter, buildingFilter, installerFilter, schedulerFilter, manufacturerFilter, yearFilter, monthFilter]);
 
   // All counts derived from scopedUnits — never global units
   const scopedUnits = useMemo(() => {
@@ -132,6 +141,7 @@ export function ManagementDashboard({
     floorFilter.length > 0 ||
     installerFilter.length > 0 ||
     schedulerFilter.length > 0 ||
+    manufacturerFilter.length > 0 ||
     yearFilter !== "all" ||
     (yearFilter !== "all" && monthFilter !== "all");
 
@@ -198,6 +208,7 @@ export function ManagementDashboard({
     floorFilter.length > 0,
     installerFilter.length > 0,
     schedulerFilter.length > 0,
+    manufacturerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
@@ -222,6 +233,11 @@ export function ManagementDashboard({
     { value: "all", label: "All schedulers" },
     { value: "__unassigned__", label: "Unassigned" },
     ...schedulers.map((s) => ({ value: s.id, label: s.name })),
+  ];
+
+  const manufacturerOptions = [
+    { value: "all", label: "All manufacturers" },
+    ...sortPartners(manufacturingPartners).map((p) => ({ value: p.id, label: p.name })),
   ];
 
   const floorOptions = useMemo(() => [
@@ -325,6 +341,13 @@ export function ManagementDashboard({
               onChange={setSchedulerFilter}
             />
             <FilterDropdown
+              multiple
+              label="Manufacturer"
+              values={manufacturerFilter}
+              options={manufacturerOptions}
+              onChange={setManufacturerFilter}
+            />
+            <FilterDropdown
               label="Year"
               value={yearFilter}
               options={yearOptions}
@@ -350,6 +373,7 @@ export function ManagementDashboard({
                   setFloorFilter([]);
                   setInstallerFilter([]);
                   setSchedulerFilter([]);
+                  setManufacturerFilter([]);
                   setYearFilter("all");
                   setMonthFilter("all");
                   setSortLevels([]);

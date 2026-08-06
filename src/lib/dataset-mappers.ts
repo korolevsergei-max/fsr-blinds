@@ -8,6 +8,7 @@ import type {
   CurrentStage,
   Cutter,
   Installer,
+  ManufacturingPartner,
   Room,
   ScheduleEntry,
   Scheduler,
@@ -21,6 +22,7 @@ import type {
   WandChain,
   FabricAdjustmentSide,
 } from "./types";
+import { INTERNAL_PARTNER_ID } from "./manufacturing-partners.ts";
 
 // ── Row types (match Supabase column names) ──────────────────────────
 
@@ -88,6 +90,14 @@ export type UnitRow = {
   created_at: string | null;
   assigned_at?: string | null;
   manufacturing_risk_flag?: RiskFlag | null;
+  /**
+   * Assigned manufacturing partner. Optional because the installer dataset RPC
+   * does not project it; mapUnit then falls back to the internal partner, which
+   * is the column's DB default and therefore always the right assumption.
+   */
+  manufacturing_partner_id?: string | null;
+  /** NULL = no manufacturer has been chosen for this unit yet. */
+  manufacturing_assigned_at?: string | null;
 };
 
 export type UnitActivityLogRow = {
@@ -150,6 +160,15 @@ export type CutterRow = {
   contact_email: string;
   contact_phone: string;
   auth_user_id?: string | null;
+};
+
+export type ManufacturingPartnerRow = {
+  id: string;
+  name: string;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  is_internal?: boolean | null;
 };
 
 export type SchedulerRow = {
@@ -226,6 +245,8 @@ export function mapUnit(
     createdAt: r.created_at,
     assignedAt: schedulerId ? r.assigned_at ?? null : null,
     manufacturingRiskFlag: r.manufacturing_risk_flag ?? undefined,
+    manufacturingPartnerId: r.manufacturing_partner_id ?? INTERNAL_PARTNER_ID,
+    manufacturingAssignedAt: r.manufacturing_assigned_at ?? null,
   };
 }
 
@@ -297,6 +318,17 @@ export function mapCutter(r: CutterRow): Cutter {
     contactEmail: r.contact_email,
     contactPhone: r.contact_phone,
     authUserId: r.auth_user_id ?? null,
+  };
+}
+
+export function mapManufacturingPartner(r: ManufacturingPartnerRow): ManufacturingPartner {
+  return {
+    id: r.id,
+    name: r.name,
+    contactName: r.contact_name ?? "",
+    contactEmail: r.contact_email ?? "",
+    contactPhone: r.contact_phone ?? "",
+    isInternal: r.is_internal ?? false,
   };
 }
 

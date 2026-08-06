@@ -7,4 +7,5 @@ export * from "./auth/cutter";
 export * from "./auth/scheduler";
 export * from "./auth/assembler";
 export * from "./auth/qc";
+export * from "./auth/subcontractor";
 export * from "./auth/owner";

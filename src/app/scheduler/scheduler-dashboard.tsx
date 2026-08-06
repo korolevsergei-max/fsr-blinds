@@ -30,6 +30,7 @@ import { formatUnitEscalationDetail, getUnitEscalations } from "@/lib/window-iss
 import { useSessionStorage } from "@/hooks/use-session-storage";
 import { UnitSortModal } from "@/components/dashboard/unit-sort-modal";
 import { type UnitSortLevel, sortUnits } from "@/lib/unit-sort";
+import { INTERNAL_PARTNER_ID, sortPartners } from "@/lib/manufacturing-partners";
 
 
 export function SchedulerDashboard({
@@ -38,13 +39,19 @@ export function SchedulerDashboard({
 }: {
   data: Pick<
     AppDataset,
-    "units" | "buildings" | "installers" | "rooms" | "windows" | "manufacturingEscalations"
+    | "units"
+    | "buildings"
+    | "installers"
+    | "manufacturingPartners"
+    | "rooms"
+    | "windows"
+    | "manufacturingEscalations"
   >;
   userName?: string;
 }) {
   const router = useRouter();
   const [signingOut, startSignOut] = useTransition();
-  const { units, buildings, installers } = data;
+  const { units, buildings, installers, manufacturingPartners } = data;
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -52,6 +59,7 @@ export function SchedulerDashboard({
   const [buildingFilter, setBuildingFilter] = useSessionStorage<string[]>("scheduler-dashboard-buildingFilter", []);
   const [floorFilter, setFloorFilter] = useSessionStorage<string[]>("scheduler-dashboard-floorFilter", []);
   const [installerFilter, setInstallerFilter] = useSessionStorage<string[]>("scheduler-dashboard-installerFilter", []);
+  const [manufacturerFilter, setManufacturerFilter] = useSessionStorage<string[]>("scheduler-dashboard-manufacturerFilter", []);
   const [yearFilter, setYearFilter] = useSessionStorage<string>("scheduler-dashboard-yearFilter", "all");
   const [monthFilter, setMonthFilter] = useSessionStorage<string>("scheduler-dashboard-monthFilter", "all");
 
@@ -75,10 +83,16 @@ export function SchedulerDashboard({
         const matchSpecific = u.assignedInstallerId && installerFilter.includes(u.assignedInstallerId);
         if (!matchUnassigned && !matchSpecific) return false;
       }
+      if (
+        manufacturerFilter.length > 0 &&
+        !manufacturerFilter.includes(u.manufacturingPartnerId ?? INTERNAL_PARTNER_ID)
+      ) {
+        return false;
+      }
       if (!unitMatchesYearMonth(u, yearFilter, effectiveMonth)) return false;
       return true;
     });
-  }, [units, buildingFilter, installerFilter, yearFilter, monthFilter]);
+  }, [units, buildingFilter, installerFilter, manufacturerFilter, yearFilter, monthFilter]);
 
   // All counts derived from scopedUnits — never global units
   const scopedUnits = useMemo(() => {
@@ -141,6 +155,7 @@ export function SchedulerDashboard({
     buildingFilter.length > 0,
     floorFilter.length > 0,
     installerFilter.length > 0,
+    manufacturerFilter.length > 0,
     yearFilter !== "all",
     yearFilter !== "all" && monthFilter !== "all",
   ].filter(Boolean).length;
@@ -155,6 +170,11 @@ export function SchedulerDashboard({
     { value: "all", label: "All installers" },
     { value: "__unassigned__", label: "Unassigned" },
     ...installers.map((i) => ({ value: i.id, label: i.name })),
+  ];
+
+  const manufacturerOptions = [
+    { value: "all", label: "All manufacturers" },
+    ...sortPartners(manufacturingPartners).map((p) => ({ value: p.id, label: p.name })),
   ];
 
   const floorOptions = useMemo(() => [
@@ -241,6 +261,13 @@ export function SchedulerDashboard({
               onChange={setInstallerFilter}
             />
             <FilterDropdown
+              multiple
+              label="Manufacturer"
+              values={manufacturerFilter}
+              options={manufacturerOptions}
+              onChange={setManufacturerFilter}
+            />
+            <FilterDropdown
               label="Year"
               value={yearFilter}
               options={yearOptions}
@@ -264,6 +291,7 @@ export function SchedulerDashboard({
                   setBuildingFilter([]);
                   setFloorFilter([]);
                   setInstallerFilter([]);
+                  setManufacturerFilter([]);
                   setYearFilter("all");
                   setMonthFilter("all");
                   setSortLevels([]);

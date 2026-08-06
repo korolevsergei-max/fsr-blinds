@@ -26,6 +26,7 @@ import {
 import { selectInChunks } from "@/lib/supabase-chunking";
 import { assertRpcArrays } from "@/lib/contract";
 import { queryTimeoutSignal } from "@/lib/query-timeout";
+import { INTERNAL_PARTNER_ID, isInternalPartnerId } from "@/lib/manufacturing-partners";
 import {
   buildRoleScheduleOutput,
   countQueueReadyWindows,
@@ -91,6 +92,8 @@ type UnitRow = {
   status: string;
   all_measured_at: string | null;
   production_entered_at: string | null;
+  /** Absent on the pre-migration RPC; treated as internal, today's behaviour. */
+  manufacturing_partner_id?: string | null;
 };
 
 type RoomRow = {
@@ -282,16 +285,64 @@ function buildBlindSortKey(win: WindowRow): string {
   return `${win.blind_type}:${win.label}`;
 }
 
+/**
+ * Delete active schedule rows belonging to subcontracted units.
+ *
+ * The reflow upserts rows only for the units it selected, so it cannot remove a
+ * row on its own — a unit reassigned out to a partner would keep whatever rows it
+ * already had and stay visible in the internal queues. Called on every reflow so
+ * the cleanup is self-healing rather than dependent on the assign action's own
+ * delete succeeding.
+ *
+ * The ARCHIVE table is deliberately left alone: archived rows are completed
+ * history for units that were internal at the time, and the completed views
+ * should keep showing that work.
+ */
+async function purgeExternalSchedules(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<void> {
+  const { data: externalUnits } = await supabase
+    .from("units")
+    .select("id")
+    .neq("manufacturing_partner_id", INTERNAL_PARTNER_ID);
+
+  const externalIds = ((externalUnits as { id: string }[] | null) ?? []).map((u) => u.id);
+  if (externalIds.length === 0) return;
+
+  const { error } = await supabase
+    .from("window_manufacturing_schedule")
+    .delete()
+    .in("unit_id", externalIds);
+  if (error) {
+    // Non-fatal: the reflow below is still correct for internal units.
+    console.warn("[mfg] purge of subcontracted schedule rows failed:", error.message);
+  }
+}
+
 export async function reflowManufacturingSchedules(reason = "system_reflow"): Promise<void> {
   const { supabase, settings, overrides } = await getSettingsAndOverrides();
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
+  // Subcontracted units are excluded at the SOURCE, not hidden at read time.
+  // The internal factory's day buckets are capacity-allocated, so a unit that is
+  // being made elsewhere must not occupy an in-house cutting/assembly/QC slot —
+  // leaving it in would push real internal dates out for work nobody is doing.
+  // No schedule rows means it also never reaches the cutter/assembler/qc queues,
+  // which all read through window_manufacturing_schedule.
   const { data: unitRows } = await supabase
     .from("units")
     .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
     .in("status", ["measured", "bracketed", "manufactured"])
+    .eq("manufacturing_partner_id", INTERNAL_PARTNER_ID)
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
+
+  // Self-heal: drop schedule rows left behind by a unit that has since moved to a
+  // subcontractor. The upsert below only rewrites rows for units it selected, so
+  // without this an outbound reassignment whose cleanup failed would leave the
+  // unit sitting in the cutter queue indefinitely. Runs on every reflow and is a
+  // no-op while nothing is subcontracted.
+  await purgeExternalSchedules(supabase);
 
   const units = (unitRows as UnitRow[] | null) ?? [];
   if (units.length === 0) {
@@ -649,6 +700,12 @@ function assembleRoleScheduleItems(
     const unit = unitsById.get(row.unit_id);
     const window = windowsById.get(row.window_id);
     if (!unit || !window) continue;
+    // Exclusivity backstop. get_role_schedule already filters subcontracted units
+    // out, but the chunked fallback path below does its own units query, and this
+    // is the single funnel every factory screen's items pass through. A unit that
+    // reaches here after being reassigned would otherwise sit in the cutter queue
+    // while the partner is building the same blinds.
+    if (!isInternalPartnerId(unit.manufacturing_partner_id)) continue;
     const production = productionByWindow.get(row.window_id);
     const roomName = roomsById.get(window.room_id)?.name ?? "Room";
     const productionStatus = production?.status ?? "pending";
@@ -836,7 +893,7 @@ export async function loadPersistedRoleSchedule(
     selectInChunks<UnitRow>(unitIds, (chunk) =>
       supabase
         .from("units")
-        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at, manufacturing_partner_id")
         .in("id", chunk)
         .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
     ),

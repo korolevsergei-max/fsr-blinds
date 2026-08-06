@@ -15,6 +15,7 @@ export function ManagementPageClient({
     "buildings",
     "installers",
     "schedulers",
+    "manufacturingPartners",
     "rooms",
     "windows",
     "manufacturingEscalations",

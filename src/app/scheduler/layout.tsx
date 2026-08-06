@@ -18,6 +18,7 @@ function emptyDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingPartners: [],
     manufacturingEscalations: [],
     postInstallIssues: [],
   };
@@ -40,6 +41,9 @@ export default async function SchedulerLayout({
   }
   if (user.role === "installer") {
     redirect("/installer");
+  }
+  if (user.role === "subcontractor") {
+    redirect("/subcontractor");
   }
   if (user.role !== "scheduler") {
     redirect("/login");

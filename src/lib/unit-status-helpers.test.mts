@@ -20,6 +20,7 @@ function createDataset(): AppDataset {
     schedule: [],
     cutters: [],
     schedulers: [],
+    manufacturingPartners: [],
     manufacturingEscalations: [],
     postInstallIssues: [],
     units: [

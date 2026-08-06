@@ -40,6 +40,7 @@ const PORTAL_REQUIRED_ROLE: Record<string, string> = {
   "/cutter": "cutter",
   "/assembler": "assembler",
   "/qc": "qc",
+  "/subcontractor": "subcontractor",
 };
 
 function supabaseAuthCookieNames(request: NextRequest): string[] {

@@ -4,7 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isInvalidRefreshTokenError } from "@/lib/supabase/auth-errors";
 
-export type UserRole = "owner" | "installer" | "cutter" | "client" | "scheduler" | "assembler" | "qc";
+export type UserRole =
+  | "owner"
+  | "installer"
+  | "cutter"
+  | "client"
+  | "scheduler"
+  | "assembler"
+  | "qc"
+  | "subcontractor";
 
 export interface AppUser {
   id: string;
@@ -21,6 +29,7 @@ const VALID_USER_ROLES: UserRole[] = [
   "scheduler",
   "assembler",
   "qc",
+  "subcontractor",
 ];
 
 function normalizeUserRole(role: unknown): UserRole | null {
@@ -43,18 +52,21 @@ async function inferRoleFromLinkedAccount(
     qcRes,
     cutterRes,
     installerRes,
+    subcontractorRes,
   ] = await Promise.all([
     supabase.from("schedulers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("assemblers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("qcs").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("cutters").select("id").eq("auth_user_id", authUserId).maybeSingle(),
     supabase.from("installers").select("id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("subcontractors").select("id").eq("auth_user_id", authUserId).maybeSingle(),
   ]);
 
   if (schedulerRes.data?.id) return "scheduler";
   if (assemblerRes.data?.id) return "assembler";
   if (qcRes.data?.id) return "qc";
   if (cutterRes.data?.id) return "cutter";
+  if (subcontractorRes.data?.id) return "subcontractor";
   if (installerRes.data?.id) return "installer";
   return null;
 }
@@ -257,6 +269,14 @@ export async function requireQc(): Promise<AppUser> {
   return user;
 }
 
+export async function requireSubcontractor(): Promise<AppUser> {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "subcontractor") {
+    throw new Error("Unauthorized: subcontractor role required");
+  }
+  return user;
+}
+
 export async function requireOwnerOrScheduler(): Promise<AppUser> {
   const user = await getCurrentUser();
   if (!user || (user.role !== "owner" && user.role !== "scheduler")) {
@@ -319,6 +339,31 @@ export async function getLinkedQcId(
     .eq("auth_user_id", authUserId)
     .single();
   return data?.id ?? null;
+}
+
+export async function getLinkedSubcontractorId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("subcontractors")
+    .select("id")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+/** The manufacturing partner (company) a subcontractor login belongs to. */
+export async function getLinkedPartnerId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("subcontractors")
+    .select("partner_id")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  return (data as { partner_id: string } | null)?.partner_id ?? null;
 }
 
 export async function getLinkedInstallerId(

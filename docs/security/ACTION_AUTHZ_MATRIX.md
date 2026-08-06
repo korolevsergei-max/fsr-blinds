@@ -64,6 +64,7 @@ or `assertOwnerOrSchedulerForInstallerActions()` (owner ∨ scheduler) in
 | `createAssemblerAccount`, `deleteAssemblerAccount` | `auth/assembler.ts` | `assertOwnerForAccountActions()` (owner) |
 | `createCutterAccount`, `deleteCutterAccount` | `auth/cutter.ts` | `assertOwnerForAccountActions()` (owner) |
 | `createQcAccount`, `deleteQcAccount` | `auth/qc.ts` | `assertOwnerForAccountActions()` (owner) |
+| `createSubcontractorAccount`, `deleteSubcontractorAccount`, `createManufacturingPartner`, `deleteManufacturingPartner` | `auth/subcontractor.ts` | `assertOwnerForAccountActions()` (owner) |
 | `createInstallerAccount`, `deleteInstallerAccount` | `auth/installer.ts` | `assertOwnerOrSchedulerForInstallerActions()` (owner ∨ scheduler) |
 | `setSchedulerBuildingAccess`, `createSchedulerAccount`, `deleteSchedulerAccount` | `auth/scheduler.ts` | `assertOwnerForAccountActions()` (owner) |
 | `createOwnerAccount`, `deleteOwnerAccount`, `changeAccountPassword`, `deleteOrphanAuthAccount` | `auth/owner.ts` | `assertOwnerForAccountActions()` (owner); `changeAccountPassword` re-auths self |
@@ -80,7 +81,48 @@ All mutating exports call `requireOwner()`.
 | Export | Guard |
 |---|---|
 | `createClient_`, `updateClient`, `deleteClient`, `updateBuilding`, `deleteBuilding`, `createBuilding`, `deleteUnit`, `bulkDeleteUnits`, `purgeAllClientData`, `createUnit`, `updateUnit`, `updateUnitCompleteByDate`, `bulkImportUnits`, `assignUnitsToScheduler`, `backfillInstalledWindowProductionStatus` | `requireOwner()` (owner) |
+| `assignUnitsToManufacturingPartner` | `requireOwnerOrScheduler()`, scheduler callers re-scoped through `getSchedulerScopedUnitIds()`, **plus owner-only re-assignment**: a scheduler may make the initial choice (the room-creation gate runs in their portal) but not change it once `manufacturing_assigned_at` is set. The `units_guard_ownership_columns` trigger (20260806120000) enforces both halves in the DB — non-owner/scheduler roles cannot touch `manufacturing_partner_id` at all (a subcontractor legitimately holds `units` UPDATE for `status`, so without this they could reassign work to themselves), and a scheduler cannot change an already-set value. |
 | `loadSchedulerUnitAssignments`, `getUnitSchedulerAssignment` | Read-only; RLS backstop (user-context client) |
+
+---
+
+## Manufacturing exclusivity (the double-build invariant)
+
+The same window must never be actionable by the in-house factory **and** a
+subcontractor at the same time — that means building the blind twice. Ownership is
+a single column (`units.manufacturing_partner_id`), so the data model is exclusive
+by construction; the risk is the two **read** paths disagreeing about it, and the
+**write** paths trusting a stale page. Four layers, applied in
+`20260806120000_manufacturing_partners.sql` unless noted:
+
+| Layer | Mechanism |
+|---|---|
+| Internal read | `get_role_schedule` joins `manufacturing_partners` and returns rows only for internal units. Every factory screen derives from that one `src` CTE, so one filter covers queue, production, dashboard and completed views. |
+| Internal read (fallback) | `assembleRoleScheduleItems` (`src/lib/manufacturing-scheduler.ts`) drops non-internal units — this is the single funnel the chunked fallback path also passes through. |
+| Partner read | `get_subcontractor_worklist` returns only `manufacturing_partner_id = auth_partner_id()`. Same column as the internal filter, so the two sets are provably disjoint. |
+| Write | `wps_guard_manufacturing_ownership` — a BEFORE INSERT OR UPDATE trigger on `window_production_status`. Every "mark cut / assembled / QC-approved / complete" path writes that table, so one trigger covers all of them, including any future screen. Rejects a subcontractor writing to an in-house unit and an in-house role writing to a subcontracted one; `service_role` and `owner` pass (reflow, backfills, repair). |
+
+App-layer mirrors of the write rule live in `production-actions.ts`
+(`assertUnitIsInternallyManufactured`) and `cutter-production-actions.ts`
+(`moveUnitToProduction`), so a stale tab gets a readable message instead of a raw
+42501. `assignUnitsToManufacturingPartner` also deletes the outgoing unit's
+`window_manufacturing_schedule` rows **synchronously** — deferring that to the
+reflow in `after()` would leave a real window where both predicates matched.
+
+---
+
+## `src/app/actions/subcontractor-actions.ts` — external manufacturing partners
+
+Both exports run on the **user-context** client, so the Phase 2 policies plus the
+`subcontractor` branch added to `can_access_unit()` (20260806120000) are the row-level
+backstop. The app-layer scope check in `scopeWindowsToCallersPartner()` is deliberate
+belt-and-braces: RLS alone would silently return zero rows, which reads to the partner
+as a broken button rather than "not yours".
+
+| Export | Guard |
+|---|---|
+| `completeWindowsForPartner` | `requireSubcontractor()` + `scopeWindowsToCallersPartner()` (windows must belong to units whose `manufacturing_partner_id` = the caller's partner, via `getLinkedPartnerId()`) |
+| `reopenWindowsForPartner` | Same, plus refuses once `units.status = 'installed'` |
 
 ---
 

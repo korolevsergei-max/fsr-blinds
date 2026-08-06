@@ -25,6 +25,9 @@ export const NOTIF_MFG_PUSHBACK = "mfg_pushback";
 /** Manufacturing pushback was resolved by rework. */
 export const NOTIF_MFG_PUSHBACK_RESOLVED = "mfg_pushback_resolved";
 
+/** A subcontractor marked a unit's manufacturing complete. */
+export const NOTIF_SUBCONTRACTOR_UNIT_COMPLETE = "subcontractor_unit_complete";
+
 /** Installer creates/updates a window with yellow or red risk flag. */
 export const NOTIF_UNIT_ESCALATION = "unit_escalation";
 
@@ -76,7 +79,12 @@ export const SCHEDULER_NOTIF_CATEGORIES: NotifCategory[] = [
   {
     key: "manufacturing",
     label: "Manufacturing",
-    types: [NOTIF_MFG_BEHIND_SCHEDULE, NOTIF_MFG_PUSHBACK, NOTIF_MFG_PUSHBACK_RESOLVED],
+    types: [
+      NOTIF_MFG_BEHIND_SCHEDULE,
+      NOTIF_MFG_PUSHBACK,
+      NOTIF_MFG_PUSHBACK_RESOLVED,
+      NOTIF_SUBCONTRACTOR_UNIT_COMPLETE,
+    ],
   },
 ];
 

@@ -8,6 +8,7 @@ export default function SchedulerPage() {
     "units",
     "buildings",
     "installers",
+    "manufacturingPartners",
     "rooms",
     "windows",
     "manufacturingEscalations",

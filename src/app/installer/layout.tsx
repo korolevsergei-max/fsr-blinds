@@ -24,6 +24,9 @@ export default async function InstallerLayout({
   if (user.role === "assembler") {
     redirect("/assembler");
   }
+  if (user.role === "subcontractor") {
+    redirect("/subcontractor");
+  }
   if (user.role !== "installer") {
     redirect("/login");
   }

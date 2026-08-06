@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import type { AppDataset } from "@/lib/app-dataset";
+import type { ManufacturingPartner } from "@/lib/types";
 import {
   mapClient,
   mapBuilding,
@@ -11,6 +12,7 @@ import {
   mapRoom,
   mapWindow,
   mapSchedule,
+  mapManufacturingPartner,
   mapScheduler,
   normalizeScheduleEntries,
   type ClientRow,
@@ -21,6 +23,7 @@ import {
   type WindowRow,
   type ScheduleRow,
   type CutterRow,
+  type ManufacturingPartnerRow,
   type SchedulerRow,
 } from "@/lib/dataset-mappers";
 import { selectInChunks } from "@/lib/supabase-chunking";
@@ -181,10 +184,29 @@ type SchedulerDatasetRaw = {
  * scheduler-name injection on every scoped unit, the synthetic `sch-<id>` self pick-list row,
  * the empty-team installer fallback, and schedule normalization.
  */
-function buildSchedulerDataset(
+/**
+ * The manufacturing partner list — a 2-3 row lookup table, read directly rather
+ * than folded into get_scheduler_dataset so that 90-line RPC does not need a
+ * verbatim re-declaration for one lookup. The owner path gets it from
+ * get_owner_dataset instead, where it is free on an already-running round trip.
+ * `cache()` dedupes it across the RSC tree for a single request.
+ */
+export const loadManufacturingPartners = cache(async (): Promise<ManufacturingPartner[]> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("manufacturing_partners")
+    .select("id, name, contact_name, contact_email, contact_phone, is_internal")
+    .order("is_internal", { ascending: false })
+    .order("name");
+  if (error) return [];
+  return ((data as ManufacturingPartnerRow[] | null) ?? []).map(mapManufacturingPartner);
+});
+
+async function buildSchedulerDataset(
   raw: SchedulerDatasetRaw,
   schedulerId: string
 ): Promise<AppDataset> {
+  const partners = await loadManufacturingPartners();
   const assignmentAtMap = new Map(
     (raw.assignments ?? []).map((a) => [a.unit_id, a.assigned_at])
   );
@@ -250,6 +272,7 @@ function buildSchedulerDataset(
       schedule,
       cutters: [],
       schedulers: [],
+      manufacturingPartners: partners,
       manufacturingEscalations: (raw.manufacturing_escalations ?? []).map(mapManufacturingEscalation),
       postInstallIssues: [],
     },
@@ -414,6 +437,9 @@ function buildInstallerDataset(raw: InstallerDatasetRaw): Promise<AppDataset> {
     schedule,
     cutters: [],
     schedulers: [],
+    // Installers never see or filter by manufacturer; the installer RPC does not
+    // project the partner id either, so mapUnit reads every unit as internal.
+    manufacturingPartners: [],
     manufacturingEscalations: [],
     postInstallIssues: [],
   });

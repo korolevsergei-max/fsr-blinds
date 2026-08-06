@@ -119,6 +119,15 @@ export function buildManufacturingPushbackNotificationBody(
   return `${formatUnitContextLine(context)} • ${room} • ${window} returned ${sourceRole} -> ${targetRole}: ${summary}${extra ? ` (${extra})` : ""}.`;
 }
 
+export function buildSubcontractorUnitCompleteBody(
+  context: UnitNotificationContext,
+  { partnerName, windowCount }: { partnerName: string; windowCount: number }
+): string {
+  const partner = clean(partnerName, "The subcontractor");
+  const blinds = `${windowCount} blind${windowCount === 1 ? "" : "s"}`;
+  return `${formatUnitContextLine(context)} • ${partner} finished manufacturing ${blinds}. Ready to install.`;
+}
+
 export function buildManufacturingPushbackResolvedBody(
   context: UnitNotificationContext,
   {

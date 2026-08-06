@@ -17,7 +17,9 @@ import {
   CalendarCheck,
 } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
-import type { Assembler, Qc } from "@/lib/types";
+import type { Assembler, ManufacturingPartner, Qc, Subcontractor } from "@/lib/types";
+import { InviteSubcontractorForm } from "./forms/invite-subcontractor-form";
+import { deleteSubcontractorAccount, deleteManufacturingPartner } from "@/app/actions/auth-actions";
 import type { InstallerCutterAuthDrift } from "@/lib/account-sync";
 import { PageHeader } from "@/components/ui/page-header";
 import { RefreshButton } from "@/components/ui/refresh-button";
@@ -42,7 +44,14 @@ import { InviteAssemblerForm } from "./forms/invite-assembler-form";
 import { InviteQcForm } from "./forms/invite-qc-form";
 import { InviteOwnerForm } from "./forms/invite-owner-form";
 
-type Tab = "installers" | "cutters" | "schedulers" | "assemblers" | "qcs" | "owners";
+type Tab =
+  | "installers"
+  | "cutters"
+  | "schedulers"
+  | "assemblers"
+  | "qcs"
+  | "subcontractors"
+  | "owners";
 
 type OwnerProfile = {
   authUserId: string;
@@ -59,6 +68,8 @@ export function AccountsManager({
   ownerProfiles,
   assemblers,
   qcs,
+  subcontractors,
+  manufacturingPartners,
   currentUserAuthId,
 }: {
   data: AppDataset;
@@ -67,6 +78,8 @@ export function AccountsManager({
   ownerProfiles: OwnerProfile[];
   assemblers: Assembler[];
   qcs: Qc[];
+  subcontractors: Subcontractor[];
+  manufacturingPartners: ManufacturingPartner[];
   currentUserAuthId: string;
 }) {
   const { installers, cutters, schedulers, units, clients, buildings } = data;
@@ -87,7 +100,9 @@ export function AccountsManager({
             ? "Quality Control"
           : tab === "schedulers"
             ? "Schedulers"
-            : "Owners";
+            : tab === "subcontractors"
+              ? "Subcontractors"
+              : "Owners";
 
   const linkedCutters = cutters.filter((m) => Boolean(m.authUserId));
   const orphanCutters = cutters.filter((m) => !m.authUserId);
@@ -97,6 +112,7 @@ export function AccountsManager({
   const orphanAssemblers = assemblers.filter((a: Assembler) => !a.authUserId);
   const linkedQcs = qcs.filter((qc) => Boolean(qc.authUserId));
   const orphanQcs = qcs.filter((qc) => !qc.authUserId);
+  const externalPartners = manufacturingPartners.filter((p) => !p.isInternal);
 
   const handleDeleteInstaller = (inst: AppDataset["installers"][number]) => {
     if (!confirm(`Delete installer "${inst.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
@@ -165,6 +181,43 @@ export function AccountsManager({
     setDeleteError("");
     startDeleteTransition(async () => {
       const result = await deleteQcAccount(qc.id, qc.authUserId, qc.email);
+      if (!result.ok) {
+        setDeleteError(result.error);
+        return;
+      }
+      window.location.reload();
+    });
+  };
+
+  const handleDeleteSubcontractor = (sub: Subcontractor) => {
+    if (!confirm(`Delete subcontractor login "${sub.name}"? This removes their account from the app (and Supabase auth if linked).`)) {
+      return;
+    }
+    setDeleteError("");
+    startDeleteTransition(async () => {
+      const result = await deleteSubcontractorAccount(sub.id, sub.authUserId, sub.email);
+      if (!result.ok) {
+        setDeleteError(result.error);
+        return;
+      }
+      window.location.reload();
+    });
+  };
+
+  const handleDeletePartner = (partner: ManufacturingPartner) => {
+    const assigned = subcontractors.filter((s) => s.partnerId === partner.id).length;
+    if (
+      !confirm(
+        `Delete manufacturer "${partner.name}"?\n\n` +
+          `${assigned} login${assigned === 1 ? "" : "s"} will be removed, and any units assigned ` +
+          `to them return to the in-house factory queues.`
+      )
+    ) {
+      return;
+    }
+    setDeleteError("");
+    startDeleteTransition(async () => {
+      const result = await deleteManufacturingPartner(partner.id);
       if (!result.ok) {
         setDeleteError(result.error);
         return;
@@ -263,7 +316,7 @@ export function AccountsManager({
 
       {/* Tabs */}
       <div className="px-4 pt-4 pb-3 flex gap-2 overflow-x-auto no-scrollbar">
-        {(["schedulers", "installers", "cutters", "assemblers", "qcs", "owners"] as Tab[]).map((t) => (
+        {(["schedulers", "installers", "cutters", "assemblers", "qcs", "subcontractors", "owners"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -315,6 +368,11 @@ export function AccountsManager({
               />
             ) : tab === "qcs" ? (
               <InviteQcForm
+                onDone={() => { setShowForm(false); window.location.reload(); }}
+              />
+            ) : tab === "subcontractors" ? (
+              <InviteSubcontractorForm
+                partners={manufacturingPartners}
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
             ) : (
@@ -743,6 +801,86 @@ export function AccountsManager({
                 No QC users yet. Tap Add to add one.
               </div>
             )}
+          </>
+        )}
+
+        {tab === "subcontractors" && (
+          <>
+            {externalPartners.length === 0 && (
+              <p className="py-6 text-center text-[13px] text-muted">
+                No subcontractors yet. Add one to start sending units out for manufacturing.
+              </p>
+            )}
+            {externalPartners.map((partner) => {
+              const logins = subcontractors.filter((s) => s.partnerId === partner.id);
+              return (
+                <div key={partner.id} className="animate-fade-up">
+                  <div className="surface-card p-4">
+                    <div className="flex items-center gap-3 mb-3 justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                          <Factory size={22} className="text-tertiary" />
+                        </div>
+                        <div>
+                          <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
+                            {partner.name}
+                          </h3>
+                          <p className="text-[12px] text-tertiary">
+                            {logins.length} login{logins.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={deletePending}
+                        onClick={() => handleDeletePartner(partner)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+
+                    {logins.length === 0 ? (
+                      <p className="text-[12px] text-tertiary">
+                        No logins yet — add one so they can see their work list.
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {logins.map((sub) => (
+                          <div
+                            key={sub.id}
+                            className="border-t border-border-subtle pt-3 flex flex-col gap-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-[13px] font-medium text-foreground">{sub.name}</p>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                disabled={deletePending}
+                                onClick={() => handleDeleteSubcontractor(sub)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2 text-[12px] text-secondary">
+                              <Envelope size={12} />
+                              {sub.email}
+                            </div>
+                            {sub.phone && (
+                              <div className="flex items-center gap-2 text-[12px] text-secondary">
+                                <Phone size={12} />
+                                {sub.phone}
+                              </div>
+                            )}
+                            {sub.authUserId && <ChangePasswordInline authUserId={sub.authUserId} />}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </>
         )}
 

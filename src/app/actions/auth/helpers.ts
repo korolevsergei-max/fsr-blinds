@@ -123,6 +123,12 @@ export async function deleteQcsByEmail(admin: SupabaseClient, email: string) {
   await admin.from("qcs").delete().ilike("email", e);
 }
 
+export async function deleteSubcontractorsByEmail(admin: SupabaseClient, email: string) {
+  const e = email.trim();
+  if (!e) return;
+  await admin.from("subcontractors").delete().ilike("email", e);
+}
+
 export function getAuthRedirectBaseUrl(): string {
   return (
     process.env.NEXT_PUBLIC_SITE_URL?.trim() ||

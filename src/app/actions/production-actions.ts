@@ -15,6 +15,7 @@ import {
 import { emitNotification } from "@/lib/emit-notification";
 import { NOTIF_MFG_PUSHBACK_RESOLVED } from "@/lib/notification-types";
 import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import { recomputeManufacturingRiskFlags } from "@/lib/manufacturing-risk";
 import {
   buildManufacturingPushbackResolvedBody,
@@ -23,6 +24,33 @@ import {
 import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-escalations";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Refuse to record in-house work on a unit that belongs to a subcontractor.
+ *
+ * THE INVARIANT this protects: the same blind must never be built twice, once
+ * here and once at a partner. The read paths already keep subcontracted units out
+ * of the cutter/assembler/QC queues (get_role_schedule filters on the partner),
+ * and a DB trigger backstops the write. This is the middle layer — it turns a
+ * stale tab or a replayed action into a clear message instead of a 42501 from
+ * Postgres, and it is the one a future queue screen would forget to add.
+ */
+async function assertUnitIsInternallyManufactured(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("units")
+    .select("manufacturing_partner_id, unit_number")
+    .eq("id", unitId)
+    .maybeSingle();
+
+  const row = data as { manufacturing_partner_id: string | null; unit_number: string } | null;
+  if (!row) return null;
+  if ((row.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) === INTERNAL_PARTNER_ID) return null;
+
+  return `Unit ${row.unit_number} is now manufactured by a subcontractor. Refresh — it has left the in-house queue.`;
+}
 
 const REVALIDATE_PATH_BY_REASON = {
   mark_cut: "/cutter",
@@ -176,6 +204,10 @@ export async function markWindowCut(
     if (!unitId) {
       return { ok: false, error: "Unit ID not found for this window." };
     }
+
+    const ownershipError = await assertUnitIsInternallyManufactured(supabase, unitId);
+    if (ownershipError) return { ok: false, error: ownershipError };
+
     const now = new Date().toISOString();
 
     const { error } = await supabase.from("window_production_status").upsert(
@@ -233,6 +265,12 @@ export async function markWindowAssembled(
       .eq("window_id", windowId)
       .maybeSingle();
 
+
+    if (currentRow?.unit_id) {
+      const ownershipError = await assertUnitIsInternallyManufactured(supabase, currentRow.unit_id);
+      if (ownershipError) return { ok: false, error: ownershipError };
+    }
+
     const { error } = await supabase
       .from("window_production_status")
       .update({
@@ -286,6 +324,12 @@ export async function markWindowQCApproved(
       .select("unit_id")
       .eq("window_id", windowId)
       .maybeSingle();
+
+
+    if (currentRow?.unit_id) {
+      const ownershipError = await assertUnitIsInternallyManufactured(supabase, currentRow.unit_id);
+      if (ownershipError) return { ok: false, error: ownershipError };
+    }
 
     const { error } = await supabase
       .from("window_production_status")

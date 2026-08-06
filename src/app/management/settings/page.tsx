@@ -4,7 +4,7 @@ import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-da
 import { createClient } from "@/lib/supabase/server";
 import { loadManufacturingSettings } from "@/lib/manufacturing-scheduler";
 import { AccountsManager } from "../accounts/accounts-manager";
-import type { Assembler, Qc } from "@/lib/types";
+import type { Assembler, ManufacturingPartner, Qc, Subcontractor } from "@/lib/types";
 import { SettingsScreen } from "./settings-screen";
 
 interface OwnerProfile {
@@ -51,6 +51,47 @@ async function loadQcs(): Promise<Qc[]> {
   }
 }
 
+async function loadSubcontractors(): Promise<Subcontractor[]> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("subcontractors")
+      .select("id, partner_id, name, email, phone, auth_user_id")
+      .order("name");
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      partnerId: row.partner_id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone ?? "",
+      authUserId: row.auth_user_id ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function loadPartners(): Promise<ManufacturingPartner[]> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("manufacturing_partners")
+      .select("id, name, contact_name, contact_email, contact_phone, is_internal")
+      .order("is_internal", { ascending: false })
+      .order("name");
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      contactName: row.contact_name ?? "",
+      contactEmail: row.contact_email ?? "",
+      contactPhone: row.contact_phone ?? "",
+      isInternal: row.is_internal ?? false,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function loadOwnerProfiles(): Promise<OwnerProfile[]> {
   try {
     const supabase = await createClient();
@@ -78,16 +119,27 @@ export default async function SettingsPage({
   const params = (await searchParams) ?? {};
   const tab = typeof params.tab === "string" ? params.tab : "manufacturing";
 
-  const [data, authDrift, schedulerAccess, ownerProfiles, assemblers, qcs, manufacturing] =
-    await Promise.all([
-      loadFullDataset(),
-      getInstallerCutterAuthDrift(),
-      loadAllSchedulerBuildingAccess(),
-      loadOwnerProfiles(),
-      loadAssemblers(),
-      loadQcs(),
-      loadManufacturingSettings(),
-    ]);
+  const [
+    data,
+    authDrift,
+    schedulerAccess,
+    ownerProfiles,
+    assemblers,
+    qcs,
+    subcontractors,
+    partners,
+    manufacturing,
+  ] = await Promise.all([
+    loadFullDataset(),
+    getInstallerCutterAuthDrift(),
+    loadAllSchedulerBuildingAccess(),
+    loadOwnerProfiles(),
+    loadAssemblers(),
+    loadQcs(),
+    loadSubcontractors(),
+    loadPartners(),
+    loadManufacturingSettings(),
+  ]);
 
   const accounts = (
     <AccountsManager
@@ -97,6 +149,8 @@ export default async function SettingsPage({
       ownerProfiles={ownerProfiles}
       assemblers={assemblers}
       qcs={qcs}
+      subcontractors={subcontractors}
+      manufacturingPartners={partners}
       currentUserAuthId={user?.id ?? ""}
     />
   );

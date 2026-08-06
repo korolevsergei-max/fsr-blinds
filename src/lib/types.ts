@@ -215,6 +215,19 @@ export interface Unit {
   assignedAt?: string | null;
   manufacturingRiskFlag?: RiskFlag;
   hasOpenPostInstallIssue?: boolean;
+  /**
+   * Who manufactures this unit. Defaults to the in-house partner
+   * (INTERNAL_PARTNER_ID) — the name is resolved client-side from the
+   * `manufacturingPartners` dataset slice rather than denormalised here, so a
+   * realtime `postgres_changes` update (which ships raw unit columns) carries it.
+   */
+  manufacturingPartnerId?: string | null;
+  /**
+   * When a manufacturer was explicitly chosen for this unit. NULL means nobody has
+   * decided yet — the column defaults to in-house, so the id alone cannot tell
+   * "chosen internal" from "never asked". The room-creation gate reads this.
+   */
+  manufacturingAssignedAt?: string | null;
 }
 
 export interface UnitActivityLog {
@@ -277,6 +290,29 @@ export interface Cutter {
   contactName: string;
   contactEmail: string;
   contactPhone: string;
+  authUserId: string | null;
+}
+
+/**
+ * A company that manufactures units — the in-house factory (`isInternal`) or an
+ * external subcontractor. Assigned per unit via `Unit.manufacturingPartnerId`.
+ */
+export interface ManufacturingPartner {
+  id: string;
+  name: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  isInternal: boolean;
+}
+
+/** A login account belonging to a ManufacturingPartner. */
+export interface Subcontractor {
+  id: string;
+  partnerId: string;
+  name: string;
+  email: string;
+  phone: string;
   authUserId: string | null;
 }
 

@@ -1,0 +1,52 @@
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth";
+import { SubcontractorNav } from "./subcontractor-nav";
+
+/**
+ * The one portal that is NOT mobile-shaped.
+ *
+ * Every other segment wraps its children in `mx-auto max-w-lg` — that single
+ * class is what makes the app a phone app. Subcontractors work at a desk against
+ * a wide spec table, so this layout deliberately omits it and gives the table the
+ * full viewport. No existing portal is touched.
+ */
+export default async function SubcontractorLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.role === "owner") {
+    redirect("/management");
+  }
+  if (user.role === "cutter") {
+    redirect("/cutter");
+  }
+  if (user.role === "installer") {
+    redirect("/installer");
+  }
+  if (user.role === "scheduler") {
+    redirect("/scheduler");
+  }
+  if (user.role === "assembler") {
+    redirect("/assembler");
+  }
+  if (user.role === "qc") {
+    redirect("/qc");
+  }
+  if (user.role !== "subcontractor") {
+    redirect("/login");
+  }
+
+  return (
+    <div className="min-h-[100dvh] bg-background">
+      <SubcontractorNav displayName={user.displayName} />
+      <main id="main-content" className="px-4 py-5 sm:px-6">
+        {children}
+      </main>
+    </div>
+  );
+}

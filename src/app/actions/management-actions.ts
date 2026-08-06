@@ -3,7 +3,10 @@
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireOwner } from "@/lib/auth";
+import { getLinkedSchedulerId, requireOwner, requireOwnerOrScheduler } from "@/lib/auth";
+import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
+import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 import { emitNotification } from "@/lib/emit-notification";
 import {
@@ -856,6 +859,140 @@ export async function assignUnitsToScheduler(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to assign units" };
+  }
+}
+
+/**
+ * Assign a set of units to a manufacturing partner (in-house or a subcontractor).
+ *
+ * The reflow at the end is what actually moves the work: it rebuilds the internal
+ * factory schedule from units whose partner is internal and purges schedule rows
+ * for the rest, so units sent out disappear from the cutter/assembler/QC queues
+ * and stop consuming in-house capacity — and units brought back reappear.
+ */
+export async function assignUnitsToManufacturingPartner(
+  partnerId: string,
+  unitIds: string[]
+): Promise<ActionResult> {
+  try {
+    const actor = await requireOwnerOrScheduler();
+    if (!partnerId || unitIds.length === 0) {
+      return { ok: false, error: "A manufacturer and at least one unit are required." };
+    }
+
+    const supabase = await createClient();
+
+    // Validate the partner up front so a stale pick list fails loudly rather than
+    // writing an id the FK would reject with an opaque message.
+    const { data: partner } = await supabase
+      .from("manufacturing_partners")
+      .select("id, name")
+      .eq("id", partnerId)
+      .maybeSingle();
+    if (!partner) {
+      return { ok: false, error: "That manufacturer no longer exists. Refresh and try again." };
+    }
+    const partnerName = (partner as { name: string }).name;
+
+    // Schedulers may only touch units inside their own portal scope.
+    let scopedUnitIds = unitIds;
+    if (actor.role === "scheduler") {
+      const schedulerId = await getLinkedSchedulerId(actor.id);
+      if (!schedulerId) return { ok: false, error: "Scheduler profile not found." };
+      const allowed = new Set(await getSchedulerScopedUnitIds(supabase, schedulerId));
+      scopedUnitIds = unitIds.filter((id) => allowed.has(id));
+      if (scopedUnitIds.length === 0) {
+        return { ok: false, error: "None of those units are in your scope." };
+      }
+    }
+
+    // A scheduler may make the INITIAL choice (the room-creation gate runs in
+    // their portal), but re-routing a unit afterwards moves live work between two
+    // companies, so it is the owner's call. Rejected loudly rather than applied to
+    // the subset they may touch — a silent partial write is how you end up with
+    // half a building at the wrong manufacturer.
+    const { data: targetRows, error: targetsError } = await supabase
+      .from("units")
+      .select("id, unit_number, manufacturing_partner_id, manufacturing_assigned_at")
+      .in("id", scopedUnitIds);
+    if (targetsError) return { ok: false, error: targetsError.message };
+
+    const targets =
+      (targetRows as {
+        id: string;
+        unit_number: string;
+        manufacturing_partner_id: string | null;
+        manufacturing_assigned_at: string | null;
+      }[] | null) ?? [];
+
+    if (actor.role !== "owner") {
+      const alreadySet = targets.filter((u) => u.manufacturing_assigned_at !== null);
+      if (alreadySet.length > 0) {
+        const names = alreadySet.slice(0, 3).map((u) => u.unit_number).join(", ");
+        const more = alreadySet.length > 3 ? ` and ${alreadySet.length - 3} more` : "";
+        return {
+          ok: false,
+          error: `Only the owner can change a manufacturer once it is set (${names}${more}). Ask an owner to re-route ${alreadySet.length === 1 ? "it" : "them"}.`,
+        };
+      }
+    }
+
+    // Units genuinely moving. Ones already on this partner are left alone so a
+    // no-op re-save does not reset their queue-added date.
+    const movingIds = targets
+      .filter((u) => (u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== partnerId)
+      .map((u) => u.id);
+    if (movingIds.length === 0) return { ok: true };
+
+    // Stamp the handoff time: the subcontractor's work list is ordered oldest-first
+    // by when each unit entered their queue, so a reassignment must reset the clock.
+    const { error } = await supabase
+      .from("units")
+      .update({
+        manufacturing_partner_id: partnerId,
+        manufacturing_assigned_at: new Date().toISOString(),
+      })
+      .in("id", movingIds);
+    if (error) return { ok: false, error: error.message };
+
+    // EXCLUSIVITY, synchronously — before this action returns and the caller's UI
+    // refreshes. Deferring it to the reflow in after() would leave the unit
+    // matching BOTH the partner's predicate and the in-house schedule rows for as
+    // long as that took, and permanently if after() never ran. The reads are
+    // filtered by partner too, so this is belt-and-braces rather than the only
+    // defence — but it keeps the tables honest.
+    if (partnerId !== INTERNAL_PARTNER_ID) {
+      const { error: purgeError } = await supabase
+        .from("window_manufacturing_schedule")
+        .delete()
+        .in("unit_id", movingIds);
+      if (purgeError) {
+        return {
+          ok: false,
+          error: `Reassigned, but the in-house schedule could not be cleared: ${purgeError.message}. Refresh and try again.`,
+        };
+      }
+    }
+
+    const unitsMeta = await loadUnitsRouteMeta(supabase, movingIds);
+
+    after(async () => {
+      for (const unitId of movingIds) {
+        await logUnitActivity(supabase, unitId, actor.role, actor.displayName, "manufacturer_assigned", {
+          manufacturer: partnerName,
+        });
+      }
+      await reflowManufacturingSchedules("manufacturer_assigned");
+      revalidateManyUnitRoutes(unitsMeta);
+      revalidateAllPortalData();
+    });
+
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Failed to assign manufacturer",
+    };
   }
 }
 

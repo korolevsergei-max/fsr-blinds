@@ -26,6 +26,9 @@ export default async function QcLayout({
   if (user.role === "assembler") {
     redirect("/assembler");
   }
+  if (user.role === "subcontractor") {
+    redirect("/subcontractor");
+  }
   if (user.role !== "qc") {
     redirect("/login");
   }

@@ -9,5 +9,6 @@ export function homePathForRole(role: string | null | undefined): string {
   if (role === "scheduler") return "/scheduler";
   if (role === "assembler") return "/assembler";
   if (role === "qc") return "/qc";
+  if (role === "subcontractor") return "/subcontractor";
   return "/";
 }

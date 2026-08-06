@@ -33,6 +33,7 @@ import { UnitStageMediaViewer } from "@/components/unit-stage-media-viewer";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
+import { UnitManufacturerPicker } from "@/components/units/unit-manufacturer-picker";
 import {
   getEscalationSurfaceClasses,
   getOpenPostInstallIssueTargets,
@@ -429,6 +430,12 @@ export function ManagementUnitDetail({
                 </p>
               </div>
             </div>
+            <UnitManufacturerPicker
+              unitId={unit.id}
+              partnerId={unit.manufacturingPartnerId}
+              assignedAt={unit.manufacturingAssignedAt}
+              className="col-span-2 flex items-center gap-3 px-4 py-3 border-b border-border-subtle"
+            />
             <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
               <CalendarBlank size={17} className="text-tertiary shrink-0" />
               <div className="min-w-0">

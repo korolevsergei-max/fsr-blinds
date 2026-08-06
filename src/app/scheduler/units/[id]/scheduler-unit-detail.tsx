@@ -27,6 +27,7 @@ import { SectionLabel } from "@/components/ui/section-label";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
+import { UnitManufacturerPicker } from "@/components/units/unit-manufacturer-picker";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
@@ -345,6 +346,19 @@ export function SchedulerUnitDetail({
               Assign installer
             </Link>
           </div>
+        </div>
+
+        {/* Manufacturer */}
+        <div
+          className="animate-fade-up"
+          style={{ "--anim-delay": "0.12s" } as React.CSSProperties}
+        >
+          <UnitManufacturerPicker
+            unitId={unit.id}
+            partnerId={unit.manufacturingPartnerId}
+            assignedAt={unit.manufacturingAssignedAt}
+            className="surface-card flex items-center gap-3 p-4"
+          />
         </div>
 
         <div
