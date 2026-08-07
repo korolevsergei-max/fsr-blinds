@@ -332,6 +332,7 @@ export function AccountsManager({
               : t === "assemblers" ? "Assemblers"
               : t === "qcs" ? "Quality Control"
               : t === "schedulers" ? "Schedulers"
+              : t === "subcontractors" ? "Subcontractors"
               : "Owners"}
           </button>
         ))}
