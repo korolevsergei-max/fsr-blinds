@@ -175,7 +175,7 @@ export async function createManufacturingPartner(
   contactName: string,
   contactEmail: string,
   contactPhone: string
-): Promise<ActionResult> {
+): Promise<ActionResult & { partnerId?: string }> {
   try {
     const denied = await assertOwnerForAccountActions();
     if (denied) return denied;
@@ -183,8 +183,9 @@ export async function createManufacturingPartner(
     if (!name.trim()) return { ok: false, error: "Name is required." };
 
     const supabase = await createClient();
+    const partnerId = `mp-${crypto.randomUUID().slice(0, 8)}`;
     const { error } = await supabase.from("manufacturing_partners").insert({
-      id: `mp-${crypto.randomUUID().slice(0, 8)}`,
+      id: partnerId,
       name: name.trim(),
       contact_name: contactName.trim(),
       contact_email: contactEmail.trim(),
@@ -194,7 +195,7 @@ export async function createManufacturingPartner(
     if (error) return { ok: false, error: error.message };
 
     revalidatePath("/management", "layout");
-    return { ok: true };
+    return { ok: true, partnerId };
   } catch (e) {
     return {
       ok: false,

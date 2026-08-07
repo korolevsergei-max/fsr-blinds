@@ -23,7 +23,10 @@ export function InviteSubcontractorForm({
   partners: ManufacturingPartner[];
   onDone: () => void;
 }) {
-  const external = partners.filter((p) => !p.isInternal);
+  const propsExternal = partners.filter((p) => !p.isInternal);
+
+  const [extraPartners, setExtraPartners] = useState<ManufacturingPartner[]>([]);
+  const external = [...propsExternal, ...extraPartners];
 
   const [partnerId, setPartnerId] = useState(external[0]?.id ?? "");
   const [newPartnerName, setNewPartnerName] = useState("");
@@ -50,8 +53,20 @@ export function InviteSubcontractorForm({
         setError(result.error);
         return;
       }
-      // The partner list arrives with the dataset; reload so the picker sees it.
-      window.location.reload();
+      // Add it locally so the login step can select it right away, without
+      // waiting on a full page reload to see it come back through props.
+      const created: ManufacturingPartner = {
+        id: result.partnerId ?? "",
+        name: newPartnerName.trim(),
+        contactName: "",
+        contactEmail: "",
+        contactPhone: "",
+        isInternal: false,
+      };
+      setExtraPartners((prev) => [...prev, created]);
+      setPartnerId(created.id);
+      setNewPartnerName("");
+      setCreatingPartner(false);
     });
   };
 
