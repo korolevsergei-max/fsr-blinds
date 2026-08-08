@@ -368,7 +368,7 @@ export function ManagementUnitDetail({
         subtitle={`${unit.buildingName} \u2022 ${unit.clientName}`}
         backHref="/management/units"
         actions={
-          <div className="flex items-center gap-2">
+          <>
             <RefreshButton />
             <Link href={`/management/units/${unit.id}/dates`}>
               <Button size="sm" variant="secondary">
@@ -399,7 +399,7 @@ export function ManagementUnitDetail({
                 Delete
               </Button>
             )}
-          </div>
+          </>
         }
       />
 

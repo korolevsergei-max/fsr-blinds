@@ -21,7 +21,7 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border" suppressHydrationWarning>
-      <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:gap-4 md:py-4">
+      <div className="flex flex-col gap-3 px-4 py-3 md:py-4">
         <div className="flex min-w-0 flex-1 items-start gap-2.5">
           {backHref && (
             <Link
@@ -44,7 +44,7 @@ export function PageHeader({
           </div>
         </div>
         {actions && (
-          <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 md:ml-auto md:w-auto md:max-w-[48%] md:flex-shrink-0 md:pb-0 [&>*]:shrink-0">
+          <div className="flex w-full max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 [&>*]:shrink-0">
             {actions}
           </div>
         )}
