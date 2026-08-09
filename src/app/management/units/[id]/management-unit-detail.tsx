@@ -12,6 +12,7 @@ import {
   Robot,
   UserGear,
   ArrowRight,
+  CaretRight,
   Trash,
   ShieldCheck,
 } from "@phosphor-icons/react";
@@ -34,6 +35,7 @@ import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel"
 import { UnitProgressMilestonesPanel } from "@/components/units/unit-progress-milestones-panel";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { UnitManufacturerPicker } from "@/components/units/unit-manufacturer-picker";
+import { EDITABLE_CELL, EDITABLE_VALUE } from "@/components/units/editable-cell-styles";
 import {
   getEscalationSurfaceClasses,
   getOpenPostInstallIssueTargets,
@@ -370,24 +372,9 @@ export function ManagementUnitDetail({
         actions={
           <>
             <RefreshButton />
-            <Link href={`/management/units/${unit.id}/dates`}>
-              <Button size="sm" variant="secondary">
-                <CalendarBlank size={14} />
-                Key dates
-              </Button>
-            </Link>
-            <Link href={`/management/units/${unit.id}/assign?role=installer`}>
-              <Button size="sm" variant="secondary">
-                <Wrench size={14} />
-                Installer
-              </Button>
-            </Link>
-            <Link href={`/management/units/${unit.id}/assign?role=scheduler`}>
-              <Button size="sm" variant="secondary">
-                <CalendarBlank size={14} />
-                Scheduler
-              </Button>
-            </Link>
+            {/* Key dates / Installer / Scheduler used to live here. They now duplicate the
+                tappable rows in the assignment card below, so the header keeps only the two
+                actions that have no home in that card. */}
             {resolvedUserRole === "owner" && (
               <Button 
                 size="sm" 
@@ -404,40 +391,57 @@ export function ManagementUnitDetail({
       />
 
       <div className="px-4 py-5 flex flex-col gap-6">
+        {/* The complete-by date is editable ONLY on the key-dates screen (the card itself is
+            display-only), so with the header's "Key dates" button gone this link is the sole
+            way an owner can still set the client deadline. */}
         <div className="animate-fade-up">
-          <CompleteByHighlightCard completeByDate={unit.completeByDate} />
+          <Link
+            href={`/management/units/${unit.id}/dates`}
+            aria-label="Edit key dates and client deadline"
+            className="block rounded-[var(--radius-lg)] transition-opacity hover:opacity-90 active:scale-[0.995]"
+          >
+            <CompleteByHighlightCard completeByDate={unit.completeByDate} />
+          </Link>
         </div>
 
         {/* Risk + Assignment */}
         <div className="animate-fade-up flex flex-col gap-3"
         >
           <div className="surface-card grid grid-cols-2 overflow-hidden" style={{ padding: 0 }}>
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
-              <UserCircle size={17} className="text-tertiary shrink-0" />
-              <div className="min-w-0">
+            <Link
+              href={`/management/units/${unit.id}/assign?role=installer`}
+              className={`${EDITABLE_CELL} border-b border-r border-border-subtle`}
+            >
+              <UserCircle size={17} className="text-accent shrink-0" />
+              <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-tertiary">Assigned installer</p>
-                <p className="text-[13px] font-medium text-foreground truncate">
+                <p className={`${EDITABLE_VALUE} truncate`}>
                   {unit.assignedInstallerName || "Unassigned"}
                 </p>
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
-              <UserCircle size={17} className="text-tertiary shrink-0" />
-              <div className="min-w-0">
+              <CaretRight size={13} weight="bold" className="text-accent/60 shrink-0" />
+            </Link>
+            <Link
+              href={`/management/units/${unit.id}/assign?role=scheduler`}
+              className={`${EDITABLE_CELL} border-b border-border-subtle`}
+            >
+              <UserCircle size={17} className="text-accent shrink-0" />
+              <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-tertiary">Assigned scheduler</p>
-                <p className="text-[13px] font-medium text-foreground truncate">
+                <p className={`${EDITABLE_VALUE} truncate`}>
                   {unit.assignedSchedulerName || "Unassigned"}
                 </p>
               </div>
-            </div>
+              <CaretRight size={13} weight="bold" className="text-accent/60 shrink-0" />
+            </Link>
             <UnitManufacturerPicker
               unitId={unit.id}
               partnerId={unit.manufacturingPartnerId}
               assignedAt={unit.manufacturingAssignedAt}
-              className="col-span-2 flex items-center gap-3 px-4 py-3 border-b border-border-subtle"
+              className={`col-span-2 ${EDITABLE_CELL} border-b border-border-subtle`}
             />
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-r border-border-subtle">
-              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+            <div className={`${EDITABLE_CELL} border-b border-r border-border-subtle`}>
+              <CalendarBlank size={17} className="text-accent shrink-0" />
               <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Measurement date</p>
                 <DateInput
@@ -446,11 +450,12 @@ export function ManagementUnitDetail({
                   disabled={isUpdatingDate}
                   compact
                   className="-ml-1"
+                  tone="accent"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle">
-              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+            <div className={`${EDITABLE_CELL} border-b border-border-subtle`}>
+              <CalendarBlank size={17} className="text-accent shrink-0" />
               <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Bracketing date</p>
                 <DateInput
@@ -459,11 +464,12 @@ export function ManagementUnitDetail({
                   disabled={isUpdatingDate}
                   compact
                   className="-ml-1"
+                  tone="accent"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-3 border-r border-border-subtle">
-              <CalendarBlank size={17} className="text-tertiary shrink-0" />
+            <div className={`${EDITABLE_CELL} border-r border-border-subtle`}>
+              <CalendarBlank size={17} className="text-accent shrink-0" />
               <div className="min-w-0">
                 <p className="text-[11px] text-tertiary">Installation date</p>
                 <DateInput
@@ -472,6 +478,7 @@ export function ManagementUnitDetail({
                   disabled={isUpdatingDate}
                   compact
                   className="-ml-1"
+                  tone="accent"
                 />
               </div>
             </div>

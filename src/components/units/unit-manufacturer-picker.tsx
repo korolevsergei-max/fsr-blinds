@@ -6,6 +6,7 @@ import { Factory } from "@phosphor-icons/react";
 import { assignUnitsToManufacturingPartner } from "@/app/actions/management-actions";
 import { useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import { INTERNAL_PARTNER_ID, sortPartners } from "@/lib/manufacturing-partners";
+import { EDITABLE_VALUE } from "@/components/units/editable-cell-styles";
 
 /**
  * Single-unit manufacturer control for the owner/scheduler unit detail page.
@@ -74,14 +75,16 @@ export function UnitManufacturerPicker({
 
   return (
     <div className={className}>
-      <Factory size={17} className="text-tertiary shrink-0" />
+      {/* Accent icon only on the editable branch — the read-only branch above keeps the
+          neutral tone so "Owner can change this" reads as genuinely not actionable. */}
+      <Factory size={17} className="text-accent shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="text-[11px] text-tertiary">Manufacturer</p>
         <select
           value={current}
           disabled={pending}
           onChange={(e) => handleChange(e.target.value)}
-          className="-ml-0.5 w-full bg-transparent text-[13px] font-medium text-foreground truncate focus:outline-none focus:ring-2 focus:ring-accent rounded disabled:opacity-60"
+          className={`-ml-0.5 w-full bg-transparent text-[13px] truncate focus:outline-none focus:ring-2 focus:ring-accent rounded disabled:opacity-60 ${EDITABLE_VALUE}`}
         >
           {sortPartners(partners).map((p) => (
             <option key={p.id} value={p.id}>

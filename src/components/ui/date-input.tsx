@@ -16,6 +16,12 @@ type DateInputProps = {
   compact?: boolean;
   className?: string;
   triggerClassName?: string;
+  /**
+   * `accent` tints the value + icon green to mark the field as editable in place.
+   * Applied to the inner span rather than the button because the span's own colour
+   * would otherwise win over anything passed via `triggerClassName`.
+   */
+  tone?: "default" | "accent";
 };
 
 function parseDate(value: string): Date | null {
@@ -84,6 +90,7 @@ export function DateInput({
   compact = false,
   className = "",
   triggerClassName = "",
+  tone = "default",
 }: DateInputProps) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, "-") || undefined;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -201,10 +208,23 @@ export function DateInput({
         }}
         className={[baseTriggerClass, triggerTone, triggerClassName].filter(Boolean).join(" ")}
       >
-        <span className={value ? "text-foreground" : "text-tertiary"}>
+        <span
+          className={
+            tone === "accent"
+              ? value
+                ? "font-semibold text-accent"
+                : "font-semibold text-accent/70"
+              : value
+                ? "text-foreground"
+                : "text-tertiary"
+          }
+        >
           {displayValue}
         </span>
-        <CalendarBlank size={compact ? 16 : 18} className="shrink-0 text-tertiary" />
+        <CalendarBlank
+          size={compact ? 16 : 18}
+          className={`shrink-0 ${tone === "accent" ? "text-accent/70" : "text-tertiary"}`}
+        />
       </button>
 
       {error && <p className="text-[13px] leading-snug text-danger">{error}</p>}

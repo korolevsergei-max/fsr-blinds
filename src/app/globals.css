@@ -64,6 +64,7 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-light: var(--accent-light);
+  --color-accent-muted: var(--accent-muted);
   --color-accent-dark: var(--accent-dark);
   --color-danger: var(--danger);
   --color-danger-light: var(--danger-light);

@@ -14,6 +14,7 @@ import {
   UserGear,
   CalendarCheck,
   ArrowRight,
+  CaretRight,
   ShieldCheck,
 } from "@phosphor-icons/react";
 import { getRoomsByUnit, getWindowsByRoom } from "@/lib/app-dataset";
@@ -28,6 +29,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { UnitEscalationsPanel } from "@/components/units/unit-escalations-panel";
 import { UnitManufacturerPicker } from "@/components/units/unit-manufacturer-picker";
+import { EDITABLE_CELL_BASE, EDITABLE_VALUE } from "@/components/units/editable-cell-styles";
 import { CompleteByHighlightCard } from "@/components/units/complete-by-highlight-card";
 import { computeUnitFlags, FLAG_LABELS, FLAG_CLASSES, type UnitFlag } from "@/lib/unit-flags";
 import { formatStoredDateForDisplay } from "@/lib/created-date";
@@ -326,26 +328,29 @@ export function SchedulerUnitDetail({
           className="animate-fade-up surface-card p-4"
           style={{ "--anim-delay": "0.1s" } as React.CSSProperties}
         >
-          <div className="flex items-center justify-between">
+          {/* Whole card is the tap target, matching the management assignment rows: the value
+              itself carries the affordance rather than a separate "Assign installer" link. */}
+          <Link
+            href={`/scheduler/units/${id}/assign`}
+            className="-m-4 flex items-center justify-between rounded-[var(--radius-lg)] bg-accent-light p-4 transition-colors hover:bg-accent-muted"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                <UserCircle size={22} className="text-tertiary" />
+              <div className="w-10 h-10 rounded-[var(--radius-md)] bg-accent-light border border-accent/20 flex items-center justify-center">
+                <UserCircle size={22} className="text-accent" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-foreground">
+                <p className={EDITABLE_VALUE}>
                   {unit.assignedInstallerName ?? "Unassigned"}
                 </p>
                 <p className="text-[11px] text-tertiary">Installer</p>
               </div>
             </div>
-            <Link
-              href={`/scheduler/units/${id}/assign`}
-              className="flex items-center gap-1 text-[12px] font-semibold text-accent"
-            >
+            <span className="flex items-center gap-1 text-[12px] font-semibold text-accent">
               <PencilSimple size={13} />
-              Assign installer
-            </Link>
-          </div>
+              Assign
+              <CaretRight size={12} weight="bold" className="text-accent/60" />
+            </span>
+          </Link>
         </div>
 
         {/* Manufacturer */}
@@ -357,7 +362,7 @@ export function SchedulerUnitDetail({
             unitId={unit.id}
             partnerId={unit.manufacturingPartnerId}
             assignedAt={unit.manufacturingAssignedAt}
-            className="surface-card flex items-center gap-3 p-4"
+            className={`surface-card ${EDITABLE_CELL_BASE} p-4`}
           />
         </div>
 
