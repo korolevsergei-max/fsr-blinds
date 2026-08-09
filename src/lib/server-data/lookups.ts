@@ -17,6 +17,7 @@ import {
   type WindowRow,
 } from "@/lib/dataset-mappers";
 import { combineInstallersWithSchedulers, emptyDataset } from "./build";
+import { loadManufacturingPartners } from "./datasets";
 import { finalizeDataset } from "./enrichment";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
@@ -84,12 +85,16 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
 
   // Second round: windows (depend on roomIds) plus this unit's building/client rows
   // (depend on the fetched unit). Keeps the scoped dataset full-shaped.
-  const [windowsRes, buildingRes, clientRes] = await Promise.all([
+  // The partner list rides along because this nested provider SHADOWS the global one:
+  // without it `UnitManufacturerPicker` and `ManufacturerGate` see zero partners and
+  // silently render nothing, so the unit can never be routed to a subcontractor.
+  const [windowsRes, buildingRes, clientRes, manufacturingPartners] = await Promise.all([
     roomIds.length > 0
       ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
       : Promise.resolve({ data: [] as WindowRow[] }),
     supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
     supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
+    loadManufacturingPartners(),
   ]);
 
   const installers = ((installersRes.data as InstallerRow[]) ?? []).map(mapInstaller);
@@ -119,6 +124,7 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
     windows: ((windowsRes.data as WindowRow[]) ?? []).map(mapWindow),
     installers: combineInstallersWithSchedulers(installers, schedulers),
     schedulers,
+    manufacturingPartners,
   });
 }
 
@@ -164,12 +170,15 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
   const rooms = ((roomsRes.data as RoomRow[]) ?? []).map(mapRoom);
   const roomIds = rooms.map((r) => r.id);
 
-  const [windowsRes, buildingRes, clientRes] = await Promise.all([
+  const [windowsRes, buildingRes, clientRes, manufacturingPartners] = await Promise.all([
     roomIds.length > 0
       ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
       : Promise.resolve({ data: [] as WindowRow[] }),
     supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
     supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
+    // Same reason as loadUnitDetail: the nested provider shadows the global one, and a
+    // scheduler makes the FIRST routing choice via ManufacturerGate on the rooms screen.
+    loadManufacturingPartners(),
   ]);
 
   // Team-scoped pick-list (fallback to all when empty) + synthetic self row — mirrors loadSchedulerDataset.
@@ -210,5 +219,6 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
     rooms,
     windows: ((windowsRes.data as WindowRow[]) ?? []).map(mapWindow),
     installers,
+    manufacturingPartners,
   });
 }
