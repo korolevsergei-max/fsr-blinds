@@ -125,7 +125,7 @@ export function SubcontractorWorkTable({
       : "No blinds waiting. New work appears here once FSR assigns and measures a unit.";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-[18px] font-semibold tracking-tight text-foreground">{heading}</h1>
@@ -220,15 +220,20 @@ export function SubcontractorWorkTable({
       {items.length === 0 ? (
         <p className="py-16 text-center text-[13px] text-muted">{emptyCopy}</p>
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-card">
+        // The pane scrolls in both directions, so `sticky top-0` on the header
+        // cells pins them to the top of THIS box as they read down the list.
+        // The background must sit on each `th`, not on the `tr`: a sticky cell
+        // paints independently of its row, and a transparent one would let the
+        // data rows scroll through it.
+        <div className="min-h-0 flex-1 overflow-auto rounded-[var(--radius-md)] border border-border bg-card">
           <table className="w-full border-collapse text-[13px]">
             <thead>
-              <tr className="bg-foreground text-white">
-                {selectMode && <th className="w-10 px-3 py-2.5" />}
+              <tr className="text-white">
+                {selectMode && <th className="sticky top-0 z-10 w-10 bg-foreground px-3 py-2.5" />}
                 {columns.map((col) => (
                   <th
                     key={col.header}
-                    className="whitespace-nowrap px-3 py-2.5 text-left text-[12px] font-semibold"
+                    className="sticky top-0 z-10 whitespace-nowrap bg-foreground px-3 py-2.5 text-left text-[12px] font-semibold"
                   >
                     {col.header}
                   </th>

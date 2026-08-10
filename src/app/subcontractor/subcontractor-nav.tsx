@@ -21,7 +21,7 @@ export function SubcontractorNav({ displayName }: { displayName: string }) {
   const [signingOut, startSignOut] = useTransition();
 
   return (
-    <header className="border-b border-border bg-card">
+    <header className="shrink-0 border-b border-border bg-card">
       <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-6 min-w-0">
           <span className="text-[15px] font-semibold tracking-tight text-foreground whitespace-nowrap">

@@ -41,10 +41,14 @@ export default async function SubcontractorLayout({
     redirect("/login");
   }
 
+  // Viewport-tall flex column, not a page that grows: the work table scrolls
+  // inside its own pane so its header row can stay pinned while they read down a
+  // 77-row list. `min-h-0` on the main is what lets that pane shrink instead of
+  // pushing the document taller.
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="flex h-[100dvh] flex-col bg-background">
       <SubcontractorNav displayName={user.displayName} />
-      <main id="main-content" className="px-4 py-5 sm:px-6">
+      <main id="main-content" className="flex min-h-0 flex-1 flex-col px-4 py-5 sm:px-6">
         {children}
       </main>
     </div>
