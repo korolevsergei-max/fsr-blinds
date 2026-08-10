@@ -81,6 +81,12 @@ test("mapUnit omits currentStage when the row has none (fallback paths keep the 
   assert.equal("currentStage" in mapUnit(createUnitRow()), false);
 });
 
+test("mapUnit reads absent manufacturing_locked as FALSE — an old RPC shape must leave the picker usable, not freeze every unit", () => {
+  assert.equal(mapUnit(createUnitRow()).manufacturingLocked, false);
+  assert.equal(mapUnit(createUnitRow({ manufacturing_locked: null })).manufacturingLocked, false);
+  assert.equal(mapUnit(createUnitRow({ manufacturing_locked: true })).manufacturingLocked, true);
+});
+
 test("normalizeScheduleEntries uses the live unit status instead of stale schedule entry status", () => {
   const unit = createUnit();
   const normalized = normalizeScheduleEntries(

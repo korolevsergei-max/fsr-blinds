@@ -21,6 +21,43 @@ import { loadManufacturingPartners } from "./datasets";
 import { finalizeDataset } from "./enrichment";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
+import { computeManufacturingLock, countProductionStatuses } from "@/lib/manufacturing-lock";
+
+/**
+ * `units.select("*")` row fields the lock predicate needs beyond UnitRow.
+ * These come free on the detail loaders (full-row select) but are NOT in the
+ * global dataset projections — which is why the lock is computed here rather
+ * than client-side.
+ */
+type UnitLockColumns = {
+  production_entered_at?: string | null;
+  all_measured_at?: string | null;
+};
+
+/**
+ * The unit-detail lock takes the cheaper route: one extra
+ * window_production_status query folded to counts, NOT a read of the
+ * unit_manufacturing_locks view. PG views default to security_invoker = off,
+ * so granting `authenticated` a direct SELECT on the view would bypass the
+ * `units` RLS policies and leak lock state across scope; the wps table read
+ * below goes through can_access_unit like every other scoped read.
+ */
+async function loadManufacturingLocked(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  unitId: string,
+  unitRow: UnitRow & UnitLockColumns
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("window_production_status")
+    .select("status")
+    .eq("unit_id", unitId);
+  return computeManufacturingLock({
+    partnerId: unitRow.manufacturing_partner_id ?? null,
+    productionEnteredAt: unitRow.production_entered_at ?? null,
+    allMeasuredAt: unitRow.all_measured_at ?? null,
+    ...countProductionStatuses((data as { status: string }[] | null) ?? []),
+  });
+}
 
 /** unit_id → scheduler_id for rows in `scheduler_unit_assignments` (at most one per unit). */
 export async function loadUnitSchedulerAssignmentMap(): Promise<Record<string, string>> {
@@ -81,21 +118,25 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
 
   const rooms = ((roomsRes.data as RoomRow[]) ?? []).map(mapRoom);
   const roomIds = rooms.map((r) => r.id);
-  const unitRow = unitRes.data as UnitRow;
+  const unitRow = unitRes.data as UnitRow & UnitLockColumns;
 
   // Second round: windows (depend on roomIds) plus this unit's building/client rows
   // (depend on the fetched unit). Keeps the scoped dataset full-shaped.
   // The partner list rides along because this nested provider SHADOWS the global one:
   // without it `UnitManufacturerPicker` and `ManufacturerGate` see zero partners and
   // silently render nothing, so the unit can never be routed to a subcontractor.
-  const [windowsRes, buildingRes, clientRes, manufacturingPartners] = await Promise.all([
-    roomIds.length > 0
-      ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
-      : Promise.resolve({ data: [] as WindowRow[] }),
-    supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
-    supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
-    loadManufacturingPartners(),
-  ]);
+  // manufacturingLocked rides along for the same shadowing reason: any Unit field
+  // this provider omits silently arrives empty on the unit-detail routes.
+  const [windowsRes, buildingRes, clientRes, manufacturingPartners, manufacturingLocked] =
+    await Promise.all([
+      roomIds.length > 0
+        ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
+        : Promise.resolve({ data: [] as WindowRow[] }),
+      supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
+      supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
+      loadManufacturingPartners(),
+      loadManufacturingLocked(supabase, unitId, unitRow),
+    ]);
 
   const installers = ((installersRes.data as InstallerRow[]) ?? []).map(mapInstaller);
   const schedulers = ((schedulersRes.data as SchedulerRow[]) ?? []).map(mapScheduler);
@@ -107,7 +148,7 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
     : null;
 
   const unit = mapUnit(
-    { ...unitRow, assigned_at: assignment?.assigned_at },
+    { ...unitRow, assigned_at: assignment?.assigned_at, manufacturing_locked: manufacturingLocked },
     schedulerName,
     schedulerId
   );
@@ -166,20 +207,22 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
   ]);
 
   if (unitRes.error || !unitRes.data) return emptyDataset();
-  const unitRow = unitRes.data as UnitRow;
+  const unitRow = unitRes.data as UnitRow & UnitLockColumns;
   const rooms = ((roomsRes.data as RoomRow[]) ?? []).map(mapRoom);
   const roomIds = rooms.map((r) => r.id);
 
-  const [windowsRes, buildingRes, clientRes, manufacturingPartners] = await Promise.all([
-    roomIds.length > 0
-      ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
-      : Promise.resolve({ data: [] as WindowRow[] }),
-    supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
-    supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
-    // Same reason as loadUnitDetail: the nested provider shadows the global one, and a
-    // scheduler makes the FIRST routing choice via ManufacturerGate on the rooms screen.
-    loadManufacturingPartners(),
-  ]);
+  const [windowsRes, buildingRes, clientRes, manufacturingPartners, manufacturingLocked] =
+    await Promise.all([
+      roomIds.length > 0
+        ? supabase.from("windows").select("*").in("room_id", roomIds).order("label")
+        : Promise.resolve({ data: [] as WindowRow[] }),
+      supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
+      supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
+      // Same reason as loadUnitDetail: the nested provider shadows the global one, and a
+      // scheduler makes the FIRST routing choice via ManufacturerGate on the rooms screen.
+      loadManufacturingPartners(),
+      loadManufacturingLocked(supabase, unitId, unitRow),
+    ]);
 
   // Team-scoped pick-list (fallback to all when empty) + synthetic self row — mirrors loadSchedulerDataset.
   let installers = ((teamInstallersRes.data as InstallerRow[]) ?? []).map(mapInstaller);
@@ -206,7 +249,11 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
 
   const assignment = assignmentRes.data as { assigned_at: string } | null;
   const schedulerName = schedulerRow?.name ?? "Unknown";
-  const unit = mapUnit({ ...unitRow, assigned_at: assignment?.assigned_at }, schedulerName, schedulerId);
+  const unit = mapUnit(
+    { ...unitRow, assigned_at: assignment?.assigned_at, manufacturing_locked: manufacturingLocked },
+    schedulerName,
+    schedulerId
+  );
 
   const building = buildingRes.data ? mapBuilding(buildingRes.data as BuildingRow) : null;
   const client = clientRes.data ? mapClient(clientRes.data as ClientRow) : null;

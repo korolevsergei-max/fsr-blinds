@@ -7,6 +7,7 @@ import { getLinkedSchedulerId, requireOwner, requireOwnerOrScheduler } from "@/l
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
+import { computeManufacturingLock } from "@/lib/manufacturing-lock";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 import { emitNotification } from "@/lib/emit-notification";
 import {
@@ -869,10 +870,19 @@ export async function assignUnitsToScheduler(
  * factory schedule from units whose partner is internal and purges schedule rows
  * for the rest, so units sent out disappear from the cutter/assembler/QC queues
  * and stop consuming in-house capacity — and units brought back reappear.
+ *
+ * Once manufacturing has STARTED on a unit (computeManufacturingLock, mirroring
+ * the DB trigger's is_manufacturing_locked), moving it re-shows part-built
+ * blinds as open work on the other side — the ~$100-per-blind double build.
+ * Locked units are rejected here with a readable message unless the owner
+ * passes the `override` confirmation, which is only valid for a single-unit
+ * call whose typed unit number matches. The DB trigger enforces the same rule
+ * even if this check is bypassed.
  */
 export async function assignUnitsToManufacturingPartner(
   partnerId: string,
-  unitIds: string[]
+  unitIds: string[],
+  override?: { unitId: string; confirmUnitNumber: string }
 ): Promise<ActionResult> {
   try {
     const actor = await requireOwnerOrScheduler();
@@ -913,7 +923,9 @@ export async function assignUnitsToManufacturingPartner(
     // half a building at the wrong manufacturer.
     const { data: targetRows, error: targetsError } = await supabase
       .from("units")
-      .select("id, unit_number, manufacturing_partner_id, manufacturing_assigned_at")
+      .select(
+        "id, unit_number, manufacturing_partner_id, manufacturing_assigned_at, production_entered_at, all_measured_at"
+      )
       .in("id", scopedUnitIds);
     if (targetsError) return { ok: false, error: targetsError.message };
 
@@ -923,6 +935,8 @@ export async function assignUnitsToManufacturingPartner(
         unit_number: string;
         manufacturing_partner_id: string | null;
         manufacturing_assigned_at: string | null;
+        production_entered_at: string | null;
+        all_measured_at: string | null;
       }[] | null) ?? [];
 
     if (actor.role !== "owner") {
@@ -939,18 +953,97 @@ export async function assignUnitsToManufacturingPartner(
 
     // Units genuinely moving. Ones already on this partner are left alone so a
     // no-op re-save does not reset their queue-added date.
-    const movingIds = targets
-      .filter((u) => (u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== partnerId)
-      .map((u) => u.id);
+    const moving = targets.filter(
+      (u) => (u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== partnerId
+    );
+    const movingIds = moving.map((u) => u.id);
     if (movingIds.length === 0) return { ok: true };
+
+    // One batched read of per-window production, folded to the two counts the
+    // lock predicate needs. Computed against each unit's CURRENT (pre-move)
+    // partner — the lock depends on which side owns the work today, exactly as
+    // the DB trigger evaluates it from OLD.
+    const { data: productionRows, error: productionError } = await supabase
+      .from("window_production_status")
+      .select("unit_id, status")
+      .in("unit_id", movingIds);
+    if (productionError) return { ok: false, error: productionError.message };
+
+    const countsByUnit = new Map<string, { startedCount: number; qcApprovedCount: number }>();
+    for (const row of (productionRows as { unit_id: string; status: string }[] | null) ?? []) {
+      let counts = countsByUnit.get(row.unit_id);
+      if (!counts) {
+        counts = { startedCount: 0, qcApprovedCount: 0 };
+        countsByUnit.set(row.unit_id, counts);
+      }
+      if (row.status !== "pending") counts.startedCount += 1;
+      if (row.status === "qc_approved") counts.qcApprovedCount += 1;
+    }
+    const emptyCounts = { startedCount: 0, qcApprovedCount: 0 };
+    const lockedUnits = moving.filter((u) =>
+      computeManufacturingLock({
+        partnerId: u.manufacturing_partner_id,
+        productionEnteredAt: u.production_entered_at,
+        allMeasuredAt: u.all_measured_at,
+        ...(countsByUnit.get(u.id) ?? emptyCounts),
+      })
+    );
+
+    // The override is valid only when ALL of: the actor is the owner, exactly
+    // one unit was requested, it is the unit the override names, and the typed
+    // unit number matches. No override path exists for any other role.
+    const overrideTarget =
+      override !== undefined &&
+      actor.role === "owner" &&
+      unitIds.length === 1 &&
+      unitIds[0] === override.unitId
+        ? targets.find(
+            (u) =>
+              u.id === override.unitId &&
+              u.unit_number.trim().toLowerCase() ===
+                override.confirmUnitNumber.trim().toLowerCase()
+          ) ?? null
+        : null;
+
+    // Locked targets without a valid override reject the WHOLE batch — same
+    // rationale as the scheduler rejection above: a silent partial write is how
+    // half a building ends up at the wrong manufacturer.
+    const blocked = lockedUnits.filter((u) => u.id !== overrideTarget?.id);
+    if (blocked.length > 0) {
+      const names = blocked.slice(0, 3).map((u) => u.unit_number).join(", ");
+      const more = blocked.length > 3 ? ` and ${blocked.length - 3} more` : "";
+      return {
+        ok: false,
+        error: `Manufacturing has already started on ${names}${more} — ${
+          actor.role === "owner"
+            ? "transferring needs the single-unit confirmation."
+            : "only the owner may transfer it."
+        }`,
+      };
+    }
+
+    const overriding =
+      overrideTarget !== null && lockedUnits.some((u) => u.id === overrideTarget.id)
+        ? overrideTarget
+        : null;
 
     // Stamp the handoff time: the subcontractor's work list is ordered oldest-first
     // by when each unit entered their queue, so a reassignment must reset the clock.
+    // On the override path the override columns ride the SAME statement — that is
+    // what makes the trigger's freshness test (NEW distinct from OLD, this UPDATE)
+    // pass; a separate write would be rejected as a stale stamp.
+    const nowIso = new Date().toISOString();
     const { error } = await supabase
       .from("units")
       .update({
         manufacturing_partner_id: partnerId,
-        manufacturing_assigned_at: new Date().toISOString(),
+        manufacturing_assigned_at: nowIso,
+        ...(overriding
+          ? {
+              manufacturing_transfer_override_at: nowIso,
+              manufacturing_transfer_override_by: actor.displayName,
+            }
+          : {}),
       })
       .in("id", movingIds);
     if (error) return { ok: false, error: error.message };
@@ -976,8 +1069,39 @@ export async function assignUnitsToManufacturingPartner(
 
     const unitsMeta = await loadUnitsRouteMeta(supabase, movingIds);
 
+    // Resolved before after() so the audit row names the side the work LEFT,
+    // not just where it went.
+    let overrideFromName: string | null = null;
+    if (overriding) {
+      const { data: fromPartner } = await supabase
+        .from("manufacturing_partners")
+        .select("name")
+        .eq("id", overriding.manufacturing_partner_id ?? INTERNAL_PARTNER_ID)
+        .maybeSingle();
+      overrideFromName =
+        (fromPartner as { name: string } | null)?.name ??
+        overriding.manufacturing_partner_id ??
+        INTERNAL_PARTNER_ID;
+    }
+
     after(async () => {
       for (const unitId of movingIds) {
+        if (overriding && unitId === overriding.id) {
+          const counts = countsByUnit.get(unitId) ?? emptyCounts;
+          const blindsInFlight = counts.startedCount - counts.qcApprovedCount;
+          await logUnitActivity(
+            supabase, unitId, actor.role, actor.displayName, "manufacturer_transfer_override",
+            {
+              from: overrideFromName,
+              to: partnerName,
+              unitNumber: overriding.unit_number,
+              blindsQcApproved: counts.qcApprovedCount,
+              blindsInFlight,
+              estimatedRebuildCostUsd: blindsInFlight * 100,
+            }
+          );
+          continue;
+        }
         await logUnitActivity(supabase, unitId, actor.role, actor.displayName, "manufacturer_assigned", {
           manufacturer: partnerName,
         });

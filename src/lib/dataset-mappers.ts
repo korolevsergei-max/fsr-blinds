@@ -98,6 +98,13 @@ export type UnitRow = {
   manufacturing_partner_id?: string | null;
   /** NULL = no manufacturer has been chosen for this unit yet. */
   manufacturing_assigned_at?: string | null;
+  /**
+   * Derived by unit_manufacturing_locks (20260810140000). The safe default is
+   * the OPPOSITE of the partner default: absent must read FALSE, so an old RPC
+   * shape leaves the manufacturer picker usable rather than freezing every
+   * unit. The DB trigger and server action are the real enforcement.
+   */
+  manufacturing_locked?: boolean | null;
 };
 
 export type UnitActivityLogRow = {
@@ -247,6 +254,7 @@ export function mapUnit(
     manufacturingRiskFlag: r.manufacturing_risk_flag ?? undefined,
     manufacturingPartnerId: r.manufacturing_partner_id ?? INTERNAL_PARTNER_ID,
     manufacturingAssignedAt: r.manufacturing_assigned_at ?? null,
+    manufacturingLocked: r.manufacturing_locked ?? false,
   };
 }
 

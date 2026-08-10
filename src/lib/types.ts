@@ -228,6 +228,15 @@ export interface Unit {
    * "chosen internal" from "never asked". The room-creation gate reads this.
    */
   manufacturingAssignedAt?: string | null;
+  /**
+   * Manufacturing has started on this unit, so its manufacturer can only be
+   * changed by the owner with the "Transfer anyway" confirmation. Derived
+   * server-side (unit_manufacturing_locks / computeManufacturingLock) — the
+   * client cannot compute it because the global datasets ship no per-window
+   * production rows. Absent reads as FALSE (picker stays usable); the DB
+   * trigger and server action are the real enforcement.
+   */
+  manufacturingLocked?: boolean;
 }
 
 export interface UnitActivityLog {
