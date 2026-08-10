@@ -44,6 +44,9 @@ function specs(item: SubcontractorWorkItem): ReturnType<typeof toCutListRow> {
 
 const dash = (v: string) => (v === "—" ? "" : v);
 
+/** Derived measurements print as mixed fractions, same as the window W/H columns. */
+const frac = (v: number | null) => (v == null ? "" : toFractionInches(v));
+
 /** ISO timestamp → YYYY-MM-DD, the form their software ingests. */
 function toDateOnly(value: string | null | undefined): string {
   return value ? value.split("T")[0]! : "";
@@ -59,11 +62,11 @@ const BASE_COLUMNS: ExportColumn[] = [
   { header: "Window width", width: 14, value: (i) => toFractionInches(i.width) },
   { header: "Window height", width: 14, value: (i) => toFractionInches(i.height) },
   { header: "Fab adj.", width: 14, value: (i) => dash(specs(i).fabAdj) },
-  { header: "Fab (mach.)", width: 14, value: (i) => dash(specs(i).fabMach) },
-  { header: "Fab (cut)", width: 14, value: (i) => dash(specs(i).fabCut) },
-  { header: "Valance", width: 12, value: (i) => dash(specs(i).valance) },
-  { header: "Tube", width: 12, value: (i) => dash(specs(i).tube) },
-  { header: "Bot. rail", width: 12, value: (i) => dash(specs(i).botRail) },
+  { header: "Fab (mach.)", width: 14, value: (i) => frac(specs(i).inches.fabMach) },
+  { header: "Fab (cut)", width: 14, value: (i) => frac(specs(i).inches.fabCut) },
+  { header: "Valance", width: 12, value: (i) => frac(specs(i).inches.valance) },
+  { header: "Tube", width: 12, value: (i) => frac(specs(i).inches.tube) },
+  { header: "Bot. rail", width: 12, value: (i) => frac(specs(i).inches.botRail) },
   { header: "Wand", width: 10, value: (i) => dash(specs(i).wand) },
   { header: "In/Out", width: 10, value: (i) => dash(specs(i).installation) },
   { header: "Chain", width: 12, value: (i) => dash(specs(i).chain) },

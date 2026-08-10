@@ -15,6 +15,13 @@ export interface ManufacturingSummaryInput {
 export interface ManufacturingSummaryRow {
   label: string;
   value: string;
+  /**
+   * Decimal inches behind `value`, on the rows that are a single derived
+   * measurement. Consumers that print a different notation — the subcontractor
+   * sheet prints mixed fractions — read this instead of re-deriving (or worse,
+   * parsing back out of) the formatted string.
+   */
+  inches?: number;
 }
 
 export interface ManufacturingSummary {
@@ -55,11 +62,11 @@ export function computeManufacturingSummary(input: ManufacturingSummaryInput): M
         value: `${fmt(width)} × ${height != null ? fmt(height) : "—"}${depth != null ? ` × ${fmt(depth)}` : ""}`,
       },
       { label: "Fabric adj.", value: fabricAdjLabel },
-      { label: "Fabric width (machine)", value: fmt(fabricMachineWidth) },
-      { label: "Fabric width (post-cut)", value: fmt(fabricPostCut) },
-      { label: "Valance width", value: fmt(width - 0.0625) },
-      { label: "Tube width", value: fmt(width - 1.375) },
-      { label: "Bottom rail", value: fmt(fabricPostCut) },
+      { label: "Fabric width (machine)", value: fmt(fabricMachineWidth), inches: fabricMachineWidth },
+      { label: "Fabric width (post-cut)", value: fmt(fabricPostCut), inches: fabricPostCut },
+      { label: "Valance width", value: fmt(width - 0.0625), inches: width - 0.0625 },
+      { label: "Tube width", value: fmt(width - 1.375), inches: width - 1.375 },
+      { label: "Bottom rail", value: fmt(fabricPostCut), inches: fabricPostCut },
       { label: "Wand & chain", value: wandChain != null ? `${wandChain}"` : "Not set" },
       { label: "Window installation", value: windowInstallation === "inside" ? "Inside" : "Outside" },
       { label: "Blind type", value: blindType === "blackout" ? "Blackout" : "Screen" },

@@ -6,6 +6,9 @@ import { getFloor } from "@/lib/app-dataset";
 // 4=Valance, 5=Tube, 6=BottomRail, 7=Wand, 8=WinInstall, 9=BlindType, 10=ChainSide
 const SPEC_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10];
 
+/** Same rows, as raw decimal inches — for sheets that print fractions instead. */
+const MEASUREMENT_INDICES = { fabMach: 2, fabCut: 3, valance: 4, tube: 5, botRail: 6 } as const;
+
 export interface CutListRow {
   date: string;
   building: string;
@@ -27,6 +30,8 @@ export interface CutListRow {
   wand: string;
   installation: string;
   chain: string;
+  /** Decimal inches behind the five derived spec columns; null with no measurements. */
+  inches: Record<keyof typeof MEASUREMENT_INDICES, number | null>;
 }
 
 function formatDate(iso: string | null): string {
@@ -75,5 +80,12 @@ export function toCutListRow(item: ManufacturingWindowItem): CutListRow {
     wand: specValues[7],
     installation: specValues[8],
     chain: specValues[9].replace(/[←→]/g, "").trim(),
+    inches: {
+      fabMach: summary.rows[MEASUREMENT_INDICES.fabMach]?.inches ?? null,
+      fabCut: summary.rows[MEASUREMENT_INDICES.fabCut]?.inches ?? null,
+      valance: summary.rows[MEASUREMENT_INDICES.valance]?.inches ?? null,
+      tube: summary.rows[MEASUREMENT_INDICES.tube]?.inches ?? null,
+      botRail: summary.rows[MEASUREMENT_INDICES.botRail]?.inches ?? null,
+    },
   };
 }
