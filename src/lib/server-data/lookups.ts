@@ -46,17 +46,24 @@ async function loadManufacturingLocked(
   supabase: Awaited<ReturnType<typeof createClient>>,
   unitId: string,
   unitRow: UnitRow & UnitLockColumns
-): Promise<boolean> {
+): Promise<{ locked: boolean; startedCount: number; qcApprovedCount: number }> {
   const { data } = await supabase
     .from("window_production_status")
     .select("status")
     .eq("unit_id", unitId);
-  return computeManufacturingLock({
-    partnerId: unitRow.manufacturing_partner_id ?? null,
-    productionEnteredAt: unitRow.production_entered_at ?? null,
-    allMeasuredAt: unitRow.all_measured_at ?? null,
-    ...countProductionStatuses((data as { status: string }[] | null) ?? []),
-  });
+  const counts = countProductionStatuses((data as { status: string }[] | null) ?? []);
+  // The counts are returned as well as the boolean: the MR4b transfer dialog has
+  // to tell the owner what the transfer costs ("6 part-built blinds, about
+  // $600"), and this is the only place that number is already in hand.
+  return {
+    locked: computeManufacturingLock({
+      partnerId: unitRow.manufacturing_partner_id ?? null,
+      productionEnteredAt: unitRow.production_entered_at ?? null,
+      allMeasuredAt: unitRow.all_measured_at ?? null,
+      ...counts,
+    }),
+    ...counts,
+  };
 }
 
 /** unit_id → scheduler_id for rows in `scheduler_unit_assignments` (at most one per unit). */
@@ -148,7 +155,13 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
     : null;
 
   const unit = mapUnit(
-    { ...unitRow, assigned_at: assignment?.assigned_at, manufacturing_locked: manufacturingLocked },
+    {
+      ...unitRow,
+      assigned_at: assignment?.assigned_at,
+      manufacturing_locked: manufacturingLocked.locked,
+      manufacturing_lock_started_count: manufacturingLocked.startedCount,
+      manufacturing_lock_qc_count: manufacturingLocked.qcApprovedCount,
+    },
     schedulerName,
     schedulerId
   );
@@ -250,7 +263,13 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
   const assignment = assignmentRes.data as { assigned_at: string } | null;
   const schedulerName = schedulerRow?.name ?? "Unknown";
   const unit = mapUnit(
-    { ...unitRow, assigned_at: assignment?.assigned_at, manufacturing_locked: manufacturingLocked },
+    {
+      ...unitRow,
+      assigned_at: assignment?.assigned_at,
+      manufacturing_locked: manufacturingLocked.locked,
+      manufacturing_lock_started_count: manufacturingLocked.startedCount,
+      manufacturing_lock_qc_count: manufacturingLocked.qcApprovedCount,
+    },
     schedulerName,
     schedulerId
   );

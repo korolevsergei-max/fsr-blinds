@@ -105,6 +105,9 @@ export type UnitRow = {
    * unit. The DB trigger and server action are the real enforcement.
    */
   manufacturing_locked?: boolean | null;
+  /** Only the scoped unit-detail loaders supply these; see Unit's doc comment. */
+  manufacturing_lock_started_count?: number | null;
+  manufacturing_lock_qc_count?: number | null;
 };
 
 export type UnitActivityLogRow = {
@@ -255,6 +258,11 @@ export function mapUnit(
     manufacturingPartnerId: r.manufacturing_partner_id ?? INTERNAL_PARTNER_ID,
     manufacturingAssignedAt: r.manufacturing_assigned_at ?? null,
     manufacturingLocked: r.manufacturing_locked ?? false,
+    // Left undefined rather than defaulted to 0: "no counts available here" and
+    // "nothing has been built" must stay distinguishable, or a list route would
+    // claim a locked unit has zero blinds at risk.
+    manufacturingLockStartedCount: r.manufacturing_lock_started_count ?? undefined,
+    manufacturingLockQcCount: r.manufacturing_lock_qc_count ?? undefined,
   };
 }
 

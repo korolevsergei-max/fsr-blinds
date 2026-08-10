@@ -436,8 +436,12 @@ export function ManagementUnitDetail({
             </Link>
             <UnitManufacturerPicker
               unitId={unit.id}
+              unitNumber={unit.unitNumber}
               partnerId={unit.manufacturingPartnerId}
               assignedAt={unit.manufacturingAssignedAt}
+              locked={unit.manufacturingLocked}
+              startedCount={unit.manufacturingLockStartedCount}
+              qcApprovedCount={unit.manufacturingLockQcCount}
               className={`col-span-2 ${EDITABLE_CELL} border-b border-border-subtle`}
             />
             <div className={`${EDITABLE_CELL} border-b border-r border-border-subtle`}>

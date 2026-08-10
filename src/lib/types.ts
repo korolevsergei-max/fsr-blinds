@@ -237,6 +237,17 @@ export interface Unit {
    * trigger and server action are the real enforcement.
    */
   manufacturingLocked?: boolean;
+  /**
+   * How much work would be lost by transferring: blinds past 'pending'
+   * (`Started`) and blinds finished (`QcApproved`). Populated ONLY by the
+   * scoped unit-detail loaders, which already query window_production_status
+   * to derive the lock — the global datasets ship no production rows, so on
+   * list routes these are undefined and the UI falls back to a countless
+   * reason string. Never used for enforcement, only to tell the owner what a
+   * transfer costs.
+   */
+  manufacturingLockStartedCount?: number;
+  manufacturingLockQcCount?: number;
 }
 
 export interface UnitActivityLog {

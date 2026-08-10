@@ -4,20 +4,35 @@
 
 ## Status — execute from this file
 
-| Phase | Status | Notes |
-|---|---|---|
-| *(audit)* | ✅ **Done** | No code needed — both-queues-at-once is provably impossible; see Context. |
-| **MR1** — close the in-house leaks | ✅ **Code complete** | Local gate green (typecheck, lint, 119/119 tests, perf-budget). Verified vs prod: factory process screens 460 → 447 units, partner embed resolves. Not yet committed as of 2026-08-10. |
-| **MR2** — dashboard escalation | ✅ **Code complete** | Migration `20260810120000` written, **not applied**. Local gate green (124/124 tests). Predicate validated vs prod: bucket shows **70** on day one, dropping to 0 once MR3's backfill runs — see note below. |
-| **MR3** — block unrouted + backfill | ⬜ Not started | Migration `20260810130000`. **The one with a prod-data write** — re-run the §3.6 pre-flight gate immediately before applying. |
-| **MR4a** — lock: enforcement | 🟡 **Code complete** | Migration `20260810140000` written, **not applied**. Local gate green (140/140 tests). Day-one impact re-measured vs prod 2026-08-10 post-MR3: still **460 locked (447 internal, 13 external)**, unit 9998 transferable, 0 locked-but-unrouted. Apply only after the §4a.6 rehearsal passes: `scripts/deploy/rehearse-manufacturing-lock-trigger.sql` (needs psql, e.g. `brew install libpq`). Then `node scripts/deploy/parity-manufacturing-lock.mjs`. |
-| **MR4b** — lock: interface | ⬜ Not started | No migration. |
+## ✅ ALL PHASES SHIPPED TO PRODUCTION — 2026-08-10
 
-**The MR2 bucket is transitional, not a 70-item to-do list.** Measured against prod: 70 units are un-installed, have windows, and carry no routing decision. Every one of them is already covered by MR3's backfill predicate (they all have manufacturing activity), so **the count self-clears to 0 when MR3 applies** — nobody has to route 70 units by hand. Without the `windowCount > 0` guard the same bucket would read **586**, which is exactly why that clause exists. After MR3, the bucket only ever shows genuinely new unrouted units.
+| Phase | Status | Shipped as | Notes |
+|---|---|---|---|
+| *(audit)* | ✅ **Done** | — | No code needed — both-queues-at-once is provably impossible; see Context. |
+| **MR1** — close the in-house leaks | ✅ **Shipped** | `5222336` | Factory process screens and unit-detail pages no longer show subcontracted work. |
+| **MR2** — dashboard escalation | ✅ **Shipped** | `5222336` | Migration `20260810120000` **applied**. Bucket went 70 → **0** when MR3's backfill ran in the same push, exactly as predicted. |
+| **MR3** — block unrouted + backfill | ✅ **Shipped** | `5222336` | Migration `20260810130000` **applied**. Both in-migration guards passed. Backfill stamped **447** units (963 → 516 unrouted). **Cutter queue unchanged at 70 units / 381 rows** — the critical check. External units untouched at 14. |
+| **MR4a** — lock: enforcement | ✅ **Shipped** | `9a9ad2d` | Migration `20260810140000` **applied**. §4a.6 rehearsal ran against prod inside a rolled-back transaction — **all 6 probes PASS**, rollback verified clean (external count 14, probe-5 unit back to `mp-internal`, view and columns absent). `parity-manufacturing-lock.mjs` green: **460 locked** (447 internal, 13 external). |
+| **MR4b** — lock: interface | ✅ **Shipped** | see below | No migration. Picker read-only with reason, owner transfer dialog with rebuild-cost line, bulk sheet splits locked from movable. 141/141 tests, perf-budget OK. |
 
-**Why the remaining phases still matter:** MR1 closed a leak found during the audit, but neither thing originally asked for is built yet. **963 of 977 units currently have no manufacturer decision recorded** — the whole fleet runs on the silent internal default, which is the path where a unit is built in-house, later assigned to a partner, and built twice. MR3 closes that; MR4 adds the lock.
+**Post-ship state, measured:** 977 units · 963 internal / 14 external · 516 still unrouted (all empty shells with no windows — correct) · 460 locked · cutter queue 70 units.
 
-Keep this table current as phases land.
+### The rehearsal does NOT need psql
+
+Earlier revisions of this doc said `scripts/deploy/rehearse-manufacturing-lock-trigger.sql` requires psql and a direct Postgres URI. It does not, and hunting for a connection string is wasted effort. Use the Management API path, which uses credentials the Supabase CLI already holds:
+
+```bash
+supabase db query --linked -f scripts/deploy/rehearse-manufacturing-lock-trigger-api.sql
+```
+
+`BEGIN`/`ROLLBACK` is honored over that path (verified: a table created inside a transaction was visible inside it and gone after). The `-api.sql` variant exists because `RAISE NOTICE` output does **not** come back over the Management API — its probes record into a results table that is `SELECT`ed immediately before the `ROLLBACK`, so a failing probe is visible instead of silently reading as a pass. The psql version is kept for anyone who does have a direct connection.
+
+### Still outstanding (manual, on the live site)
+
+Nothing in code. Two things need a human:
+
+1. **Tell the schedulers.** The 447 backfilled units are now **owner-only for re-routing**, and 460 units are locked outright. A scheduler who picks the wrong manufacturer can no longer fix it themselves.
+2. **Smoke test the installer path** — create a unit, add a room *as an installer* (which skips the room-creation gate), add and measure a window. It must appear in the "No manufacturer assigned" bucket and **not** in the cutter queue. That is the exact path the old gate exempted, and the one this work exists to close.
 
 ## Context
 

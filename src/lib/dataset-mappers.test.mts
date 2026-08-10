@@ -87,6 +87,32 @@ test("mapUnit reads absent manufacturing_locked as FALSE — an old RPC shape mu
   assert.equal(mapUnit(createUnitRow({ manufacturing_locked: true })).manufacturingLocked, true);
 });
 
+/**
+ * The counts drive the transfer dialog's cost line ("6 part-built blinds, about
+ * $600"). Only the scoped unit-detail loaders supply them, so on list routes they
+ * must stay UNDEFINED rather than defaulting to 0 — otherwise the dialog would
+ * confidently tell the owner a locked unit has nothing at risk, which is the one
+ * thing this whole feature exists to prevent.
+ */
+test("mapUnit keeps absent lock counts undefined instead of collapsing them to 0", () => {
+  const absent = mapUnit(createUnitRow());
+  assert.equal(absent.manufacturingLockStartedCount, undefined);
+  assert.equal(absent.manufacturingLockQcCount, undefined);
+
+  const present = mapUnit(
+    createUnitRow({ manufacturing_lock_started_count: 6, manufacturing_lock_qc_count: 4 })
+  );
+  assert.equal(present.manufacturingLockStartedCount, 6);
+  assert.equal(present.manufacturingLockQcCount, 4);
+
+  // A genuine zero must survive as 0, not fall through to undefined.
+  const zero = mapUnit(
+    createUnitRow({ manufacturing_lock_started_count: 0, manufacturing_lock_qc_count: 0 })
+  );
+  assert.equal(zero.manufacturingLockStartedCount, 0);
+  assert.equal(zero.manufacturingLockQcCount, 0);
+});
+
 test("normalizeScheduleEntries uses the live unit status instead of stale schedule entry status", () => {
   const unit = createUnit();
   const normalized = normalizeScheduleEntries(

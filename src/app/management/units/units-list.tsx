@@ -856,7 +856,7 @@ export function UnitsList({
         {showManufacturerSheet && (
           <BulkAssignManufacturerSheet
             key="bulk-assign-manufacturer"
-            unitIds={[...selectedIds]}
+            units={selectedUnitsData}
             partners={partners}
             onClose={() => setShowManufacturerSheet(false)}
             onSuccess={exitSelectMode}

@@ -360,8 +360,12 @@ export function SchedulerUnitDetail({
         >
           <UnitManufacturerPicker
             unitId={unit.id}
+            unitNumber={unit.unitNumber}
             partnerId={unit.manufacturingPartnerId}
             assignedAt={unit.manufacturingAssignedAt}
+            locked={unit.manufacturingLocked}
+            startedCount={unit.manufacturingLockStartedCount}
+            qcApprovedCount={unit.manufacturingLockQcCount}
             className={`surface-card ${EDITABLE_CELL_BASE} p-4`}
           />
         </div>

@@ -6,17 +6,23 @@ import { CheckCircle, Factory, X } from "@phosphor-icons/react";
 import { assignUnitsToManufacturingPartner } from "@/app/actions/management-actions";
 import { Button } from "@/components/ui/button";
 import { sortPartners } from "@/lib/manufacturing-partners";
-import type { ManufacturingPartner } from "@/lib/types";
+import type { ManufacturingPartner, Unit } from "@/lib/types";
 
 type Props = {
-  unitIds: string[];
+  /**
+   * Whole units, not ids: the sheet has to know which ones are locked. The server
+   * action rejects a batch containing ANY locked unit — deliberately, so a partial
+   * write can't silently happen — so submitting the raw selection would fail the
+   * whole thing over one in-production unit and give no clue which.
+   */
+  units: Unit[];
   partners: ManufacturingPartner[];
   onClose: () => void;
   onSuccess: () => void;
 };
 
 export function BulkAssignManufacturerSheet({
-  unitIds,
+  units,
   partners,
   onClose,
   onSuccess,
@@ -28,11 +34,17 @@ export function BulkAssignManufacturerSheet({
 
   const ordered = sortPartners(partners);
 
+  const movable = units.filter((u) => !u.manufacturingLocked);
+  const skippedCount = units.length - movable.length;
+
   const handleSave = () => {
-    if (!selectedPartnerId) return;
+    if (!selectedPartnerId || movable.length === 0) return;
     setError("");
     startTransition(async () => {
-      const result = await assignUnitsToManufacturingPartner(selectedPartnerId, unitIds);
+      const result = await assignUnitsToManufacturingPartner(
+        selectedPartnerId,
+        movable.map((u) => u.id)
+      );
       if (!result.ok) {
         setError(result.error);
         return;
@@ -60,7 +72,7 @@ export function BulkAssignManufacturerSheet({
           <div>
             <h2 className="text-[15px] font-semibold text-foreground">Assign Manufacturer</h2>
             <p className="text-[12px] text-tertiary">
-              {unitIds.length} unit{unitIds.length !== 1 ? "s" : ""} selected
+              {units.length} unit{units.length !== 1 ? "s" : ""} selected
             </p>
           </div>
           <button
@@ -128,6 +140,13 @@ export function BulkAssignManufacturerSheet({
               Units sent to a subcontractor leave the in-house cutting, assembly and QC
               queues, and stop taking up factory capacity.
             </p>
+            {skippedCount > 0 && (
+              <p className="text-[11px] text-muted mt-2 leading-snug">
+                {skippedCount} unit{skippedCount !== 1 ? "s" : ""} skipped — manufacturing
+                already started. Open {skippedCount === 1 ? "it" : "them"} individually to
+                transfer.
+              </p>
+            )}
           </div>
 
           <div className="pb-32">
@@ -140,12 +159,14 @@ export function BulkAssignManufacturerSheet({
               <Button
                 fullWidth
                 size="lg"
-                disabled={!selectedPartnerId || pending}
+                disabled={!selectedPartnerId || pending || movable.length === 0}
                 onClick={handleSave}
               >
                 {pending
                   ? "Assigning…"
-                  : `Assign ${unitIds.length} Unit${unitIds.length !== 1 ? "s" : ""}`}
+                  : movable.length === 0
+                    ? "Nothing to assign"
+                    : `Assign ${movable.length} Unit${movable.length !== 1 ? "s" : ""}`}
               </Button>
             )}
           </div>
