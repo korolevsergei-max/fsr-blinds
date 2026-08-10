@@ -26,7 +26,7 @@ import {
 import { selectInChunks } from "@/lib/supabase-chunking";
 import { assertRpcArrays } from "@/lib/contract";
 import { queryTimeoutSignal } from "@/lib/query-timeout";
-import { INTERNAL_PARTNER_ID, isInternalPartnerId } from "@/lib/manufacturing-partners";
+import { INTERNAL_PARTNER_ID, isInternalFactoryWork } from "@/lib/manufacturing-partners";
 import {
   buildRoleScheduleOutput,
   countQueueReadyWindows,
@@ -94,6 +94,12 @@ type UnitRow = {
   production_entered_at: string | null;
   /** Absent on the pre-migration RPC; treated as internal, today's behaviour. */
   manufacturing_partner_id?: string | null;
+  /**
+   * `undefined` (column not projected) must read as ROUTED — only an explicit
+   * NULL means "nobody decided". Inverting that empties every factory queue
+   * the moment a read path forgets the column. See isInternalFactoryWork.
+   */
+  manufacturing_assigned_at?: string | null;
 };
 
 type RoomRow = {
@@ -297,6 +303,25 @@ function buildBlindSortKey(win: WindowRow): string {
  * The ARCHIVE table is deliberately left alone: archived rows are completed
  * history for units that were internal at the time, and the completed views
  * should keep showing that work.
+ *
+ * UNROUTED units (manufacturing_assigned_at IS NULL) are deliberately NOT
+ * purged, even though the reflow's source query now excludes them too:
+ *
+ *  1. No invariant is at stake. An unrouted unit is internal-by-default, so no
+ *     partner worklist can see it (get_subcontractor_worklist filters on
+ *     `= v_partner`) — zero double-build exposure. The only failure mode is a
+ *     stall, which the dashboard's "No manufacturer assigned" bucket escalates.
+ *  2. Deletion is lossy and this state is reversible. Schedule rows carry
+ *     is_schedule_locked, lock_reason, manual_priority, moved_at,
+ *     moved_by_user_id; "nobody decided yet" gets answered five minutes later
+ *     and the unit should return with its manual priority intact.
+ *  3. No capacity leak. The cutLoad/assemblyLoad/qcLoad maps are seeded only
+ *     from locked candidates of units the source query selected, so rows
+ *     belonging to excluded units are inert — unlike the subcontracted case,
+ *     where the capacity argument does hold.
+ *
+ * Migration 20260810130000's guard assertion plus the verify script cover the
+ * consistency check a destructive cleaner would have provided.
  */
 async function purgeExternalSchedules(
   supabase: ReturnType<typeof createAdminClient>
@@ -329,11 +354,17 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
   // leaving it in would push real internal dates out for work nobody is doing.
   // No schedule rows means it also never reaches the cutter/assembler/qc queues,
   // which all read through window_manufacturing_schedule.
+  //
+  // Unrouted units (manufacturing_assigned_at IS NULL) are excluded the same
+  // way: the in-house queue is for units somebody consciously routed here, not
+  // for the column default. They surface in the dashboard's "No manufacturer
+  // assigned" bucket instead of silently entering the cutter queue.
   const { data: unitRows } = await supabase
     .from("units")
     .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
     .in("status", ["measured", "bracketed", "manufactured"])
     .eq("manufacturing_partner_id", INTERNAL_PARTNER_ID)
+    .not("manufacturing_assigned_at", "is", null)
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
 
@@ -690,6 +721,16 @@ function assembleRoleScheduleItems(
   const { schedules, units, windows, production, rooms, openByWindow, historyByWindow } = source;
 
   const unitsById = new Map(units.map((unit) => [unit.id, unit]));
+  // Projection tripwire: if NO unit carries the routing column, a source query
+  // regressed (RPC units key or the chunked fallback select) and the routing
+  // half of isInternalFactoryWork below is inert. Loud beats silent — but note
+  // the failure direction is "unrouted units reappear", never an empty queue:
+  // absent-column reads as routed by design.
+  if (units.length > 0 && units.every((u) => u.manufacturing_assigned_at === undefined)) {
+    console.warn(
+      "[mfg] role schedule units carry no manufacturing_assigned_at — routing filter is inert (check the RPC projection)"
+    );
+  }
   const windowsById = new Map(windows.map((window) => [window.id, window]));
   const roomsById = new Map(rooms.map((room) => [room.id, room]));
   const productionByWindow = new Map(production.map((row) => [row.window_id, row]));
@@ -700,12 +741,16 @@ function assembleRoleScheduleItems(
     const unit = unitsById.get(row.unit_id);
     const window = windowsById.get(row.window_id);
     if (!unit || !window) continue;
-    // Exclusivity backstop. get_role_schedule already filters subcontracted units
-    // out, but the chunked fallback path below does its own units query, and this
-    // is the single funnel every factory screen's items pass through. A unit that
-    // reaches here after being reassigned would otherwise sit in the cutter queue
-    // while the partner is building the same blinds.
-    if (!isInternalPartnerId(unit.manufacturing_partner_id)) continue;
+    // Exclusivity backstop. get_role_schedule already filters subcontracted and
+    // unrouted units out, but the chunked fallback path below does its own units
+    // query, and this is the single funnel every factory screen's items pass
+    // through. A subcontracted unit that reaches here would sit in the cutter
+    // queue while the partner builds the same blinds; an unrouted one would be
+    // built without anyone having decided so. NOT a naive truthiness check —
+    // isInternalFactoryWork treats an absent column as routed, because
+    // `!unit.manufacturing_assigned_at` here would empty every factory queue
+    // the moment a projection forgets the column.
+    if (!isInternalFactoryWork(unit)) continue;
     const production = productionByWindow.get(row.window_id);
     const roomName = roomsById.get(window.room_id)?.name ?? "Room";
     const productionStatus = production?.status ?? "pending";
@@ -893,7 +938,7 @@ export async function loadPersistedRoleSchedule(
     selectInChunks<UnitRow>(unitIds, (chunk) =>
       supabase
         .from("units")
-        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at, manufacturing_partner_id")
+        .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status, all_measured_at, production_entered_at, manufacturing_partner_id, manufacturing_assigned_at")
         .in("id", chunk)
         .then((res) => ({ data: res.data as UnitRow[] | null, error: res.error })),
     ),

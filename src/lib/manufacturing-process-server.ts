@@ -11,6 +11,7 @@ import {
   type ManufacturingProcessUnitInput,
 } from "./manufacturing-process-core";
 import { selectInChunks } from "./supabase-chunking";
+import { INTERNAL_PARTNER_ID } from "./manufacturing-partners";
 
 type UnitRow = {
   id: string;
@@ -143,17 +144,40 @@ async function loadManufacturingProcessRowsForUnits(
   );
 }
 
-async function loadUnitsForManufacturingProcess(scope: ManufacturingProcessScope) {
+/**
+ * `internalOnly` narrows the owner-scoped read to the in-house factory's own
+ * work. The cutter/assembler/QC process screens pass it; the owner and scheduler
+ * screens deliberately do not, because the office needs the whole picture
+ * including subcontracted units.
+ *
+ * Without it a cutter sees a subcontracted unit sitting at "0 cut", opens it,
+ * and physically cuts blinds the partner is already building — the write is
+ * refused by `wps_guard_manufacturing_ownership`, but only after the fact.
+ */
+async function loadUnitsForManufacturingProcess(
+  scope: ManufacturingProcessScope,
+  opts: { internalOnly?: boolean } = {}
+) {
   const supabase = await createClient();
   let unitRows: UnitRow[] = [];
 
   if (scope.role === "owner") {
-    const { data } = await supabase
+    let query = supabase
       .from("units")
       .select(
         "id, client_id, client_name, building_id, building_name, unit_number, complete_by_date, window_count, assigned_installer_id"
       )
       .gt("window_count", 0);
+    if (opts.internalOnly) {
+      // The routed filter mirrors the reflow source query: the factory's own
+      // screens only show units somebody consciously assigned to the in-house
+      // queue. Unrouted units live in the dashboard's "No manufacturer
+      // assigned" bucket until someone decides.
+      query = query
+        .eq("manufacturing_partner_id", INTERNAL_PARTNER_ID)
+        .not("manufacturing_assigned_at", "is", null);
+    }
+    const { data } = await query;
     unitRows = (data ?? []) as UnitRow[];
   } else if (scope.role === "scheduler") {
     if (scope.scopedUnitIds.length === 0) return [];
@@ -179,13 +203,15 @@ async function loadUnitsForManufacturingProcess(scope: ManufacturingProcessScope
   return mapUnits(unitRows);
 }
 
-async function loadAllManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
+async function loadAllManufacturingProcessRows(
+  opts: { internalOnly?: boolean } = {}
+): Promise<ManufacturingProcessRow[]> {
   const startedAt = performance.now();
   const scope: ManufacturingProcessScope = { role: "owner" };
-  const units = await loadUnitsForManufacturingProcess(scope);
+  const units = await loadUnitsForManufacturingProcess(scope, opts);
   const rows = await loadManufacturingProcessRowsForUnits(units, scope);
   console.warn(
-    `[perf][process-rows] units=${units.length} rows=${rows.length} ${(performance.now() - startedAt).toFixed(0)}ms`
+    `[perf][process-rows] units=${units.length} rows=${rows.length}${opts.internalOnly ? " internal-only" : ""} ${(performance.now() - startedAt).toFixed(0)}ms`
   );
   return rows;
 }
@@ -227,19 +253,19 @@ export async function loadCutterManufacturingProcessRows(): Promise<Manufacturin
   const user = await getCurrentUser();
   if (!user || user.role !== "cutter") return [];
 
-  return loadAllManufacturingProcessRows();
+  return loadAllManufacturingProcessRows({ internalOnly: true });
 }
 
 export async function loadAssemblerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "assembler") return [];
 
-  return loadAllManufacturingProcessRows();
+  return loadAllManufacturingProcessRows({ internalOnly: true });
 }
 
 export async function loadQcManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "qc") return [];
 
-  return loadAllManufacturingProcessRows();
+  return loadAllManufacturingProcessRows({ internalOnly: true });
 }

@@ -90,3 +90,41 @@ test("owner issue counts: missing installation date is flagged; escalations come
   assert.equal(issueCounts.past_scheduled, 0);
   assert.equal(issueCounts.at_risk, 0);
 });
+
+/**
+ * Mirrors the `has_unassigned_manufacturer` flag in
+ * 20260810120000_dashboard_unassigned_manufacturer.sql. Three boundaries, and
+ * each one is load-bearing:
+ *
+ *  - windowCount > 0 keeps units with nothing to build out of the bucket. Every
+ *    unit in prod predating the routing decision has a NULL timestamp, so
+ *    without this clause a freshly imported building buries the real ones.
+ *  - installed units are excluded (computeUnitFlags returns early for them);
+ *    their manufacturer is history, not a decision anyone still needs to make.
+ *  - a stamped timestamp means someone chose, even if they chose in-house.
+ */
+test("owner issue counts: unassigned manufacturer needs windows and an un-installed unit", () => {
+  const units = [
+    // Counted: real work, nobody decided.
+    makeUnit({ id: "needs-answer", windowCount: 4, manufacturingAssignedAt: null }),
+    // Not counted: nothing to build yet.
+    makeUnit({ id: "no-windows", windowCount: 0, manufacturingAssignedAt: null }),
+    // Not counted: already installed.
+    makeUnit({
+      id: "done",
+      status: "installed",
+      windowCount: 4,
+      manufacturingAssignedAt: null,
+    }),
+    // Not counted: someone explicitly chose.
+    makeUnit({
+      id: "routed",
+      windowCount: 4,
+      manufacturingAssignedAt: "2026-08-01T00:00:00Z",
+    }),
+  ];
+
+  const { issueCounts } = computeOwnerDashboardCounts(units, TODAY, new Set());
+
+  assert.equal(issueCounts.unassigned_manufacturer, 1);
+});

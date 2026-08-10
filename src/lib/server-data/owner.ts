@@ -41,8 +41,14 @@ function normalizeOwnerDashboardCounts(
       installation: readCount(raw.stage_counts, "installation"),
       post_install_issue: readCount(raw.stage_counts, "post_install_issue"),
     },
+    // Every DashboardIssue must be read here. A key present in the union but
+    // missing from this object silently reads as 0 — and because
+    // ownerIssueCountsToMap drops zero counts, the bucket then vanishes from the
+    // default owner dashboard and reappears the moment any filter is applied,
+    // which looks like flakiness rather than a missing line.
     issueCounts: {
       past_scheduled: readCount(raw.issue_counts, "past_scheduled"),
+      unassigned_manufacturer: readCount(raw.issue_counts, "unassigned_manufacturer"),
       escalations: readCount(raw.issue_counts, "escalations"),
       missing: readCount(raw.issue_counts, "missing"),
       at_risk: readCount(raw.issue_counts, "at_risk"),

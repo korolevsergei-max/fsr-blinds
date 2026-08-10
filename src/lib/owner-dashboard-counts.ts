@@ -22,6 +22,7 @@ export const EMPTY_OWNER_DASHBOARD_COUNTS: OwnerDashboardCounts = {
   },
   issueCounts: {
     past_scheduled: 0,
+    unassigned_manufacturer: 0,
     escalations: 0,
     missing: 0,
     at_risk: 0,

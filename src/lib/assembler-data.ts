@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, WindowProductionStatus, ProductionStatus, WindowInstallation, WandChain, FabricAdjustmentSide } from "@/lib/types";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import {
+  resolveFactoryManufacturer,
+  type FactoryUnitManufacturer,
+} from "@/lib/manufacturing-partners";
 
 export interface AssemblerUnit {
   id: string;
@@ -13,6 +17,8 @@ export interface AssemblerUnit {
   cutCount: number;
   assembledCount: number;
   qcApprovedCount: number;
+  /** Set on the detail read only; the queue never surfaces subcontracted units. */
+  manufacturedBy?: FactoryUnitManufacturer;
 }
 
 export interface AssemblerWindow {
@@ -79,7 +85,7 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
     supabase
       .from("units")
       .select(
-        "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag"
+        "id, unit_number, building_name, client_name, installation_date, window_count, manufacturing_risk_flag, manufacturing_partner_id, manufacturing_partners(name, is_internal)"
       )
       .eq("id", unitId)
       .single(),
@@ -147,6 +153,10 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
     (p) => p.status === "qc_approved"
   ).length;
 
+  const unitRow = u as typeof u & {
+    manufacturing_partner_id?: string | null;
+    manufacturing_partners?: { name: string; is_internal: boolean } | null;
+  };
   const unit: AssemblerUnit = {
     id: u.id,
     unitNumber: u.unit_number,
@@ -158,6 +168,10 @@ export async function loadAssemblerUnitDetail(unitId: string): Promise<Assembler
     cutCount,
     assembledCount,
     qcApprovedCount,
+    manufacturedBy: resolveFactoryManufacturer(
+      unitRow.manufacturing_partner_id,
+      unitRow.manufacturing_partners
+    ),
   };
 
   const windows: AssemblerWindow[] = windowRows

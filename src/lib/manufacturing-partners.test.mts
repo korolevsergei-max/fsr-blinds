@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   INTERNAL_PARTNER_ID,
+  isInternalFactoryWork,
   isInternalPartnerId,
   partnerNameFor,
   sortPartners,
@@ -50,6 +51,61 @@ test("internal and external are mutually exclusive for every id", () => {
     const externalSide = !isInternalPartnerId(id);
     assert.notEqual(internalSide, externalSide, `id ${String(id)} landed on both sides`);
   }
+});
+
+/**
+ * The queue-emptying guard. `manufacturing_assigned_at` is absent from any read
+ * path that does not project it — the chunked schedule fallback, an older RPC
+ * shape after a rollback. Those must keep reading as ROUTED, or the cutter,
+ * assembler and QC screens all go blank facility-wide the moment one projection
+ * is dropped. Only an explicit NULL means nobody has chosen a manufacturer.
+ */
+test("an absent routing timestamp still counts as in-house work", () => {
+  assert.equal(isInternalFactoryWork({ manufacturing_partner_id: INTERNAL_PARTNER_ID }), true);
+  assert.equal(
+    isInternalFactoryWork({
+      manufacturing_partner_id: INTERNAL_PARTNER_ID,
+      manufacturing_assigned_at: undefined,
+    }),
+    true
+  );
+  // ...and a unit with no projected columns at all, which is the same case.
+  assert.equal(isInternalFactoryWork({}), true);
+});
+
+test("an explicit NULL routing timestamp means nobody decided — not our work", () => {
+  assert.equal(
+    isInternalFactoryWork({
+      manufacturing_partner_id: INTERNAL_PARTNER_ID,
+      manufacturing_assigned_at: null,
+    }),
+    false
+  );
+});
+
+test("a routed in-house unit is our work; a subcontracted one never is", () => {
+  assert.equal(
+    isInternalFactoryWork({
+      manufacturing_partner_id: INTERNAL_PARTNER_ID,
+      manufacturing_assigned_at: "2026-08-01T00:00:00Z",
+    }),
+    true
+  );
+  assert.equal(
+    isInternalFactoryWork({
+      manufacturing_partner_id: "mp-acme",
+      manufacturing_assigned_at: "2026-08-01T00:00:00Z",
+    }),
+    false
+  );
+  // Subcontracted wins even when nobody stamped a decision.
+  assert.equal(
+    isInternalFactoryWork({
+      manufacturing_partner_id: "mp-acme",
+      manufacturing_assigned_at: undefined,
+    }),
+    false
+  );
 });
 
 test("partnerNameFor resolves through the list and falls back to in-house", () => {

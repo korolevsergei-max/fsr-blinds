@@ -21,6 +21,7 @@ import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/a
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import { SubcontractedNotice } from "@/components/manufacturing/subcontracted-notice";
 import type { PushbackDirection } from "@/lib/pushback-reasons";
 
 function formatDim(val: number | null): string {
@@ -32,10 +33,12 @@ function QcWindowCard({
   window,
   roomName,
   onApproveQC,
+  canMark,
 }: {
   window: AssemblerWindow;
   roomName: string;
   onApproveQC: (windowId: string) => void;
+  canMark: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [dialogDirection, setDialogDirection] = useState<PushbackDirection | null>(null);
@@ -147,7 +150,8 @@ function QcWindowCard({
         chainSide={window.chainSide}
       />
 
-      {status === "assembled" && (
+      {/* Hidden on subcontracted units; the DB trigger rejects those writes. */}
+      {status === "assembled" && canMark && (
         <div className="flex flex-col gap-2 pt-1">
           <button
             onClick={handleApproveQC}
@@ -197,6 +201,9 @@ function QcWindowCard({
 export function QcUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
   const { unit, rooms } = detail;
+  // Absent partner info reads as in-house — the safe direction, matching
+  // isInternalPartnerId. The DB trigger is the actual guard.
+  const canMark = unit.manufacturedBy?.isInternal ?? true;
   const [windows, setWindows] = useState(detail.windows);
 
   const handleApproveQC = (windowId: string) => {
@@ -263,6 +270,8 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
         </div>
       </div>
 
+      {!canMark && <SubcontractedNotice partnerName={unit.manufacturedBy?.partnerName ?? "a subcontractor"} />}
+
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
           <span className="text-secondary font-medium">QC Progress</span>
@@ -293,6 +302,7 @@ export function QcUnitDetail({ detail }: { detail: DetailType }) {
                 window={win}
                 roomName={room.name}
                 onApproveQC={handleApproveQC}
+                canMark={canMark}
               />
             ))}
           </div>

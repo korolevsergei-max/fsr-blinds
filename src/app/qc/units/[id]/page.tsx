@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { loadAssemblerUnitDetail } from "@/lib/assembler-data";
 import { QcUnitDetail } from "./qc-unit-detail";
 
@@ -8,6 +9,6 @@ export default async function QcUnitDetailPage({
 }) {
   const { id } = await params;
   const detail = await loadAssemblerUnitDetail(id);
-  if (!detail) return null;
+  if (!detail) notFound();
   return <QcUnitDetail detail={detail} />;
 }

@@ -13,13 +13,14 @@ import { markWindowCut } from "@/app/actions/production-actions";
 import type { CutterUnitDetail as DetailType, CutterWindow } from "@/lib/cutter-data";
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
+import { SubcontractedNotice } from "@/components/manufacturing/subcontracted-notice";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
   return `${val}"`;
 }
 
-function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; roomName: string; onCut: (id: string) => void }) {
+function WindowCard({ window: win, roomName, onCut, canMark }: { window: CutterWindow; roomName: string; onCut: (id: string) => void; canMark: boolean }) {
   const [pending, startTransition] = useTransition();
   const production = win.production;
   const status = production?.status ?? "pending";
@@ -122,8 +123,8 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
         chainSide={win.chainSide}
       />
 
-      {/* Action */}
-      {status === "pending" && (
+      {/* Action — hidden on subcontracted units; the DB trigger rejects those writes. */}
+      {status === "pending" && canMark && (
         <button
           onClick={handleMarkCut}
           disabled={pending}
@@ -140,6 +141,9 @@ function WindowCard({ window: win, roomName, onCut }: { window: CutterWindow; ro
 export function CutterUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
   const { unit, rooms } = detail;
+  // Absent partner info reads as in-house — the safe direction, matching
+  // isInternalPartnerId. The DB trigger is the actual guard.
+  const canMark = unit.manufacturedBy?.isInternal ?? true;
 
   // Local optimistic window state — starts from server data, updates instantly on tap
   const [windows, setWindows] = useState(detail.windows);
@@ -219,6 +223,8 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
         </div>
       </div>
 
+      {!canMark && <SubcontractedNotice partnerName={unit.manufacturedBy?.partnerName ?? "a subcontractor"} />}
+
       {/* Progress bar */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
@@ -267,7 +273,7 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
               {room.name}
             </p>
             {roomWindows.map((win) => (
-              <WindowCard key={win.id} window={win} roomName={room.name} onCut={handleCut} />
+              <WindowCard key={win.id} window={win} roomName={room.name} onCut={handleCut} canMark={canMark} />
             ))}
           </div>
         );

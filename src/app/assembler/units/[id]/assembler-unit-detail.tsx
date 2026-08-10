@@ -17,6 +17,7 @@ import type { AssemblerUnitDetail as DetailType, AssemblerWindow } from "@/lib/a
 import { PRODUCTION_STATUS_LABELS } from "@/lib/types";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import { SubcontractedNotice } from "@/components/manufacturing/subcontracted-notice";
 
 function formatDim(val: number | null): string {
   if (val === null) return "\u2014";
@@ -27,10 +28,12 @@ function AssemblerWindowCard({
   window,
   roomName,
   onAssemble,
+  canMark,
 }: {
   window: AssemblerWindow;
   roomName: string;
   onAssemble: (windowId: string) => void;
+  canMark: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -136,8 +139,8 @@ function AssemblerWindowCard({
         chainSide={window.chainSide}
       />
 
-      {/* Actions */}
-      {status === "cut" && (
+      {/* Actions — hidden on subcontracted units; the DB trigger rejects those writes. */}
+      {status === "cut" && canMark && (
         <button
           onClick={handleAssemble}
           disabled={pending}
@@ -163,7 +166,7 @@ function AssemblerWindowCard({
         </p>
       )}
 
-      {(status === "cut" || status === "assembled") && (
+      {(status === "cut" || status === "assembled") && canMark && (
         <button
           onClick={() => setDialogOpen(true)}
           disabled={pending}
@@ -188,6 +191,9 @@ function AssemblerWindowCard({
 export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
   const router = useRouter();
   const { unit, rooms } = detail;
+  // Absent partner info reads as in-house — the safe direction, matching
+  // isInternalPartnerId. The DB trigger is the actual guard.
+  const canMark = unit.manufacturedBy?.isInternal ?? true;
   const [windows, setWindows] = useState(detail.windows);
 
   const handleAssemble = (windowId: string) => {
@@ -260,6 +266,8 @@ export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
         </div>
       </div>
 
+      {!canMark && <SubcontractedNotice partnerName={unit.manufacturedBy?.partnerName ?? "a subcontractor"} />}
+
       {/* Progress */}
       <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2">
         <div className="flex justify-between text-xs">
@@ -302,6 +310,7 @@ export function AssemblerUnitDetail({ detail }: { detail: DetailType }) {
                 window={win}
                 roomName={room.name}
                 onAssemble={handleAssemble}
+                canMark={canMark}
               />
             ))}
           </div>

@@ -8,6 +8,7 @@ export type UnitFlag =
   | "missing_measurement_date"
   | "missing_bracketing_date"
   | "missing_installation_date"
+  | "missing_manufacturer"
   | "at_risk";
 
 export const DONE_STATUSES = new Set<UnitStatus>(["installed"]);
@@ -29,6 +30,15 @@ export function computeUnitFlags(unit: Unit, todayStr: string): UnitFlag[] {
   if (!unit.assignedInstallerId) flags.push("missing_installer");
   if (!unit.measurementDate) flags.push("missing_measurement_date");
   if (!unit.bracketingDate) flags.push("missing_bracketing_date");
+
+  // Nobody has chosen who builds this unit. `manufacturingPartnerId` defaults to
+  // in-house, so the timestamp is the only signal that a decision was actually
+  // made. Gated on windowCount because a unit with nothing to build does not yet
+  // need an answer — without that clause a freshly imported building would dump
+  // hundreds of rows into the bucket and train the owner to ignore it.
+  if (!unit.manufacturingAssignedAt && unit.windowCount > 0) {
+    flags.push("missing_manufacturer");
+  }
 
   if (
     unit.bracketingDate &&
@@ -83,6 +93,7 @@ export const FLAG_LABELS: Record<UnitFlag, string> = {
   missing_measurement_date:  "No Measurement Date",
   missing_bracketing_date:   "No Bracket Date",
   missing_installation_date: "No Install Date",
+  missing_manufacturer:      "No Manufacturer",
   at_risk:                   "Install Soon",
 };
 
@@ -93,5 +104,6 @@ export const FLAG_CLASSES: Record<UnitFlag, string> = {
   missing_measurement_date:  "bg-zinc-100 text-zinc-600",
   missing_bracketing_date:   "bg-zinc-100 text-zinc-600",
   missing_installation_date: "bg-zinc-100 text-zinc-600",
+  missing_manufacturer:      "bg-violet-100 text-violet-700",
   at_risk:                   "bg-orange-100 text-orange-700",
 };

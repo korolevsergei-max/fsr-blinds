@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type { RiskFlag, BlindType, UnitStatus, WindowProductionStatus, ProductionStatus, WindowInstallation, WandChain, FabricAdjustmentSide } from "@/lib/types";
 import { selectInChunks } from "@/lib/supabase-chunking";
+import {
+  resolveFactoryManufacturer,
+  type FactoryUnitManufacturer,
+} from "@/lib/manufacturing-partners";
 
 export interface CutterUnit {
   id: string;
@@ -11,6 +15,8 @@ export interface CutterUnit {
   status: UnitStatus;
   windowCount: number;
   manufacturingRiskFlag: RiskFlag;
+  /** Set on the detail read only; the queue never surfaces subcontracted units. */
+  manufacturedBy?: FactoryUnitManufacturer;
 }
 
 export interface CutterRoom {
@@ -86,7 +92,7 @@ export async function loadCutterUnitDetail(
     supabase
       .from("units")
       .select(
-        "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag"
+        "id, unit_number, building_name, client_name, installation_date, status, window_count, manufacturing_risk_flag, manufacturing_partner_id, manufacturing_partners(name, is_internal)"
       )
       .eq("id", unitId)
       .single(),
@@ -103,7 +109,10 @@ export async function loadCutterUnitDetail(
 
   if (unitRes.error || !unitRes.data) return null;
 
-  const u = unitRes.data;
+  const u = unitRes.data as typeof unitRes.data & {
+    manufacturing_partner_id?: string | null;
+    manufacturing_partners?: { name: string; is_internal: boolean } | null;
+  };
   const unit: CutterUnit = {
     id: u.id,
     unitNumber: u.unit_number,
@@ -113,6 +122,10 @@ export async function loadCutterUnitDetail(
     status: u.status as UnitStatus,
     windowCount: u.window_count ?? 0,
     manufacturingRiskFlag: (u.manufacturing_risk_flag ?? "green") as RiskFlag,
+    manufacturedBy: resolveFactoryManufacturer(
+      u.manufacturing_partner_id,
+      u.manufacturing_partners
+    ),
   };
 
   const rooms: CutterRoom[] = (roomsRes.data ?? []).map((r) => ({
