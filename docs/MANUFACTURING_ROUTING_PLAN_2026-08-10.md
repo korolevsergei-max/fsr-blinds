@@ -17,6 +17,33 @@
 
 **Post-ship state, measured:** 977 units · 963 internal / 14 external · 516 still unrouted (all empty shells with no windows — correct) · 460 locked · cutter queue 70 units.
 
+### 2026-08-12 — the room-creation gate was REMOVED (client decision)
+
+`src/components/units/manufacturer-gate.tsx` is deleted. Rooms, windows and measurements are
+now captured with no manufacturer chosen, for every role — the client needs measuring to start
+before the routing decision exists. Assignment moved entirely to the unit-detail picker and the
+bulk-assign sheet, and can happen at any point.
+
+**Nothing about the no-double-build invariant changed.** The gate was only ever a prompt; the
+four enforcement layers, both guard triggers, and the reflow's
+`manufacturing_assigned_at IS NOT NULL` filter are all untouched. An unrouted unit remains
+invisible to the in-house queues *and* to every partner worklist — which is precisely the
+behaviour the client asked for. MR3's block is doing the work the gate used to be credited with.
+
+Two consequences to keep in mind:
+
+1. **Unrouted is now a normal, long-lived state, not an empty-shell artefact.** The "No
+   manufacturer assigned" dashboard bucket (MR2) is the sole escalation and will carry real
+   volume. It fires on `windowCount > 0 && !manufacturingAssignedAt`.
+2. **Routing an already-measured unit to a subcontractor locks it immediately** — the external
+   lock branch is `all_measured_at IS NOT NULL`, i.e. the vendor can already see it. Under the
+   old flow routing preceded measuring, so a scheduler could still correct a mis-pick; now that
+   correction needs the owner's "Transfer anyway" confirmation. The lock is behaving as designed
+   (§4a), but the window for a cheap fix is much shorter. Tell the schedulers.
+
+§MR4b's note below ("`manufacturer-gate.tsx` — no change") is retained as history; the file no
+longer exists.
+
 ### The rehearsal does NOT need psql
 
 Earlier revisions of this doc said `scripts/deploy/rehearse-manufacturing-lock-trigger.sql` requires psql and a direct Postgres URI. It does not, and hunting for a connection string is wasted effort. Use the Management API path, which uses credentials the Supabase CLI already holds:

@@ -58,6 +58,12 @@ export function UnitManufacturerPicker({
   const currentPartner = partners.find((p) => p.id === current);
   const currentName = currentPartner?.name ?? current;
 
+  // Nobody has chosen yet. `manufacturing_partner_id` defaults to in-house, so without
+  // this the control would read "FSR Internal" on a unit that is in NO queue — telling
+  // the office it is routed when the reflow and every partner worklist skip it. The
+  // optimistic id clears it the moment a real choice is made.
+  const unassigned = !assignedAt && optimisticId === null;
+
   if (partners.length === 0) return null;
 
   // Two separate rules, and they stack:
@@ -114,7 +120,9 @@ export function UnitManufacturerPicker({
   }
 
   const handleChange = (next: string) => {
-    if (next === current) return;
+    // The "Not assigned" placeholder carries an empty value and is not a choice.
+    if (!next) return;
+    if (!unassigned && next === current) return;
     const previous = current;
     setOptimisticId(next);
     setError("");
@@ -135,17 +143,25 @@ export function UnitManufacturerPicker({
       <div className="min-w-0 flex-1">
         <p className="text-[11px] text-tertiary">Manufacturer</p>
         <select
-          value={current}
+          value={unassigned ? "" : current}
           disabled={pending}
           onChange={(e) => handleChange(e.target.value)}
           className={`-ml-0.5 w-full bg-transparent text-[13px] truncate focus:outline-none focus:ring-2 focus:ring-accent rounded disabled:opacity-60 ${EDITABLE_VALUE}`}
         >
+          {unassigned && (
+            <option value="" disabled>
+              — Not assigned —
+            </option>
+          )}
           {sortPartners(partners).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
         </select>
+        {unassigned && (
+          <p className="text-[10px] text-tertiary mt-0.5">Not in any manufacturing queue yet</p>
+        )}
         {error && <p className="text-[11px] text-danger mt-0.5">{error}</p>}
       </div>
     </div>

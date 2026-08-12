@@ -9,7 +9,6 @@ import { getRoomsByUnit } from "@/lib/app-dataset";
 import type { AppDataset } from "@/lib/app-dataset";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { ManufacturerGate } from "@/components/units/manufacturer-gate";
 
 const quickChips = ["Living Room", "Bedroom 1", "Bedroom 2", "Kitchen", "Office", "Bathroom", "Den"];
 
@@ -166,10 +165,11 @@ export function CreateRooms({
         backHref={`${routeBasePath}/${unit.id}`}
       />
 
-      {/* Route the unit before any room exists — see ManufacturerGate. Renders the
-          editor untouched once a manufacturer has been chosen, and always for
-          installers, who cannot make that call. */}
-      <ManufacturerGate unit={unit} routeBasePath={routeBasePath}>
+      {/* No manufacturer prompt here, by design. Rooms, windows and measurements are
+          captured before anyone decides who builds the unit; until that decision is
+          made the unit enters no manufacturing queue at all (the reflow source query
+          in manufacturing-scheduler.ts requires manufacturing_assigned_at). Routing
+          happens later, from the unit-detail picker or the bulk-assign sheet. */}
       <div className="px-5 pt-4 pb-2">
         <h2 className="text-xl font-bold tracking-tight text-foreground">
           {unit.buildingName}
@@ -441,7 +441,6 @@ export function CreateRooms({
           <ArrowRight size={16} weight="bold" />
         </Button>
       </div>
-      </ManufacturerGate>
     </div>
   );
 }

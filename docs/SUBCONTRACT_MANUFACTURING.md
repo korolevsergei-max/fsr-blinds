@@ -105,12 +105,16 @@ runs on every reflow and drops rows for units that have since moved out.
 unit created (CSV import or manually)
   manufacturing_partner_id = 'mp-internal', manufacturing_assigned_at = NULL
         │
-        ▼  owner/scheduler opens /units/<id>/rooms
-  ManufacturerGate: "Who manufactures Unit 2306?"      ← routing happens HERE,
-  → stamps partner + manufacturing_assigned_at            before any room exists
-        │
         ▼  rooms + windows added, installer measures
   units.all_measured_at set
+  — all of this happens with NO manufacturer chosen, by design (2026-08-12).
+    An unrouted unit is in NO queue: the reflow source query requires
+    manufacturing_assigned_at, and no partner worklist can see it because the
+    partner column still sits at the 'mp-internal' default. It stalls, visibly,
+    in the dashboard's "No manufacturer assigned" filter.
+        │
+        ▼  owner/scheduler routes it, at any time, from the unit-detail picker
+          or the bulk-assign sheet  → stamps partner + manufacturing_assigned_at
         │
         ├─ internal  → reflow schedules it → cutter → assembler → qc
         │
@@ -164,8 +168,7 @@ stays unrouted until the office assigns it.
 | **Export column contract** | `src/lib/subcontractor-xlsx.ts` → `EXPORT_COLUMNS` |
 | Decimal → fraction | `src/lib/fraction-inches.ts` |
 | Portal | `src/app/subcontractor/`, `src/components/subcontractor/subcontractor-work-table.tsx` |
-| Routing gate | `src/components/units/manufacturer-gate.tsx` (wired in `components/rooms/create-rooms.tsx`) |
-| Owner/scheduler UI | `src/components/units/bulk-assign-manufacturer-sheet.tsx`, `unit-manufacturer-picker.tsx` |
+| Owner/scheduler UI (the only routing surfaces) | `src/components/units/bulk-assign-manufacturer-sheet.tsx`, `unit-manufacturer-picker.tsx` |
 | Accounts | `src/app/actions/auth/subcontractor.ts`, `management/accounts/forms/invite-subcontractor-form.tsx` |
 | Verification | `scripts/deploy/verify-manufacturing-partners.mjs` |
 

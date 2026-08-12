@@ -130,8 +130,10 @@ export async function loadUnitDetail(unitId: string): Promise<AppDataset> {
   // Second round: windows (depend on roomIds) plus this unit's building/client rows
   // (depend on the fetched unit). Keeps the scoped dataset full-shaped.
   // The partner list rides along because this nested provider SHADOWS the global one:
-  // without it `UnitManufacturerPicker` and `ManufacturerGate` see zero partners and
-  // silently render nothing, so the unit can never be routed to a subcontractor.
+  // without it `UnitManufacturerPicker` sees zero partners and silently renders
+  // nothing, so the unit can never be routed to a subcontractor. This is now the ONLY
+  // place routing can happen for a single unit (the room-creation gate was removed on
+  // 2026-08-12), which makes the partner list load load-bearing rather than a nicety.
   // manufacturingLocked rides along for the same shadowing reason: any Unit field
   // this provider omits silently arrives empty on the unit-detail routes.
   const [windowsRes, buildingRes, clientRes, manufacturingPartners, manufacturingLocked] =
@@ -232,7 +234,7 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
       supabase.from("buildings").select("*").eq("id", unitRow.building_id).maybeSingle(),
       supabase.from("clients").select("*").eq("id", unitRow.client_id).maybeSingle(),
       // Same reason as loadUnitDetail: the nested provider shadows the global one, and a
-      // scheduler makes the FIRST routing choice via ManufacturerGate on the rooms screen.
+      // scheduler makes the FIRST routing choice from the picker on this very page.
       loadManufacturingPartners(),
       loadManufacturingLocked(supabase, unitId, unitRow),
     ]);
