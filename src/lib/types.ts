@@ -115,6 +115,8 @@ export interface WindowProductionStatus {
 
 export interface ManufacturingSettings {
   id: string;
+  /** Which in-house station these capacities belong to (20260814120000). */
+  stationId: string;
   cutterDailyCapacity: number;
   assemblerDailyCapacity: number;
   qcDailyCapacity: number;

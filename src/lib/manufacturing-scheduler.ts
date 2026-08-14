@@ -26,7 +26,8 @@ import {
 import { selectInChunks } from "@/lib/supabase-chunking";
 import { assertRpcArrays } from "@/lib/contract";
 import { queryTimeoutSignal } from "@/lib/query-timeout";
-import { INTERNAL_PARTNER_ID, isInternalFactoryWork } from "@/lib/manufacturing-partners";
+import { requireStationId } from "@/lib/auth";
+import { INTERNAL_PARTNER_ID, isStationWork } from "@/lib/manufacturing-partners";
 import {
   buildRoleScheduleOutput,
   countQueueReadyWindows,
@@ -50,6 +51,7 @@ export { buildRoleScheduleOutput } from "@/lib/manufacturing-queue-core";
 
 type SettingsRow = {
   id: string;
+  station_id: string;
   cutter_daily_capacity: number;
   assembler_daily_capacity: number;
   qc_daily_capacity: number;
@@ -97,7 +99,7 @@ type UnitRow = {
   /**
    * `undefined` (column not projected) must read as ROUTED — only an explicit
    * NULL means "nobody decided". Inverting that empties every factory queue
-   * the moment a read path forgets the column. See isInternalFactoryWork.
+   * the moment a read path forgets the column. See isStationWork.
    */
   manufacturing_assigned_at?: string | null;
 };
@@ -193,9 +195,16 @@ function parseDateKey(dateKey: string): Date {
   return new Date(`${dateKey}T00:00:00`);
 }
 
-function mapSettings(row: SettingsRow | null): ManufacturingSettings {
+function mapSettings(
+  row: SettingsRow | null,
+  stationId: string
+): ManufacturingSettings {
   return {
     id: row?.id ?? "default",
+    // The requested station, not the row's: a missing row still has to report
+    // WHICH station these defaults stand in for, or the settings screen would
+    // save them onto the wrong one.
+    stationId: row?.station_id ?? stationId,
     cutterDailyCapacity: row?.cutter_daily_capacity ?? 30,
     assemblerDailyCapacity: row?.assembler_daily_capacity ?? 30,
     qcDailyCapacity: row?.qc_daily_capacity ?? 30,
@@ -231,7 +240,32 @@ function mapSchedule(row: ScheduleRow): WindowManufacturingSchedule {
   };
 }
 
-async function getSettingsAndOverrides() {
+/**
+ * Every in-house station, newest routing target last. Read from the table rather
+ * than a constant: since 20260814120000 there is more than one internal partner,
+ * and the ONE place this must never be hardcoded is purgeExternalSchedules —
+ * treating Station B as external there deletes its schedule rows, and a unit with
+ * no schedule rows vanishes from every queue with no error anywhere.
+ */
+async function loadInternalStationIds(
+  supabase: ReturnType<typeof createAdminClient>
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("manufacturing_partners")
+    .select("id")
+    .eq("is_internal", true)
+    .order("name");
+  const ids = ((data as { id: string }[] | null) ?? []).map((row) => row.id);
+  // Fail LOUD rather than silently reflowing nothing. An empty internal set can
+  // only mean a broken read; proceeding would purge every schedule row on the
+  // floor as "external".
+  if (ids.length === 0) {
+    throw new Error("[mfg] no internal manufacturing stations found — refusing to reflow");
+  }
+  return ids;
+}
+
+async function getSettingsAndOverrides(stationId: string = INTERNAL_PARTNER_ID) {
   // Service-role client: the schedule reflow is a facility-wide system computation
   // (it reads and re-plans the WHOLE production queue) that is triggered from
   // scoped sessions too — e.g. an installer finishing a measurement. Under the
@@ -240,14 +274,14 @@ async function getSettingsAndOverrides() {
   // Callers are server actions/RSCs that have already passed app-layer role guards.
   const supabase = createAdminClient();
   const [settingsRes, overridesRes] = await Promise.all([
-    supabase.from("manufacturing_settings").select("*").eq("id", "default").maybeSingle(),
+    supabase.from("manufacturing_settings").select("*").eq("station_id", stationId).maybeSingle(),
     supabase
       .from("manufacturing_calendar_overrides")
       .select("id, work_date, is_working, label")
       .order("work_date"),
   ]);
 
-  const settings = mapSettings((settingsRes.data as SettingsRow | null) ?? null);
+  const settings = mapSettings((settingsRes.data as SettingsRow | null) ?? null, stationId);
   const overrides = new Map<string, ManufacturingCalendarOverride>();
   for (const row of (overridesRes.data as CalendarOverrideRow[] | null) ?? []) {
     const mapped = mapOverride(row);
@@ -324,12 +358,21 @@ function buildBlindSortKey(win: WindowRow): string {
  * consistency check a destructive cleaner would have provided.
  */
 async function purgeExternalSchedules(
-  supabase: ReturnType<typeof createAdminClient>
+  supabase: ReturnType<typeof createAdminClient>,
+  internalStationIds: string[]
 ): Promise<void> {
+  // ⚠️ RULE 2 (docs/MANUFACTURING_STATIONS.md). "External" means "not any of OUR
+  // stations", never "!== INTERNAL_PARTNER_ID". With the old constant compare
+  // this DELETE swept up every Station B unit, and because queue membership is
+  // "has schedule rows AND the unit's partner is mine", each one would silently
+  // disappear from the floor rather than fail.
+  //
+  // A move BETWEEN stations must never reach this: both sides are internal, the
+  // rows stay, and the per-station reflow below simply re-plans their dates.
   const { data: externalUnits } = await supabase
     .from("units")
     .select("id")
-    .neq("manufacturing_partner_id", INTERNAL_PARTNER_ID);
+    .not("manufacturing_partner_id", "in", `(${internalStationIds.join(",")})`);
 
   const externalIds = ((externalUnits as { id: string }[] | null) ?? []).map((u) => u.id);
   if (externalIds.length === 0) return;
@@ -344,36 +387,57 @@ async function purgeExternalSchedules(
   }
 }
 
+/**
+ * Re-plan every in-house station's queue.
+ *
+ * Each station is packed INDEPENDENTLY, against its own daily capacities: a
+ * station is its own people and its own throughput, so merging their day buckets
+ * would let Station A's backlog push Station B's dates out. `reflowStation`
+ * builds its cutLoad/assemblyLoad/qcLoad maps per call, which is what makes the
+ * per-station calendars genuinely separate rather than a shared pool.
+ *
+ * The purge runs ONCE, before any station, against the whole internal set — see
+ * Rule 2 in purgeExternalSchedules.
+ */
 export async function reflowManufacturingSchedules(reason = "system_reflow"): Promise<void> {
-  const { supabase, settings, overrides } = await getSettingsAndOverrides();
+  const supabase = createAdminClient();
+  const stationIds = await loadInternalStationIds(supabase);
+
+  // Self-heal: drop schedule rows left behind by a unit that has since moved to a
+  // subcontractor. Each station's upsert only rewrites rows for units it
+  // selected, so without this an outbound reassignment whose cleanup failed
+  // would leave the unit sitting in a queue indefinitely. Runs on every reflow
+  // and is a no-op while nothing is subcontracted.
+  await purgeExternalSchedules(supabase, stationIds);
+
+  for (const stationId of stationIds) {
+    await reflowStation(stationId, reason);
+  }
+}
+
+async function reflowStation(stationId: string, reason: string): Promise<void> {
+  const { supabase, settings, overrides } = await getSettingsAndOverrides(stationId);
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
-  // Subcontracted units are excluded at the SOURCE, not hidden at read time.
-  // The internal factory's day buckets are capacity-allocated, so a unit that is
-  // being made elsewhere must not occupy an in-house cutting/assembly/QC slot —
-  // leaving it in would push real internal dates out for work nobody is doing.
-  // No schedule rows means it also never reaches the cutter/assembler/qc queues,
-  // which all read through window_manufacturing_schedule.
+  // Other stations' and subcontracted units are excluded at the SOURCE, not
+  // hidden at read time. A station's day buckets are capacity-allocated, so a
+  // unit being made elsewhere must not occupy one of ITS cutting/assembly/QC
+  // slots — leaving it in would push real dates out for work nobody here is
+  // doing. No schedule rows for this station also means it never reaches these
+  // queues, which all read through window_manufacturing_schedule.
   //
   // Unrouted units (manufacturing_assigned_at IS NULL) are excluded the same
-  // way: the in-house queue is for units somebody consciously routed here, not
+  // way: a station's queue is for units somebody consciously routed to it, not
   // for the column default. They surface in the dashboard's "No manufacturer
-  // assigned" bucket instead of silently entering the cutter queue.
+  // assigned" bucket instead of silently entering Station A's cutter queue.
   const { data: unitRows } = await supabase
     .from("units")
     .select("id, building_id, client_id, unit_number, building_name, client_name, installation_date, complete_by_date, status")
     .in("status", ["measured", "bracketed", "manufactured"])
-    .eq("manufacturing_partner_id", INTERNAL_PARTNER_ID)
+    .eq("manufacturing_partner_id", stationId)
     .not("manufacturing_assigned_at", "is", null)
     .order("installation_date", { ascending: true, nullsFirst: false })
     .order("unit_number");
-
-  // Self-heal: drop schedule rows left behind by a unit that has since moved to a
-  // subcontractor. The upsert below only rewrites rows for units it selected, so
-  // without this an outbound reassignment whose cleanup failed would leave the
-  // unit sitting in the cutter queue indefinitely. Runs on every reflow and is a
-  // no-op while nothing is subcontracted.
-  await purgeExternalSchedules(supabase);
 
   const units = (unitRows as UnitRow[] | null) ?? [];
   if (units.length === 0) {
@@ -684,11 +748,22 @@ export async function reflowManufacturingSchedules(reason = "system_reflow"): Pr
   }
 }
 
-export async function loadManufacturingSettings(): Promise<{
+/**
+ * A station's capacities plus the facility-wide working calendar.
+ *
+ * `stationId` defaults to Station A on purpose: the callers that do NOT pass one
+ * (recomputeManufacturingRiskFlags, buildManufacturingCalendarMonth) read only
+ * `applyOntarioHolidays` and the overrides, which describe the BUILDING and are
+ * identical on every station row. Any caller that touches a *_daily_capacity
+ * MUST pass the station it means.
+ */
+export async function loadManufacturingSettings(
+  stationId: string = INTERNAL_PARTNER_ID
+): Promise<{
   settings: ManufacturingSettings;
   overrides: ManufacturingCalendarOverride[];
 }> {
-  const { settings, overrides } = await getSettingsAndOverrides();
+  const { settings, overrides } = await getSettingsAndOverrides(stationId);
   return { settings, overrides: [...overrides.values()] };
 }
 
@@ -716,7 +791,8 @@ export async function buildManufacturingCalendarMonth(
  */
 function assembleRoleScheduleItems(
   role: "cutter" | "assembler" | "qc",
-  source: RoleScheduleSource
+  source: RoleScheduleSource,
+  stationId: string
 ): { items: ManufacturingWindowItem[]; allItems: ManufacturingWindowItem[] } {
   const { schedules, units, windows, production, rooms, openByWindow, historyByWindow } = source;
 
@@ -741,16 +817,16 @@ function assembleRoleScheduleItems(
     const unit = unitsById.get(row.unit_id);
     const window = windowsById.get(row.window_id);
     if (!unit || !window) continue;
-    // Exclusivity backstop. get_role_schedule already filters subcontracted and
-    // unrouted units out, but the chunked fallback path below does its own units
-    // query, and this is the single funnel every factory screen's items pass
-    // through. A subcontracted unit that reaches here would sit in the cutter
-    // queue while the partner builds the same blinds; an unrouted one would be
-    // built without anyone having decided so. NOT a naive truthiness check —
-    // isInternalFactoryWork treats an absent column as routed, because
-    // `!unit.manufacturing_assigned_at` here would empty every factory queue
-    // the moment a projection forgets the column.
-    if (!isInternalFactoryWork(unit)) continue;
+    // Exclusivity backstop. get_role_schedule already filters to this station
+    // and drops subcontracted and unrouted units, but the chunked fallback path
+    // below does its own units query, and this is the single funnel every
+    // factory screen's items pass through. Another station's unit reaching here
+    // would sit in this queue while that station builds the same blinds; an
+    // unrouted one would be built without anyone having decided so. NOT a naive
+    // truthiness check — isStationWork treats an absent routing column as
+    // routed, because `!unit.manufacturing_assigned_at` here would empty every
+    // queue the moment a projection forgets the column.
+    if (!isStationWork(unit, stationId)) continue;
     const production = productionByWindow.get(row.window_id);
     const roomName = roomsById.get(window.room_id)?.name ?? "Room";
     const productionStatus = production?.status ?? "pending";
@@ -832,6 +908,14 @@ export type RoleScheduleOptions = {
    * is empty, true and false are identical.
    */
   includeArchived?: boolean;
+  /**
+   * Which station's queue to read. Staff callers omit it and get their own
+   * (requireStationId throws if they have none). The OWNER has no station and
+   * MUST pass one — /management/schedule picks it from its station switcher —
+   * because the capacities below are per-station and merging two stations' day
+   * buckets would report a capacity neither of them has.
+   */
+  stationId?: string;
 };
 
 export async function loadPersistedRoleSchedule(
@@ -840,7 +924,10 @@ export async function loadPersistedRoleSchedule(
 ): Promise<ManufacturingRoleSchedule> {
   const includeArchived = options.includeArchived ?? false;
   const startedAt = performance.now();
-  const { supabase, settings, overrides } = await getSettingsAndOverrides();
+  // No silent default: falling back to Station A here would show its queue and
+  // its capacity to a Station B cutter.
+  const stationId = options.stationId ?? (await requireStationId());
+  const { supabase, settings, overrides } = await getSettingsAndOverrides(stationId);
   const currentWorkDate = getCurrentWorkDate(settings, overrides);
 
   // NOTE: this is a pure read. Correctness of the persisted schedule (every
@@ -869,6 +956,10 @@ export async function loadPersistedRoleSchedule(
     .rpc("get_role_schedule", {
       p_date_column: dateColumn,
       p_include_archived: includeArchived,
+      // Ignored by the RPC for cutter/assembler/qc, which are pinned to their
+      // own auth_station_id() — a crafted argument cannot widen scope. It is
+      // the owner's station selector that this actually carries.
+      p_station_id: stationId,
     })
     .abortSignal(queryTimeoutSignal());
   if (!rpcError && rpcData) {
@@ -884,15 +975,19 @@ export async function loadPersistedRoleSchedule(
       "schedule_rows", "units", "windows", "production", "rooms", "escalations",
     ]);
     const { openByWindow, historyByWindow } = buildEscalationMapsByWindow(raw.escalations ?? []);
-    const { items, allItems } = assembleRoleScheduleItems(role, {
-      schedules: raw.schedule_rows ?? [],
-      units: raw.units ?? [],
-      windows: raw.windows ?? [],
-      production: raw.production ?? [],
-      rooms: raw.rooms ?? [],
-      openByWindow,
-      historyByWindow,
-    });
+    const { items, allItems } = assembleRoleScheduleItems(
+      role,
+      {
+        schedules: raw.schedule_rows ?? [],
+        units: raw.units ?? [],
+        windows: raw.windows ?? [],
+        production: raw.production ?? [],
+        rooms: raw.rooms ?? [],
+        openByWindow,
+        historyByWindow,
+      },
+      stationId
+    );
     console.warn(
       `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
     );
@@ -970,15 +1065,19 @@ export async function loadPersistedRoleSchedule(
       .then((res) => ({ data: res.data as Array<{ id: string; name: string }> | null, error: res.error })),
   );
 
-  const { items, allItems } = assembleRoleScheduleItems(role, {
-    schedules,
-    units: unitData,
-    windows: windowData,
-    production: productionData,
-    rooms: roomData,
-    openByWindow: escalationMaps.openByWindow,
-    historyByWindow: escalationMaps.historyByWindow,
-  });
+  const { items, allItems } = assembleRoleScheduleItems(
+    role,
+    {
+      schedules,
+      units: unitData,
+      windows: windowData,
+      production: productionData,
+      rooms: roomData,
+      openByWindow: escalationMaps.openByWindow,
+      historyByWindow: escalationMaps.historyByWindow,
+    },
+    stationId
+  );
 
   console.warn(
     `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`

@@ -93,11 +93,17 @@ export function SettingsScreen({
 
   const saveSettings = () => {
     startSettingsTransition(async () => {
+      // TODO(stations phase 6): a station picker here, so Station B's capacities
+      // are editable too. Until then this edits Station A only — `settings` is
+      // loaded for Station A, so saving anything else would write one station's
+      // numbers onto another's row. `applyHolidays` is facility-wide and the
+      // action propagates it to every station regardless.
       const result = await updateManufacturingSettings(
         Number(cutterCapacity || 0),
         Number(assemblerCapacity || 0),
         Number(qcCapacity || 0),
-        applyHolidays
+        applyHolidays,
+        settings.stationId
       );
       if (!result.ok) {
         window.alert(result.error);

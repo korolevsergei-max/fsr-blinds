@@ -10,6 +10,7 @@ import {
   reflowManufacturingSchedules,
 } from "@/lib/manufacturing-scheduler";
 import { getCurrentUser, requireOwner } from "@/lib/auth";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import type { ManufacturingCalendarOverride } from "@/lib/types";
 import { emitNotification } from "@/lib/emit-notification";
 import {
@@ -161,23 +162,49 @@ async function requireManufacturingUser() {
   return user;
 }
 
+/**
+ * Capacities belong to ONE station; `applyOntarioHolidays` describes the
+ * building, so it is written to EVERY station row. That duplication is what
+ * keeps the working calendar facility-wide by construction — the alternative,
+ * a separate calendar table, would let two stations drift onto different
+ * holidays for no reason anyone wants.
+ */
 export async function updateManufacturingSettings(
   cutterDailyCapacity: number,
   assemblerDailyCapacity: number,
   qcDailyCapacity: number,
-  applyOntarioHolidays: boolean
+  applyOntarioHolidays: boolean,
+  stationId: string
 ): Promise<ActionResult> {
   try {
     await requireOwner();
     const supabase = await createClient();
-    const { error } = await supabase.from("manufacturing_settings").upsert({
-      id: "default",
-      cutter_daily_capacity: Math.max(0, Math.floor(cutterDailyCapacity)),
-      assembler_daily_capacity: Math.max(0, Math.floor(assemblerDailyCapacity)),
-      qc_daily_capacity: Math.max(0, Math.floor(qcDailyCapacity)),
-      apply_ontario_holidays: applyOntarioHolidays,
-    });
+
+    const { data: station } = await supabase
+      .from("manufacturing_partners")
+      .select("id, is_internal")
+      .eq("id", stationId)
+      .maybeSingle();
+    if (!station || !(station as { is_internal: boolean }).is_internal) {
+      return { ok: false, error: "That station no longer exists." };
+    }
+
+    const { error } = await supabase
+      .from("manufacturing_settings")
+      .update({
+        cutter_daily_capacity: Math.max(0, Math.floor(cutterDailyCapacity)),
+        assembler_daily_capacity: Math.max(0, Math.floor(assemblerDailyCapacity)),
+        qc_daily_capacity: Math.max(0, Math.floor(qcDailyCapacity)),
+        apply_ontario_holidays: applyOntarioHolidays,
+      })
+      .eq("station_id", stationId);
     if (error) return { ok: false, error: error.message };
+
+    const { error: calendarError } = await supabase
+      .from("manufacturing_settings")
+      .update({ apply_ontario_holidays: applyOntarioHolidays })
+      .neq("station_id", stationId);
+    if (calendarError) return { ok: false, error: calendarError.message };
 
     await reflowManufacturingSchedules("settings_updated");
     revalidateManufacturingPaths();
@@ -247,17 +274,26 @@ export async function shiftWindowManufacturingSchedule(
   try {
     const user = await requireManufacturingUser();
     const supabase = await createClient();
-    const { settings, overrides } = await loadManufacturingSettings();
-    const overridesByDate = overrideMap(overrides);
 
     const { data: row, error } = await supabase
       .from("window_manufacturing_schedule")
-      .select("*")
+      .select("*, units!inner(manufacturing_partner_id)")
       .eq("window_id", windowId)
       .maybeSingle();
     if (error || !row) {
       return { ok: false, error: "Manufacturing schedule row not found." };
     }
+
+    // Capacity is per station (20260814120000), so both the limit and the count
+    // it is compared against must be the OWNING station's — read off the unit
+    // rather than the caller, because the owner may shift either station's rows
+    // and has no station of their own. Getting this wrong compares Station B's
+    // load to Station A's capacity.
+    const stationId =
+      (row.units as unknown as { manufacturing_partner_id: string } | null)
+        ?.manufacturing_partner_id ?? INTERNAL_PARTNER_ID;
+    const { settings, overrides } = await loadManufacturingSettings(stationId);
+    const overridesByDate = overrideMap(overrides);
 
     const step = direction === "earlier" ? -1 : 1;
     const currentCut = row.scheduled_cut_date ?? null;
@@ -316,8 +352,9 @@ export async function shiftWindowManufacturingSchedule(
             : "scheduled_qc_date";
       const { count } = await supabase
         .from("window_manufacturing_schedule")
-        .select("id", { count: "exact", head: true })
+        .select("id, units!inner(manufacturing_partner_id)", { count: "exact", head: true })
         .eq(dateColumn, targetDate)
+        .eq("units.manufacturing_partner_id", stationId)
         .neq("window_id", windowId);
       const nextCount = (count ?? 0) + 1;
       if (nextCount > cap && !force) {
