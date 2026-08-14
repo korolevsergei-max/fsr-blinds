@@ -57,6 +57,7 @@ function makeSchedule(items: ManufacturingWindowItem[]): ManufacturingRoleSchedu
   return {
     settings: {
       id: "default",
+  stationId: "mp-internal",
       cutterDailyCapacity: 30,
       assemblerDailyCapacity: 30,
       qcDailyCapacity: 30,

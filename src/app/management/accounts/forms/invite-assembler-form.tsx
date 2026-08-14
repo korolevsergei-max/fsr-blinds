@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { createAssemblerAccount } from "@/app/actions/auth-actions";
 
-export function InviteAssemblerForm({ onDone }: { onDone: () => void }) {
+/** `stationId` is fixed by the section this was opened from — see InviteCutterForm. */
+export function InviteAssemblerForm({
+  stationId,
+  onDone,
+}: {
+  stationId: string;
+  onDone: () => void;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -29,7 +36,7 @@ export function InviteAssemblerForm({ onDone }: { onDone: () => void }) {
     }
     setError("");
     startTransition(async () => {
-      const result = await createAssemblerAccount(name, email, phone, password);
+      const result = await createAssemblerAccount(name, email, phone, password, stationId);
       if (!result.ok) {
         setError(result.error);
         return;

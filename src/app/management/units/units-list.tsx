@@ -40,7 +40,7 @@ import { getFloor } from "@/lib/app-dataset";
 import { UNIT_STATUS_LABELS } from "@/lib/types";
 import type { ManufacturingPartner, Scheduler } from "@/lib/types";
 import { BulkAssignManufacturerSheet } from "@/components/units/bulk-assign-manufacturer-sheet";
-import { INTERNAL_PARTNER_ID, partnerNameFor, sortPartners } from "@/lib/manufacturing-partners";
+import { INTERNAL_PARTNER_ID, isInternalPartner, partnerNameFor, sortPartners } from "@/lib/manufacturing-partners";
 
 /** Dataset slices the management units list reads. */
 export type UnitsListData = Pick<
@@ -612,9 +612,12 @@ export function UnitsList({
           const schedulerId = unit.assignedSchedulerId;
           const schedulerName = unit.assignedSchedulerName || (schedulerId ? schedulers.find((s) => s.id === schedulerId)?.name : null);
           // Only surfaced when the unit is subcontracted — in-house is the norm and
-          // a chip on every card would be noise.
+          // a chip on every card would be noise. Checked against the partner list's
+          // is_internal, not the INTERNAL_PARTNER_ID constant: since Station B, that
+          // constant is just the column default and would mislabel its units as
+          // subcontracted.
           const externalPartnerName =
-            unit.manufacturingPartnerId && unit.manufacturingPartnerId !== INTERNAL_PARTNER_ID
+            unit.manufacturingPartnerId && !isInternalPartner(unit.manufacturingPartnerId, partners)
               ? partnerNameFor(unit.manufacturingPartnerId, partners)
               : null;
           return (

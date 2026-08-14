@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireCutterOrOwner } from "@/lib/auth";
+import { requireCutterOrOwner, requireStationId } from "@/lib/auth";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -26,24 +26,51 @@ function revalidateCutterQueuesAfterResponse() {
  */
 export async function moveUnitToProduction(unitId: string): Promise<ActionResult> {
   try {
-    await requireCutterOrOwner();
+    const actor = await requireCutterOrOwner();
     const supabase = await createClient();
 
-    // Exclusivity: a subcontracted unit must never enter the in-house production
-    // floor. The queue no longer lists them, so reaching here means a stale tab.
+    // Exclusivity: a unit must never enter a production floor that is not the
+    // one building it — a subcontractor's, or the OTHER station's. The queue no
+    // longer lists them, so reaching here means a stale tab or a unit that was
+    // relocated while it was open.
+    //
+    // The owner is exempt from the station comparison (they have no station and
+    // legitimately act across the whole floor) but not from the subcontractor
+    // check, which is why the two cases are separate below.
     const { data: unitRow } = await supabase
       .from("units")
-      .select("manufacturing_partner_id, unit_number")
+      .select("manufacturing_partner_id, unit_number, manufacturing_partners(name, is_internal)")
       .eq("id", unitId)
       .maybeSingle();
     const unit = unitRow as
-      | { manufacturing_partner_id: string | null; unit_number: string }
+      | {
+          manufacturing_partner_id: string | null;
+          unit_number: string;
+          manufacturing_partners?: { name: string; is_internal: boolean } | null;
+        }
       | null;
-    if (unit && (unit.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== INTERNAL_PARTNER_ID) {
-      return {
-        ok: false,
-        error: `Unit ${unit.unit_number} is manufactured by a subcontractor. Refresh — it has left the in-house queue.`,
-      };
+
+    if (unit) {
+      const partnerId = unit.manufacturing_partner_id ?? INTERNAL_PARTNER_ID;
+      const partner = unit.manufacturing_partners;
+      // Absent embed reads as in-house, matching resolveFactoryManufacturer:
+      // the DB trigger is the real guard and locking the floor out of its own
+      // work would be the worse failure.
+      if (!(partner?.is_internal ?? partnerId === INTERNAL_PARTNER_ID)) {
+        return {
+          ok: false,
+          error: `Unit ${unit.unit_number} is manufactured by a subcontractor. Refresh — it has left the in-house queue.`,
+        };
+      }
+      if (actor.role === "cutter") {
+        const stationId = await requireStationId();
+        if (partnerId !== stationId) {
+          return {
+            ok: false,
+            error: `Unit ${unit.unit_number} is now built at ${partner?.name ?? "another station"}. Refresh — it has left your queue.`,
+          };
+        }
+      }
     }
 
     const { error } = await supabase

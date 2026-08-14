@@ -115,6 +115,8 @@ export interface WindowProductionStatus {
 
 export interface ManufacturingSettings {
   id: string;
+  /** Which in-house station these capacities belong to (20260814120000). */
+  stationId: string;
   cutterDailyCapacity: number;
   assemblerDailyCapacity: number;
   qcDailyCapacity: number;
@@ -311,6 +313,8 @@ export interface Cutter {
   contactEmail: string;
   contactPhone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 /**
@@ -350,6 +354,8 @@ export interface Assembler {
   email: string;
   phone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 export interface Qc {
@@ -358,6 +364,8 @@ export interface Qc {
   email: string;
   phone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 export interface WindowManufacturingEscalation {

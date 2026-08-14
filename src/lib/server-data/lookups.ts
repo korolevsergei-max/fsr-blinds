@@ -22,6 +22,7 @@ import { finalizeDataset } from "./enrichment";
 import { getCurrentUser, getLinkedSchedulerId } from "@/lib/auth";
 import { isSchedulerScopedUnit } from "@/lib/scheduler-scope";
 import { computeManufacturingLock, countProductionStatuses } from "@/lib/manufacturing-lock";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 
 /**
  * `units.select("*")` row fields the lock predicate needs beyond UnitRow.
@@ -47,17 +48,28 @@ async function loadManufacturingLocked(
   unitId: string,
   unitRow: UnitRow & UnitLockColumns
 ): Promise<{ locked: boolean; startedCount: number; qcApprovedCount: number }> {
-  const { data } = await supabase
-    .from("window_production_status")
-    .select("status")
-    .eq("unit_id", unitId);
+  // The partner's is_internal is read from the table, not derived from the id:
+  // since 20260814120000 there is more than one internal row (Station A,
+  // Station B), so comparing against INTERNAL_PARTNER_ID would classify every
+  // Station B unit as a subcontractor and diverge from the SQL lock predicate.
+  // Both reads are tiny and indexed, and run in parallel.
+  const [{ data }, { data: partner }] = await Promise.all([
+    supabase.from("window_production_status").select("status").eq("unit_id", unitId),
+    supabase
+      .from("manufacturing_partners")
+      .select("is_internal")
+      .eq("id", unitRow.manufacturing_partner_id ?? INTERNAL_PARTNER_ID)
+      .maybeSingle(),
+  ]);
   const counts = countProductionStatuses((data as { status: string }[] | null) ?? []);
   // The counts are returned as well as the boolean: the MR4b transfer dialog has
   // to tell the owner what the transfer costs ("6 part-built blinds, about
   // $600"), and this is the only place that number is already in hand.
   return {
     locked: computeManufacturingLock({
-      partnerId: unitRow.manufacturing_partner_id ?? null,
+      // Absent row (deleted mid-request, stale RLS) reads as in-house, matching
+      // is_manufacturing_locked's own COALESCE(..., true) in SQL.
+      isInternal: (partner as { is_internal: boolean } | null)?.is_internal ?? true,
       productionEnteredAt: unitRow.production_entered_at ?? null,
       allMeasuredAt: unitRow.all_measured_at ?? null,
       ...counts,

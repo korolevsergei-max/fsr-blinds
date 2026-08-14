@@ -7,7 +7,19 @@ import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { createCutterAccount } from "@/app/actions/auth-actions";
 
-export function InviteCutterForm({ onDone }: { onDone: () => void }) {
+/**
+ * `stationId` is fixed by the section this form was opened from — the station a
+ * login belongs to is chosen once, at creation, and never edited afterwards
+ * (there is no updateCutterStation action; moving a person between stations
+ * means a new login). The server re-validates it with assertStationIsInternal.
+ */
+export function InviteCutterForm({
+  stationId,
+  onDone,
+}: {
+  stationId: string;
+  onDone: () => void;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -30,7 +42,14 @@ export function InviteCutterForm({ onDone }: { onDone: () => void }) {
     setError("");
     startTransition(async () => {
       // Pass the name as both organization name and contact name for now
-      const result = await createCutterAccount(name.trim(), email.trim(), name.trim(), phone, password);
+      const result = await createCutterAccount(
+        name.trim(),
+        email.trim(),
+        name.trim(),
+        phone,
+        password,
+        stationId
+      );
       if (!result.ok) {
         setError(result.error);
         return;

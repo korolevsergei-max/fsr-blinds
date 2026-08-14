@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import {
   Envelope,
   Phone,
@@ -59,7 +59,149 @@ type OwnerProfile = {
   email: string;
 };
 
-// Unused function removed to fix lint warning
+/**
+ * The three station-scoped roles share one card shape, so they render through
+ * one section component instead of three near-identical blocks. Cutters carry a
+ * separate contact name; assemblers and QCs do not, hence the optional field.
+ */
+type StationPerson = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  contactName?: string;
+  authUserId: string | null;
+  stationId: string;
+};
+
+/**
+ * One station's people for one role, with its own Add affordance.
+ *
+ * Rendered even when the station has nobody yet — a newly opened station with no
+ * staff must still be visible and addable, which is the whole point of splitting
+ * these into sections. The station is not a field on the form: it is fixed by
+ * which section's Add button was pressed, matching the DB rule that a login
+ * belongs to exactly one station from creation onward.
+ */
+function StationAccountsSection({
+  station,
+  roleLabel,
+  rolePlural,
+  people,
+  icon,
+  deletePending,
+  onDelete,
+  formOpen,
+  onToggleForm,
+  form,
+}: {
+  station: ManufacturingPartner;
+  /** Singular, shown on each card: "Cutter", "Quality Control". */
+  roleLabel: string;
+  /** Plural, shown in the count and empty state: "cutters", "QC accounts". */
+  rolePlural: string;
+  people: StationPerson[];
+  icon: ReactNode;
+  deletePending: boolean;
+  onDelete: (person: StationPerson) => void;
+  formOpen: boolean;
+  onToggleForm: () => void;
+  form: ReactNode;
+}) {
+  const orphans = people.filter((p) => !p.authUserId);
+  return (
+    <div className="flex flex-col gap-3 pt-3">
+      <div className="flex items-center justify-between gap-3 border-b border-border-subtle pb-2">
+        <div>
+          <p className="text-[13px] font-semibold text-foreground tracking-tight">{station.name}</p>
+          <p className="text-[11px] text-tertiary">
+            {people.length} {rolePlural}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant={formOpen ? "secondary" : undefined}
+          onClick={onToggleForm}
+        >
+          {formOpen ? (
+            "Close"
+          ) : (
+            <>
+              <Plus size={14} weight="bold" />
+              Add
+            </>
+          )}
+        </Button>
+      </div>
+
+      {formOpen && <div>{form}</div>}
+
+      {people.length === 0 && !formOpen && (
+        <p className="rounded-[var(--radius-md)] border border-dashed border-border px-3 py-5 text-center text-[12px] text-tertiary">
+          No {rolePlural} at {station.name} yet.
+        </p>
+      )}
+
+      {orphans.length > 0 && (
+        <InlineAlert variant="error">
+          Orphaned {rolePlural} not linked to Supabase Auth: {orphans.length}. Use Delete
+          to remove them.
+        </InlineAlert>
+      )}
+
+      {people.map((person) => (
+        <div key={person.id} className="animate-fade-up">
+          <div className="surface-card p-4">
+            <div className="flex items-center gap-3 mb-3 justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                  {icon}
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
+                    {person.name}
+                  </h3>
+                  <p className="text-[12px] text-tertiary">
+                    {roleLabel}
+                    {person.authUserId ? "" : " (orphan)"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={deletePending}
+                onClick={() => onDelete(person)}
+              >
+                Delete
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              {person.contactName && (
+                <div className="flex items-center gap-2 text-[12px] text-secondary">
+                  <UserCircle size={12} />
+                  {person.contactName}
+                </div>
+              )}
+              <div className="flex items-center gap-2 text-[12px] text-secondary">
+                <Envelope size={12} />
+                {person.email}
+              </div>
+              {person.phone && (
+                <div className="flex items-center gap-2 text-[12px] text-secondary">
+                  <Phone size={12} />
+                  {person.phone}
+                </div>
+              )}
+            </div>
+            {person.authUserId && <ChangePasswordInline authUserId={person.authUserId} />}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function AccountsManager({
   data,
@@ -85,6 +227,8 @@ export function AccountsManager({
   const { installers, cutters, schedulers, units, clients, buildings } = data;
   const [tab, setTab] = useState<Tab>("installers");
   const [showForm, setShowForm] = useState(false);
+  /** `${tab}:${stationId}` of the open per-station invite form, or null. */
+  const [openStationForm, setOpenStationForm] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [deletePending, startDeleteTransition] = useTransition();
   const [expandedAccessId, setExpandedAccessId] = useState<string | null>(null);
@@ -104,15 +248,39 @@ export function AccountsManager({
               ? "Subcontractors"
               : "Owners";
 
-  const linkedCutters = cutters.filter((m) => Boolean(m.authUserId));
-  const orphanCutters = cutters.filter((m) => !m.authUserId);
   const linkedSchedulers = schedulers.filter((s) => Boolean(s.authUserId));
   const orphanSchedulers = schedulers.filter((s) => !s.authUserId);
-  const linkedAssemblers = assemblers.filter((a: Assembler) => Boolean(a.authUserId));
-  const orphanAssemblers = assemblers.filter((a: Assembler) => !a.authUserId);
-  const linkedQcs = qcs.filter((qc) => Boolean(qc.authUserId));
-  const orphanQcs = qcs.filter((qc) => !qc.authUserId);
   const externalPartners = manufacturingPartners.filter((p) => !p.isInternal);
+  // Own stations only, in display order — walls Station A's people off from
+  // Station B's in the accounts list the same way the RLS layer walls off units.
+  const stations = manufacturingPartners.filter((p) => p.isInternal);
+  const isStationTab = tab === "cutters" || tab === "assemblers" || tab === "qcs";
+
+  const cutterPeople: StationPerson[] = cutters.map((c) => ({
+    id: c.id,
+    name: c.name,
+    email: c.contactEmail,
+    phone: c.contactPhone,
+    contactName: c.contactName,
+    authUserId: c.authUserId,
+    stationId: c.stationId,
+  }));
+  const assemblerPeople: StationPerson[] = assemblers.map((a: Assembler) => ({
+    id: a.id,
+    name: a.name,
+    email: a.email,
+    phone: a.phone,
+    authUserId: a.authUserId,
+    stationId: a.stationId,
+  }));
+  const qcPeople: StationPerson[] = qcs.map((q) => ({
+    id: q.id,
+    name: q.name,
+    email: q.email,
+    phone: q.phone,
+    authUserId: q.authUserId,
+    stationId: q.stationId,
+  }));
 
   const handleDeleteInstaller = (inst: AppDataset["installers"][number]) => {
     if (!confirm(`Delete installer "${inst.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
@@ -129,13 +297,13 @@ export function AccountsManager({
     });
   };
 
-  const handleDeleteCutter = (cutter: AppDataset["cutters"][number]) => {
+  const handleDeleteCutter = (cutter: StationPerson) => {
     if (!confirm(`Delete cutter "${cutter.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
       return;
     }
     setDeleteError("");
     startDeleteTransition(async () => {
-      const result = await deleteCutterAccount(cutter.id, cutter.authUserId, cutter.contactEmail);
+      const result = await deleteCutterAccount(cutter.id, cutter.authUserId, cutter.email);
       if (!result.ok) {
         setDeleteError(result.error);
         return;
@@ -159,7 +327,7 @@ export function AccountsManager({
     });
   };
 
-  const handleDeleteAssembler = (asm: Assembler) => {
+  const handleDeleteAssembler = (asm: StationPerson) => {
     if (!confirm(`Delete assembler "${asm.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
       return;
     }
@@ -174,7 +342,7 @@ export function AccountsManager({
     });
   };
 
-  const handleDeleteQc = (qc: Qc) => {
+  const handleDeleteQc = (qc: StationPerson) => {
     if (!confirm(`Delete QC user "${qc.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
       return;
     }
@@ -342,33 +510,25 @@ export function AccountsManager({
       {/* List */}
       <div className="px-4 flex flex-col gap-3 pb-8">
         {deleteError && <InlineAlert variant="error">{deleteError}</InlineAlert>}
-        <div className="pt-1">
-          <Button size="sm" onClick={() => setShowForm(!showForm)}>
-            <Plus size={14} weight="bold" />
-            {showForm ? `Close ${tabLabel}` : `Add ${tabLabel}`}
-          </Button>
-        </div>
+        {/* Station-scoped roles get one Add per station section instead — the
+            station a login belongs to is decided by which section you add from. */}
+        {!isStationTab && (
+          <div className="pt-1">
+            <Button size="sm" onClick={() => setShowForm(!showForm)}>
+              <Plus size={14} weight="bold" />
+              {showForm ? `Close ${tabLabel}` : `Add ${tabLabel}`}
+            </Button>
+          </div>
+        )}
 
-        {showForm && (
+        {showForm && !isStationTab && (
           <div>
             {tab === "installers" ? (
               <InviteInstallerForm
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
-            ) : tab === "cutters" ? (
-              <InviteCutterForm
-                onDone={() => { setShowForm(false); window.location.reload(); }}
-              />
             ) : tab === "schedulers" ? (
               <InviteSchedulerForm
-                onDone={() => { setShowForm(false); window.location.reload(); }}
-              />
-            ) : tab === "assemblers" ? (
-              <InviteAssemblerForm
-                onDone={() => { setShowForm(false); window.location.reload(); }}
-              />
-            ) : tab === "qcs" ? (
-              <InviteQcForm
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
             ) : tab === "subcontractors" ? (
@@ -398,126 +558,33 @@ export function AccountsManager({
           </>
         )}
 
-        {tab === "cutters" && (
-          <>
-            {linkedCutters.map((mfr, i) => (
-              <div
-                key={mfr.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <Factory size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                          {mfr.name}
-                        </h3>
-                        <p className="text-[12px] text-tertiary">Cutter</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteCutter(mfr)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    {mfr.contactName && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <UserCircle size={12} />
-                        {mfr.contactName}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {mfr.contactEmail}
-                    </div>
-                    {mfr.contactPhone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {mfr.contactPhone}
-                      </div>
-                    )}
-                  </div>
-                  {mfr.authUserId && <ChangePasswordInline authUserId={mfr.authUserId} />}
-                </div>
-              </div>
-            ))}
-
-            {orphanCutters.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned cutter records (not linked to Supabase Auth):{" "}
-                    {orphanCutters.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanCutters.map((mfr, i) => (
-                  <div
-                key={mfr.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 mb-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <Factory size={22} className="text-tertiary" />
-                          </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                              {mfr.name}
-                            </h3>
-                            <p className="text-[12px] text-tertiary">Cutter</p>
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          disabled={deletePending}
-                          onClick={() => handleDeleteCutter(mfr)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        {mfr.contactName && (
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <UserCircle size={12} />
-                            {mfr.contactName}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-[12px] text-secondary">
-                          <Envelope size={12} />
-                          {mfr.contactEmail}
-                        </div>
-                        {mfr.contactPhone && (
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <Phone size={12} />
-                            {mfr.contactPhone}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {cutters.length === 0 && (
-              <div className="text-center py-12 text-[13px] text-tertiary">
-                No cutters yet. Tap Add to add one.
-              </div>
-            )}
-          </>
-        )}
+        {tab === "cutters" && stations.map((station) => (
+          <StationAccountsSection
+            key={station.id}
+            station={station}
+            roleLabel="Cutter"
+            rolePlural="cutters"
+            people={cutterPeople.filter((p) => p.stationId === station.id)}
+            icon={<Factory size={22} className="text-tertiary" />}
+            deletePending={deletePending}
+            onDelete={handleDeleteCutter}
+            formOpen={openStationForm === `cutters:${station.id}`}
+            onToggleForm={() =>
+              setOpenStationForm((cur) =>
+                cur === `cutters:${station.id}` ? null : `cutters:${station.id}`
+              )
+            }
+            form={
+              <InviteCutterForm
+                stationId={station.id}
+                onDone={() => {
+                  setOpenStationForm(null);
+                  window.location.reload();
+                }}
+              />
+            }
+          />
+        ))}
 
         {tab === "schedulers" && (
           <>
@@ -633,177 +700,61 @@ export function AccountsManager({
           </>
         )}
 
-        {tab === "assemblers" && (
-          <>
-            {linkedAssemblers.map((qc: Assembler, i: number) => (
-              <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <CheckCircle size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                        <p className="text-[12px] text-tertiary">Assembler</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteAssembler(qc)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {qc.email}
-                    </div>
-                    {qc.phone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {qc.phone}
-                      </div>
-                    )}
-                  </div>
-                  {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
-                </div>
-              </div>
-            ))}
+        {tab === "assemblers" && stations.map((station) => (
+          <StationAccountsSection
+            key={station.id}
+            station={station}
+            roleLabel="Assembler"
+            rolePlural="assemblers"
+            people={assemblerPeople.filter((p) => p.stationId === station.id)}
+            icon={<CheckCircle size={22} className="text-tertiary" />}
+            deletePending={deletePending}
+            onDelete={handleDeleteAssembler}
+            formOpen={openStationForm === `assemblers:${station.id}`}
+            onToggleForm={() =>
+              setOpenStationForm((cur) =>
+                cur === `assemblers:${station.id}` ? null : `assemblers:${station.id}`
+              )
+            }
+            form={
+              <InviteAssemblerForm
+                stationId={station.id}
+                onDone={() => {
+                  setOpenStationForm(null);
+                  window.location.reload();
+                }}
+              />
+            }
+          />
+        ))}
 
-            {orphanAssemblers.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned assembler records (not linked to Supabase Auth):{" "}
-                    {orphanAssemblers.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanAssemblers.map((qc: Assembler, i: number) => (
-                  <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <CheckCircle size={22} className="text-tertiary" />
-                          </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                            <p className="text-[12px] text-tertiary">Assembler (orphan)</p>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteAssembler(qc)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {assemblers.length === 0 && (
-              <div className="text-center py-12 text-[13px] text-tertiary">
-                No assemblers yet. Tap Add to add one.
-              </div>
-            )}
-          </>
-        )}
-
-        {tab === "qcs" && (
-          <>
-            {linkedQcs.map((qc, i) => (
-              <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <ShieldCheck size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                        <p className="text-[12px] text-tertiary">Quality Control</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteQc(qc)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {qc.email}
-                    </div>
-                    {qc.phone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {qc.phone}
-                      </div>
-                    )}
-                  </div>
-                  {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
-                </div>
-              </div>
-            ))}
-
-            {orphanQcs.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned QC records (not linked to Supabase Auth):{" "}
-                    {orphanQcs.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanQcs.map((qc, i) => (
-                  <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <ShieldCheck size={22} className="text-tertiary" />
-                          </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                            <p className="text-[12px] text-tertiary">Quality Control (orphan)</p>
-                          </div>
-                        </div>
-                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteQc(qc)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {qcs.length === 0 && (
-              <div className="text-center py-12 text-[13px] text-tertiary">
-                No QC users yet. Tap Add to add one.
-              </div>
-            )}
-          </>
-        )}
+        {tab === "qcs" && stations.map((station) => (
+          <StationAccountsSection
+            key={station.id}
+            station={station}
+            roleLabel="Quality Control"
+            rolePlural="QC accounts"
+            people={qcPeople.filter((p) => p.stationId === station.id)}
+            icon={<ShieldCheck size={22} className="text-tertiary" />}
+            deletePending={deletePending}
+            onDelete={handleDeleteQc}
+            formOpen={openStationForm === `qcs:${station.id}`}
+            onToggleForm={() =>
+              setOpenStationForm((cur) =>
+                cur === `qcs:${station.id}` ? null : `qcs:${station.id}`
+              )
+            }
+            form={
+              <InviteQcForm
+                stationId={station.id}
+                onDone={() => {
+                  setOpenStationForm(null);
+                  window.location.reload();
+                }}
+              />
+            }
+          />
+        ))}
 
         {tab === "subcontractors" && (
           <>

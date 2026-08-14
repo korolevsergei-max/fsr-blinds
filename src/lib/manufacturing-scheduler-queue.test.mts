@@ -9,6 +9,7 @@ const TODAY = "2026-05-26";
 
 const BASE_SETTINGS: ManufacturingSettings = {
   id: "default",
+  stationId: "mp-internal",
   cutterDailyCapacity: 30,
   assemblerDailyCapacity: 30,
   qcDailyCapacity: 30,

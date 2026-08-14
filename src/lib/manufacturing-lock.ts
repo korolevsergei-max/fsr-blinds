@@ -1,5 +1,3 @@
-import { isInternalPartnerId } from "./manufacturing-partners.ts";
-
 /**
  * TS mirror of `public.is_manufacturing_locked` (migration 20260810140000).
  * Keep the two in lockstep; scripts/deploy/parity-manufacturing-lock.mjs
@@ -10,10 +8,26 @@ import { isInternalPartnerId } from "./manufacturing-partners.ts";
  * action pre-checks it for a readable message, and this function is how both
  * the action and the unit-detail loaders compute it without reading the
  * (deliberately unexposed) unit_manufacturing_locks view.
+ *
+ * NOTE what the lock does NOT cover since stations landed (20260814120000):
+ * moving a unit between two IN-HOUSE stations is a relocation, not a transfer —
+ * the blinds walk down the hall and every window_production_status row travels
+ * untouched — so `units_guard_ownership_columns` skips the lock entirely when
+ * both sides are internal. This function still answers "is this unit locked
+ * against a change of COMPANY", which is what its callers ask.
  */
 export interface ManufacturingLockInput {
-  /** The unit's CURRENT partner — for a transfer, the pre-move side. */
-  partnerId: string | null | undefined;
+  /**
+   * Is the unit's CURRENT partner one of our own stations? For a transfer, the
+   * pre-move side.
+   *
+   * ⚠️ A boolean, not a partner id, on purpose. This used to be `partnerId`
+   * compared against the INTERNAL_PARTNER_ID constant — which, once a second
+   * internal station existed, classified every Station B unit as EXTERNAL and
+   * diverged from the SQL predicate (which reads `is_internal` from the table).
+   * parity-manufacturing-lock.mjs compares the two across all of prod.
+   */
+  isInternal: boolean;
   productionEnteredAt: string | null | undefined;
   allMeasuredAt: string | null | undefined;
   /** Windows whose window_production_status is anything but 'pending'. */
@@ -23,8 +37,8 @@ export interface ManufacturingLockInput {
 }
 
 export function computeManufacturingLock(input: ManufacturingLockInput): boolean {
-  if (isInternalPartnerId(input.partnerId)) {
-    // INTERNAL: the cutter pulled it onto the floor, or a blind has moved.
+  if (input.isInternal) {
+    // IN-HOUSE: the cutter pulled it onto the floor, or a blind has moved.
     return input.productionEnteredAt != null || input.startedCount > 0;
   }
   // EXTERNAL: the vendor can see it (all_measured_at is their worklist

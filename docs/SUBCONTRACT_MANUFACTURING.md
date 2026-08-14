@@ -41,9 +41,16 @@ stop — that is not how this works.
 
 `units.manufacturing_partner_id` is `NOT NULL DEFAULT 'mp-internal'`. Anywhere the
 column is absent (an RPC that does not project it, a pre-migration row), the code
-reads it as **internal** — see `isInternalPartnerId()`. Inverting that default
+reads it as **internal** — see `isInternalPartner()`. Inverting that default
 would silently drop real units out of the factory queues with nobody building
 them. There is a test pinning it (`manufacturing-partners.test.mts`).
+
+> **Since stations (2026-08-14):** there is now more than one internal row, so
+> `id === INTERNAL_PARTNER_ID` is **not** a test for in-house work — that constant
+> is only the column *default*. Internality is resolved from the partner list
+> (`isInternalPartner`), and the old `isInternalPartnerId()` helper was deleted
+> rather than kept, precisely so this mistake cannot be made silently. See
+> [`MANUFACTURING_STATIONS.md`](./MANUFACTURING_STATIONS.md).
 
 ### `manufacturing_assigned_at` is the "has anyone decided?" flag
 
@@ -159,7 +166,7 @@ stays unrouted until the office assigns it.
 | Concern | File |
 |---|---|
 | Schema, RLS, triggers, RPCs | `supabase/migrations/20260806120000_manufacturing_partners.sql` |
-| `INTERNAL_PARTNER_ID`, `isInternalPartnerId` | `src/lib/manufacturing-partners.ts` |
+| `INTERNAL_PARTNER_ID`, `isInternalPartner`, `isStationWork` | `src/lib/manufacturing-partners.ts` |
 | Reflow exclusion + capacity + TS read filter | `src/lib/manufacturing-scheduler.ts` |
 | Assign action (owner-only re-assign, sync purge) | `src/app/actions/management-actions.ts` → `assignUnitsToManufacturingPartner` |
 | In-house write guards | `src/app/actions/production-actions.ts`, `cutter-production-actions.ts` |
@@ -245,10 +252,13 @@ node scripts/deploy/parity-unit-current-stage.mjs       # TS ↔ SQL stage parit
 ```
 
 `verify-manufacturing-partners.mjs` is the one that matters after any change to
-the exclusivity layers: it asserts exactly one internal partner exists, no unit
-points at a missing partner, and — while everything is in-house — that the
-`get_role_schedule` filter drops **nothing** (rpc row count == table row count).
-An empty factory queue is the failure mode to fear, and that check catches it.
+the exclusivity layers: it asserts at least one internal partner exists (it was
+*exactly* one until stations lifted that index) and that `mp-internal` is still
+among them, that no unit points at a missing partner, and — while everything is
+in-house — that the `get_role_schedule` filter drops **nothing** (rpc row count ==
+table row count). An empty factory queue is the failure mode to fear, and that
+check catches it. Per-station integrity is
+`verify-manufacturing-stations.mjs`'s job.
 
 ---
 

@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { CheckCircle, Factory, X } from "@phosphor-icons/react";
 import { assignUnitsToManufacturingPartner } from "@/app/actions/management-actions";
 import { Button } from "@/components/ui/button";
-import { sortPartners } from "@/lib/manufacturing-partners";
+import { INTERNAL_PARTNER_ID, sortPartners } from "@/lib/manufacturing-partners";
 import type { ManufacturingPartner, Unit } from "@/lib/types";
 
 type Props = {
@@ -33,9 +33,30 @@ export function BulkAssignManufacturerSheet({
   const [pending, startTransition] = useTransition();
 
   const ordered = sortPartners(partners);
+  const internalIds = new Set(partners.filter((p) => p.isInternal).map((p) => p.id));
+  const target = partners.find((p) => p.id === selectedPartnerId);
+  const targetIsStation = target?.isInternal ?? false;
 
-  const movable = units.filter((u) => !u.manufacturingLocked);
+  // What is movable depends on WHERE it is going, which is why this is computed
+  // after the destination is picked rather than once up front.
+  //
+  // A lock freezes a unit against a change of COMPANY. Moving between two of our
+  // own stations rebuilds nothing — the blinds walk down the hall with all their
+  // recorded work — so a locked in-house unit is perfectly movable to a station
+  // and only stuck when the destination is a vendor. Mirrors the isRelocation
+  // branch in assignUnitsToManufacturingPartner and v_relocation in the trigger.
+  const isRelocation = (u: Unit) =>
+    targetIsStation && internalIds.has(u.manufacturingPartnerId ?? INTERNAL_PARTNER_ID);
+  const movable = units.filter((u) => !u.manufacturingLocked || isRelocation(u));
   const skippedCount = units.length - movable.length;
+
+  // The physical hand-off, aggregated across the selection: these blinds exist
+  // and somebody has to carry them to the new station.
+  const relocating = movable.filter((u) => u.manufacturingLocked && isRelocation(u));
+  const blindsToCarry = relocating.reduce(
+    (total, u) => total + (u.manufacturingLockStartedCount ?? 0),
+    0
+  );
 
   const handleSave = () => {
     if (!selectedPartnerId || movable.length === 0) return;
@@ -127,7 +148,7 @@ export function BulkAssignManufacturerSheet({
                       {p.name}
                     </span>
                     <span className="block text-[11px] text-tertiary truncate">
-                      {p.isInternal ? "In-house factory" : p.contactEmail || "Subcontractor"}
+                      {p.isInternal ? "In-house station" : p.contactEmail || "Subcontractor"}
                     </span>
                   </div>
                   {selectedPartnerId === p.id && (
@@ -137,13 +158,26 @@ export function BulkAssignManufacturerSheet({
               ))}
             </div>
             <p className="text-[11px] text-tertiary mt-3 leading-snug">
-              Units sent to a subcontractor leave the in-house cutting, assembly and QC
-              queues, and stop taking up factory capacity.
+              A unit only ever sits in one place. Moving it out of a station clears it from
+              that station&apos;s cutting, assembly and QC queues and frees its capacity.
             </p>
+            {relocating.length > 0 && (
+              <p className="text-[11px] text-tertiary mt-2 leading-snug">
+                {relocating.length} unit{relocating.length !== 1 ? "s" : ""} already part-built
+                {blindsToCarry > 0 && (
+                  <>
+                    {" "}
+                    — {blindsToCarry} blind{blindsToCarry !== 1 ? "s" : ""} to move physically
+                  </>
+                )}
+                . All recorded work moves with them; nothing is rebuilt.
+              </p>
+            )}
             {skippedCount > 0 && (
               <p className="text-[11px] text-muted mt-2 leading-snug">
                 {skippedCount} unit{skippedCount !== 1 ? "s" : ""} skipped — manufacturing
-                already started. Open {skippedCount === 1 ? "it" : "them"} individually to
+                already started and {skippedCount === 1 ? "it is" : "they are"} going to a
+                different company. Open {skippedCount === 1 ? "it" : "them"} individually to
                 transfer.
               </p>
             )}
@@ -166,7 +200,7 @@ export function BulkAssignManufacturerSheet({
                   ? "Assigning…"
                   : movable.length === 0
                     ? "Nothing to assign"
-                    : `Assign ${movable.length} Unit${movable.length !== 1 ? "s" : ""}`}
+                    : `${targetIsStation ? "Move" : "Assign"} ${movable.length} Unit${movable.length !== 1 ? "s" : ""}`}
               </Button>
             )}
           </div>

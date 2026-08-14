@@ -59,11 +59,19 @@ Account create/delete/mutate go through `assertOwnerForAccountActions()` (owner)
 or `assertOwnerOrSchedulerForInstallerActions()` (owner ∨ scheduler) in
 [`auth/helpers.ts`](../../src/app/actions/auth/helpers.ts), on the **admin** client.
 
+Since Station B landed (20260814120000), a cutter/assembler/QC account is also
+walled to one station at creation: `assertStationIsInternal()` (`auth/helpers.ts`)
+rejects a `stationId` that does not resolve to an in-house
+`manufacturing_partners` row — the mirror of `createSubcontractorAccount`'s
+"must not be internal" check. `auth_station_id()` (RLS) trusts whatever ends up
+on the row, so this is the one place a bad id is kept from ever landing there.
+The station is fixed at creation; there is no `updateXStation` action.
+
 | Export | File | Guard |
 |---|---|---|
-| `createAssemblerAccount`, `deleteAssemblerAccount` | `auth/assembler.ts` | `assertOwnerForAccountActions()` (owner) |
-| `createCutterAccount`, `deleteCutterAccount` | `auth/cutter.ts` | `assertOwnerForAccountActions()` (owner) |
-| `createQcAccount`, `deleteQcAccount` | `auth/qc.ts` | `assertOwnerForAccountActions()` (owner) |
+| `createAssemblerAccount`, `deleteAssemblerAccount` | `auth/assembler.ts` | `assertOwnerForAccountActions()` (owner); create also `assertStationIsInternal()` on the given `stationId` |
+| `createCutterAccount`, `deleteCutterAccount` | `auth/cutter.ts` | `assertOwnerForAccountActions()` (owner); create also `assertStationIsInternal()` on the given `stationId` |
+| `createQcAccount`, `deleteQcAccount` | `auth/qc.ts` | `assertOwnerForAccountActions()` (owner); create also `assertStationIsInternal()` on the given `stationId` |
 | `createSubcontractorAccount`, `deleteSubcontractorAccount`, `createManufacturingPartner`, `deleteManufacturingPartner` | `auth/subcontractor.ts` | `assertOwnerForAccountActions()` (owner) |
 | `createInstallerAccount`, `deleteInstallerAccount` | `auth/installer.ts` | `assertOwnerOrSchedulerForInstallerActions()` (owner ∨ scheduler) |
 | `setSchedulerBuildingAccess`, `createSchedulerAccount`, `deleteSchedulerAccount` | `auth/scheduler.ts` | `assertOwnerForAccountActions()` (owner) |
