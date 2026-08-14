@@ -6,20 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { createCutterAccount } from "@/app/actions/auth-actions";
-import type { ManufacturingPartner } from "@/lib/types";
 
+/**
+ * `stationId` is fixed by the section this form was opened from — the station a
+ * login belongs to is chosen once, at creation, and never edited afterwards
+ * (there is no updateCutterStation action; moving a person between stations
+ * means a new login). The server re-validates it with assertStationIsInternal.
+ */
 export function InviteCutterForm({
-  stations,
+  stationId,
   onDone,
 }: {
-  stations: ManufacturingPartner[];
+  stationId: string;
   onDone: () => void;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [stationId, setStationId] = useState(stations[0]?.id ?? "");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string } | null>(null);
@@ -33,10 +37,6 @@ export function InviteCutterForm({
     }
     if (!password || password.length < 8) {
       setError("Password must be at least 8 characters.");
-      return;
-    }
-    if (!stationId) {
-      setError("Choose which station this login belongs to.");
       return;
     }
     setError("");
@@ -107,18 +107,6 @@ export function InviteCutterForm({
         <p className="text-[12px] text-tertiary mt-0.5">Set their email and password — no email sent. Share credentials directly.</p>
       </div>
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-[12px] font-semibold text-secondary">Station</label>
-        <select
-          value={stationId}
-          onChange={(e) => { setStationId(e.target.value); if (error) setError(""); }}
-          className="w-full border border-border rounded-[var(--radius-md)] px-3 py-2.5 text-[13px] text-foreground bg-card focus:outline-none focus:ring-2 focus:ring-accent"
-        >
-          {stations.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      </div>
       <Input label="Name" value={name} onChange={(e) => { setName(e.target.value); if (error) setError(""); }} placeholder="Reza Tehrani" autoFocus />
       <Input label="Email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (error) setError(""); }} placeholder="info@blindsco.ca" />
       <Input label="Phone" type="tel" value={phone} onChange={(e) => { setPhone(e.target.value); if (error) setError(""); }} placeholder="+1 (416) 555-0000" />

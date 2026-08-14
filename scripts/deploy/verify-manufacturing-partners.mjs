@@ -45,8 +45,17 @@ if (partnersErr) {
   process.exit(1);
 }
 const internal = (partners ?? []).filter((p) => p.is_internal);
-check("exactly one internal partner exists", internal.length === 1, `found ${internal.length}`);
-check("the internal partner is mp-internal", internal[0]?.id === "mp-internal", internal[0]?.id ?? "none");
+// Was "exactly one" until 20260814120000 lifted the single-internal unique index
+// to allow a second station. What still matters is that AT LEAST one exists (an
+// empty internal set empties every factory queue) and that the column default
+// 'mp-internal' is one of them — every unit that predates routing points at it.
+// Per-station integrity is verify-manufacturing-stations.mjs's job.
+check("at least one internal partner exists", internal.length >= 1, `found ${internal.length}`);
+check(
+  "the default partner mp-internal is internal",
+  internal.some((p) => p.id === "mp-internal"),
+  internal.map((p) => p.id).join(", ") || "none"
+);
 console.log(`        partners: ${(partners ?? []).map((p) => `${p.id}${p.is_internal ? "*" : ""}`).join(", ")}`);
 
 // 2. Every unit is routed somewhere valid — an unroutable unit is invisible to both sides.

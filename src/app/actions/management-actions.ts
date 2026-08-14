@@ -7,6 +7,7 @@ import { getLinkedSchedulerId, requireOwner, requireOwnerOrScheduler } from "@/l
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
+import { planManufacturerMove } from "@/lib/manufacturing-move";
 import { computeManufacturingLock } from "@/lib/manufacturing-lock";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 import { emitNotification } from "@/lib/emit-notification";
@@ -1009,16 +1010,17 @@ export async function assignUnitsToManufacturingPartner(
     const sourceIsInternal = (u: { manufacturing_partner_id: string | null }) =>
       internalIds.has(u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID);
 
-    // A RELOCATION is in-house → in-house. It carries every part-built blind
-    // with it and rebuilds nothing, so the lock — which exists to price a
-    // cross-company double build — does not apply. Mirrors the v_relocation
-    // branch in units_guard_ownership_columns.
+    // Relocation vs transfer, and everything that follows from it, comes from
+    // one tested predicate (src/lib/manufacturing-move.ts) rather than inline
+    // booleans — including RULE 2, that a relocation never deletes schedule rows.
+    const planFor = (u: { manufacturing_partner_id: string | null }) =>
+      planManufacturerMove(sourceIsInternal(u), targetIsInternal);
     const isRelocation = (u: { manufacturing_partner_id: string | null }) =>
-      targetIsInternal && sourceIsInternal(u);
+      planFor(u).kind === "relocation";
 
     const lockedUnits = moving.filter(
       (u) =>
-        !isRelocation(u) &&
+        planFor(u).evaluatesLock &&
         computeManufacturingLock({
           isInternal: sourceIsInternal(u),
           productionEnteredAt: u.production_entered_at,
@@ -1092,44 +1094,50 @@ export async function assignUnitsToManufacturingPartner(
     // long as that took, and permanently if after() never ran. The reads are
     // filtered by partner too, so this is belt-and-braces rather than the only
     // defence — but it keeps the tables honest.
-    if (!targetIsInternal) {
+    const purgeIds = moving.filter((u) => planFor(u).deletesScheduleRows).map((u) => u.id);
+    if (purgeIds.length > 0) {
       const { error: purgeError } = await supabase
         .from("window_manufacturing_schedule")
         .delete()
-        .in("unit_id", movingIds);
+        .in("unit_id", purgeIds);
       if (purgeError) {
         return {
           ok: false,
           error: `Reassigned, but the in-house schedule could not be cleared: ${purgeError.message}. Refresh and try again.`,
         };
       }
-    } else {
-      // RULE 2: an in-house destination KEEPS its schedule rows — deleting them
-      // is how a unit disappears from every queue. What is cleared is the manual
-      // planning made against the OLD station's day buckets: a pinned date or a
-      // hand-set priority means nothing under different capacities, and a locked
-      // row pinned to an over-capacity day would jam the new station's packing.
-      // The reflow in after() then re-plans the dates. UPDATE, never DELETE.
-      const relocatingIds = moving.filter(isRelocation).map((u) => u.id);
-      if (relocatingIds.length > 0) {
-        const { error: repinError } = await supabase
-          .from("window_manufacturing_schedule")
-          .update({
-            is_schedule_locked: false,
-            lock_reason: "",
-            manual_priority: 0,
-            over_capacity_override: false,
-            last_reschedule_reason: "station_relocated",
-          })
-          .in("unit_id", relocatingIds);
-        if (repinError) {
-          // Non-fatal by design: the unit HAS moved and is already visible in the
-          // receiving station's queue (membership derives from the units join,
-          // not from these columns). Only the plan is stale, and the next reflow
-          // corrects it. Failing the action here would be worse — it would
-          // suggest the move did not happen.
-          console.warn("[mfg] could not clear pins after relocation:", repinError.message);
-        }
+    }
+
+    // RULE 2: an in-house destination KEEPS its schedule rows — deleting them is
+    // how a unit disappears from every queue. What is cleared is the manual
+    // planning made against the OLD station's day buckets: a pinned date or a
+    // hand-set priority means nothing under different capacities, and a locked
+    // row pinned to an over-capacity day would jam the new station's packing.
+    // The reflow in after() then re-plans the dates. UPDATE, never DELETE.
+    //
+    // Independent of the purge above, not its else-branch: the two sets are
+    // disjoint by construction (planManufacturerMove never sets both
+    // deletesScheduleRows and clearsManualPins), and a bulk move can legitimately
+    // contain both kinds at once.
+    const relocatingIds = moving.filter((u) => planFor(u).clearsManualPins).map((u) => u.id);
+    if (relocatingIds.length > 0) {
+      const { error: repinError } = await supabase
+        .from("window_manufacturing_schedule")
+        .update({
+          is_schedule_locked: false,
+          lock_reason: "",
+          manual_priority: 0,
+          over_capacity_override: false,
+          last_reschedule_reason: "station_relocated",
+        })
+        .in("unit_id", relocatingIds);
+      if (repinError) {
+        // Non-fatal by design: the unit HAS moved and is already visible in the
+        // receiving station's queue (membership derives from the units join,
+        // not from these columns). Only the plan is stale, and the next reflow
+        // corrects it. Failing the action here would be worse — it would
+        // suggest the move did not happen.
+        console.warn("[mfg] could not clear pins after relocation:", repinError.message);
       }
     }
 

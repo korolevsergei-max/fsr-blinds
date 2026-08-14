@@ -584,3 +584,39 @@ node scripts/deploy/parity-manufacturing-lock.mjs     # new, Phase MR4
 - `docs/SUBCONTRACT_MANUFACTURING.md` — §3 gains a routing layer row; §4 lifecycle gains the "unrouted ⇒ no queue" branch; §5 table gains a "Change it after manufacturing started" row; §8 gains the `undefined ⇒ routed` asymmetry as a numbered gotcha; §9 gains the new parity script.
 - `docs/security/ACTION_AUTHZ_MATRIX.md` — new rows for the lock trigger and override stamp.
 - New `docs/DEPLOY_RUNBOOK_MANUFACTURING_LOCK_2026-08-10.md` — four phases, pre-flight queries, the backfill's scheduler-permission side effect, the "stamps are not reversible" rollback note.
+
+---
+
+## Phase MR5 — a second in-house station (shipped 2026-08-14)
+
+**Migration:** `20260814120000_manufacturing_stations.sql`.
+**Full write-up:** [`MANUFACTURING_STATIONS.md`](./MANUFACTURING_STATIONS.md) —
+read that, not this section, before touching the routing code.
+
+The routing dimension MR1–MR4b built ("who manufactures this unit") turned out to
+be the right one: adding a second in-house station needed **no new column, no new
+role, and no new portal**. A station is simply another `manufacturing_partners`
+row with `is_internal = true`, so `units.manufacturing_partner_id` went from
+two-way (in-house / vendor) to three-way (Station A / Station B / vendor) with the
+existing column, index and FK untouched.
+
+What MR5 changed on top of this plan:
+
+- **The single-internal unique index was dropped.** MR1–MR4b could assume exactly
+  one internal partner and compare against the `INTERNAL_PARTNER_ID` constant;
+  that assumption is gone. Internality is now resolved from the partner list, and
+  `isInternalPartnerId()` was **deleted** so the old comparison cannot be written
+  by accident.
+- **The lock became pair-aware.** MR4a/MR4b's rules still hold for every
+  in-house↔vendor *transfer*, but an in-house→in-house *relocation* skips the lock
+  entirely: nothing is rebuilt, so there is no $100/blind to price. See
+  `planManufacturerMove`.
+- **`get_role_schedule` gained a station predicate — and a role gate it never
+  had.** It was `SECURITY DEFINER` granted to `authenticated` with no role check
+  at all, so any signed-in user could read the whole factory schedule. Closed as
+  part of MR5.
+- **The MR3 "unrouted ⇒ no queue" branch carries over unchanged**, and gains an
+  asymmetry worth knowing: an unrouted unit holds the column default
+  `mp-internal`, so Station A staff can see it and Station B staff cannot. Harmless
+  — an unrouted unit is in nobody's queue and is escalated by the dashboard bucket
+  — but it is why the dashboard bucket still matters after stations.
