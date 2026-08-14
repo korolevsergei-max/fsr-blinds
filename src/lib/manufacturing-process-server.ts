@@ -1,5 +1,10 @@
 import { createClient } from "./supabase/server";
-import { getCurrentUser, getLinkedInstallerId, getLinkedSchedulerId } from "./auth";
+import {
+  getCurrentUser,
+  getLinkedInstallerId,
+  getLinkedSchedulerId,
+  getLinkedStationId,
+} from "./auth";
 import { getSchedulerScopedUnitIds } from "./scheduler-scope";
 import type { ProductionStatus } from "./types";
 import {
@@ -11,7 +16,6 @@ import {
   type ManufacturingProcessUnitInput,
 } from "./manufacturing-process-core";
 import { selectInChunks } from "./supabase-chunking";
-import { INTERNAL_PARTNER_ID } from "./manufacturing-partners";
 
 type UnitRow = {
   id: string;
@@ -145,18 +149,19 @@ async function loadManufacturingProcessRowsForUnits(
 }
 
 /**
- * `internalOnly` narrows the owner-scoped read to the in-house factory's own
- * work. The cutter/assembler/QC process screens pass it; the owner and scheduler
- * screens deliberately do not, because the office needs the whole picture
- * including subcontracted units.
+ * `stationId` narrows the owner-scoped read to ONE in-house station's own work.
+ * The cutter/assembler/QC process screens pass their own station; the owner and
+ * scheduler screens deliberately do not, because the office needs the whole
+ * picture including the other station and subcontracted units.
  *
- * Without it a cutter sees a subcontracted unit sitting at "0 cut", opens it,
- * and physically cuts blinds the partner is already building — the write is
- * refused by `wps_guard_manufacturing_ownership`, but only after the fact.
+ * Without it a cutter sees another station's (or a subcontractor's) unit sitting
+ * at "0 cut", opens it, and physically cuts blinds someone else is already
+ * building — the write is refused by `wps_guard_manufacturing_ownership`, but
+ * only after the fact.
  */
 async function loadUnitsForManufacturingProcess(
   scope: ManufacturingProcessScope,
-  opts: { internalOnly?: boolean } = {}
+  opts: { stationId?: string } = {}
 ) {
   const supabase = await createClient();
   let unitRows: UnitRow[] = [];
@@ -168,13 +173,13 @@ async function loadUnitsForManufacturingProcess(
         "id, client_id, client_name, building_id, building_name, unit_number, complete_by_date, window_count, assigned_installer_id"
       )
       .gt("window_count", 0);
-    if (opts.internalOnly) {
-      // The routed filter mirrors the reflow source query: the factory's own
-      // screens only show units somebody consciously assigned to the in-house
-      // queue. Unrouted units live in the dashboard's "No manufacturer
-      // assigned" bucket until someone decides.
+    if (opts.stationId) {
+      // The routed filter mirrors the reflow source query: a station's own
+      // screens only show units somebody consciously assigned to it. Unrouted
+      // units live in the dashboard's "No manufacturer assigned" bucket until
+      // someone decides.
       query = query
-        .eq("manufacturing_partner_id", INTERNAL_PARTNER_ID)
+        .eq("manufacturing_partner_id", opts.stationId)
         .not("manufacturing_assigned_at", "is", null);
     }
     const { data } = await query;
@@ -204,14 +209,14 @@ async function loadUnitsForManufacturingProcess(
 }
 
 async function loadAllManufacturingProcessRows(
-  opts: { internalOnly?: boolean } = {}
+  opts: { stationId?: string } = {}
 ): Promise<ManufacturingProcessRow[]> {
   const startedAt = performance.now();
   const scope: ManufacturingProcessScope = { role: "owner" };
   const units = await loadUnitsForManufacturingProcess(scope, opts);
   const rows = await loadManufacturingProcessRowsForUnits(units, scope);
   console.warn(
-    `[perf][process-rows] units=${units.length} rows=${rows.length}${opts.internalOnly ? " internal-only" : ""} ${(performance.now() - startedAt).toFixed(0)}ms`
+    `[perf][process-rows] units=${units.length} rows=${rows.length}${opts.stationId ? ` station=${opts.stationId}` : ""} ${(performance.now() - startedAt).toFixed(0)}ms`
   );
   return rows;
 }
@@ -253,19 +258,28 @@ export async function loadCutterManufacturingProcessRows(): Promise<Manufacturin
   const user = await getCurrentUser();
   if (!user || user.role !== "cutter") return [];
 
-  return loadAllManufacturingProcessRows({ internalOnly: true });
+  const stationId = await getLinkedStationId(user.id);
+  if (!stationId) return [];
+
+  return loadAllManufacturingProcessRows({ stationId });
 }
 
 export async function loadAssemblerManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "assembler") return [];
 
-  return loadAllManufacturingProcessRows({ internalOnly: true });
+  const stationId = await getLinkedStationId(user.id);
+  if (!stationId) return [];
+
+  return loadAllManufacturingProcessRows({ stationId });
 }
 
 export async function loadQcManufacturingProcessRows(): Promise<ManufacturingProcessRow[]> {
   const user = await getCurrentUser();
   if (!user || user.role !== "qc") return [];
 
-  return loadAllManufacturingProcessRows({ internalOnly: true });
+  const stationId = await getLinkedStationId(user.id);
+  if (!stationId) return [];
+
+  return loadAllManufacturingProcessRows({ stationId });
 }

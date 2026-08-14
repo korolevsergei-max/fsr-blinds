@@ -366,6 +366,46 @@ export async function getLinkedPartnerId(
   return (data as { partner_id: string } | null)?.partner_id ?? null;
 }
 
+/**
+ * The in-house station a cutter/assembler/QC login belongs to — the TS twin of
+ * the `public.auth_station_id()` RLS helper (20260814120000).
+ *
+ * One auth user is in at most one of the three role tables, so the first hit
+ * wins. Returns null only for a non-station role; `station_id` is NOT NULL, so a
+ * real staff account always resolves. Callers must treat null as "no station" and
+ * fail closed — never as "every station".
+ */
+export async function getLinkedStationId(
+  authUserId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const [cutters, assemblers, qcs] = await Promise.all([
+    supabase.from("cutters").select("station_id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("assemblers").select("station_id").eq("auth_user_id", authUserId).maybeSingle(),
+    supabase.from("qcs").select("station_id").eq("auth_user_id", authUserId).maybeSingle(),
+  ]);
+  for (const res of [cutters, assemblers, qcs]) {
+    const stationId = (res.data as { station_id: string } | null)?.station_id;
+    if (stationId) return stationId;
+  }
+  return null;
+}
+
+/**
+ * The caller's own station, for the factory portals' reads. Throws rather than
+ * returning a default: silently falling back to Station A would show one
+ * station another's work, which is the exact wall stations exist to build.
+ */
+export async function requireStationId(): Promise<string> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized: sign-in required");
+  const stationId = await getLinkedStationId(user.id);
+  if (!stationId) {
+    throw new Error("Unauthorized: no manufacturing station linked to this account");
+  }
+  return stationId;
+}
+
 export async function getLinkedInstallerId(
   authUserId: string
 ): Promise<string | null> {

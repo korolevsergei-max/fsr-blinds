@@ -11,6 +11,7 @@ import {
   getLinkedCutterId,
   getLinkedAssemblerId,
   getLinkedQcId,
+  requireStationId,
 } from "@/lib/auth";
 import { emitNotification } from "@/lib/emit-notification";
 import { NOTIF_MFG_PUSHBACK_RESOLVED } from "@/lib/notification-types";
@@ -26,29 +27,44 @@ import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-es
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Refuse to record in-house work on a unit that belongs to a subcontractor.
+ * Refuse to record work on a unit that is not the caller's station's — because
+ * it belongs to a subcontractor, or to the OTHER in-house station.
  *
- * THE INVARIANT this protects: the same blind must never be built twice, once
- * here and once at a partner. The read paths already keep subcontracted units out
- * of the cutter/assembler/QC queues (get_role_schedule filters on the partner),
- * and a DB trigger backstops the write. This is the middle layer — it turns a
- * stale tab or a replayed action into a clear message instead of a 42501 from
- * Postgres, and it is the one a future queue screen would forget to add.
+ * THE INVARIANT this protects: the same blind must never be built twice. The
+ * read paths already keep other units out of a station's queues
+ * (get_role_schedule filters on the partner), and a DB trigger backstops the
+ * write. This is the middle layer — it turns a stale tab or a replayed action
+ * into a clear message instead of a 42501 from Postgres, and it is the one a
+ * future queue screen would forget to add.
+ *
+ * Units can move between stations mid-build (20260814120000), so this is a live
+ * race, not just a stale-tab case: a cutter can legitimately have a unit open
+ * when the owner relocates it. Naming the new station is what makes that
+ * readable instead of baffling.
  */
-async function assertUnitIsInternallyManufactured(
+async function assertUnitIsThisStationsWork(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  unitId: string
+  unitId: string,
+  stationId: string
 ): Promise<string | null> {
   const { data } = await supabase
     .from("units")
-    .select("manufacturing_partner_id, unit_number")
+    .select("manufacturing_partner_id, unit_number, manufacturing_partners(name, is_internal)")
     .eq("id", unitId)
     .maybeSingle();
 
-  const row = data as { manufacturing_partner_id: string | null; unit_number: string } | null;
+  const row = data as {
+    manufacturing_partner_id: string | null;
+    unit_number: string;
+    manufacturing_partners?: { name: string; is_internal: boolean } | null;
+  } | null;
   if (!row) return null;
-  if ((row.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) === INTERNAL_PARTNER_ID) return null;
+  if ((row.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) === stationId) return null;
 
+  const partner = row.manufacturing_partners;
+  if (partner?.is_internal) {
+    return `Unit ${row.unit_number} is now built at ${partner.name}. Refresh — it has left your queue.`;
+  }
   return `Unit ${row.unit_number} is now manufactured by a subcontractor. Refresh — it has left the in-house queue.`;
 }
 
@@ -205,7 +221,8 @@ export async function markWindowCut(
       return { ok: false, error: "Unit ID not found for this window." };
     }
 
-    const ownershipError = await assertUnitIsInternallyManufactured(supabase, unitId);
+    const stationId = await requireStationId();
+    const ownershipError = await assertUnitIsThisStationsWork(supabase, unitId, stationId);
     if (ownershipError) return { ok: false, error: ownershipError };
 
     const now = new Date().toISOString();
@@ -267,7 +284,12 @@ export async function markWindowAssembled(
 
 
     if (currentRow?.unit_id) {
-      const ownershipError = await assertUnitIsInternallyManufactured(supabase, currentRow.unit_id);
+      const stationId = await requireStationId();
+      const ownershipError = await assertUnitIsThisStationsWork(
+        supabase,
+        currentRow.unit_id,
+        stationId
+      );
       if (ownershipError) return { ok: false, error: ownershipError };
     }
 
@@ -327,7 +349,12 @@ export async function markWindowQCApproved(
 
 
     if (currentRow?.unit_id) {
-      const ownershipError = await assertUnitIsInternallyManufactured(supabase, currentRow.unit_id);
+      const stationId = await requireStationId();
+      const ownershipError = await assertUnitIsThisStationsWork(
+        supabase,
+        currentRow.unit_id,
+        stationId
+      );
       if (ownershipError) return { ok: false, error: ownershipError };
     }
 

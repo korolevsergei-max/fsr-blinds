@@ -7,11 +7,10 @@ import {
   manufacturingLockReason,
 } from "./manufacturing-lock.ts";
 
-const EXTERNAL = "mp-092d835a";
 
 function lock(overrides: Partial<Parameters<typeof computeManufacturingLock>[0]> = {}) {
   return computeManufacturingLock({
-    partnerId: "mp-internal",
+    isInternal: true,
     productionEnteredAt: null,
     allMeasuredAt: null,
     startedCount: 0,
@@ -41,27 +40,37 @@ test("internal: nothing started ⇒ transferable", () => {
 });
 
 test("external: all_measured_at locks — the vendor can already SEE the unit in their worklist", () => {
-  assert.equal(lock({ partnerId: EXTERNAL, allMeasuredAt: "2026-08-01T00:00:00Z" }), true);
+  assert.equal(lock({ isInternal: false, allMeasuredAt: "2026-08-01T00:00:00Z" }), true);
 });
 
 test("external: a finished (qc_approved) blind locks even if somehow unmeasured", () => {
-  assert.equal(lock({ partnerId: EXTERNAL, qcApprovedCount: 1, startedCount: 1 }), true);
+  assert.equal(lock({ isInternal: false, qcApprovedCount: 1, startedCount: 1 }), true);
 });
 
 test("external: internal-style partial progress does NOT lock — only visibility or finished work", () => {
   // startedCount > 0 with no qc_approved is the internal trigger, not the external one.
-  assert.equal(lock({ partnerId: EXTERNAL, startedCount: 3 }), false);
-  assert.equal(lock({ partnerId: EXTERNAL, productionEnteredAt: "2026-08-01T00:00:00Z" }), false);
+  assert.equal(lock({ isInternal: false, startedCount: 3 }), false);
+  assert.equal(lock({ isInternal: false, productionEnteredAt: "2026-08-01T00:00:00Z" }), false);
 });
 
 test("external: unmeasured, nothing finished ⇒ transferable (the unit-9998 case)", () => {
-  assert.equal(lock({ partnerId: EXTERNAL }), false);
+  assert.equal(lock({ isInternal: false }), false);
 });
 
-test("partnerId null/undefined ⇒ internal branch (the column's DB default)", () => {
-  assert.equal(lock({ partnerId: null, startedCount: 1 }), true);
-  assert.equal(lock({ partnerId: undefined, startedCount: 1 }), true);
-  assert.equal(lock({ partnerId: null }), false);
+/**
+ * The stations regression (20260814120000). This input used to be a partnerId
+ * compared against the INTERNAL_PARTNER_ID constant, so a Station B unit — an
+ * `is_internal = true` row with a different id — silently took the EXTERNAL
+ * branch: `all_measured_at` would lock it the moment it was measured, while the
+ * SQL predicate (which reads is_internal from the table) said it was not locked.
+ * parity-manufacturing-lock.mjs compares the two across all of prod.
+ */
+test("a second in-house station takes the internal branch, not the vendor one", () => {
+  // Measured but untouched: internal ⇒ still transferable. Getting this wrong
+  // freezes every measured Station B unit.
+  assert.equal(lock({ isInternal: true, allMeasuredAt: "2026-08-01T00:00:00Z" }), false);
+  // Partial progress: internal ⇒ locked against a change of COMPANY.
+  assert.equal(lock({ isInternal: true, startedCount: 3 }), true);
 });
 
 // ── countProductionStatuses: the or-later roll-up feeding the counts ────────
