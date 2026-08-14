@@ -131,7 +131,6 @@ export default async function SettingsPage({
     qcs,
     subcontractors,
     partners,
-    manufacturing,
   ] = await Promise.all([
     loadFullDataset(),
     getInstallerCutterAuthDrift(),
@@ -141,8 +140,13 @@ export default async function SettingsPage({
     loadQcs(),
     loadSubcontractors(),
     loadPartners(),
-    loadManufacturingSettings(),
   ]);
+
+  const stations = partners.filter((p) => p.isInternal);
+  const requestedStationId = typeof params.station === "string" ? params.station : undefined;
+  const stationId =
+    stations.find((s) => s.id === requestedStationId)?.id ?? stations[0]?.id ?? INTERNAL_PARTNER_ID;
+  const manufacturing = await loadManufacturingSettings(stationId);
 
   const accounts = (
     <AccountsManager
@@ -160,6 +164,10 @@ export default async function SettingsPage({
 
   return (
     <SettingsScreen
+      // Remounts on station switch so the capacity inputs (initialized from
+      // `settings` in local useState) reset to the newly selected station's
+      // numbers instead of the previous station's stale values.
+      key={stationId}
       initialTab={
         tab === "accounts"
           ? "accounts"
@@ -171,6 +179,8 @@ export default async function SettingsPage({
       showDataTab={user?.role === "owner"}
       settings={manufacturing.settings}
       overrides={manufacturing.overrides}
+      stations={stations}
+      activeStationId={stationId}
     />
   );
 }

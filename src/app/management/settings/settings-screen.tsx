@@ -8,7 +8,7 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataManagementSection } from "@/components/settings/data-management-section";
-import type { ManufacturingCalendarOverride, ManufacturingSettings } from "@/lib/types";
+import type { ManufacturingCalendarOverride, ManufacturingPartner, ManufacturingSettings } from "@/lib/types";
 import {
   getOntarioHolidayName,
   isWorkingDay,
@@ -42,12 +42,17 @@ export function SettingsScreen({
   showDataTab,
   settings,
   overrides,
+  stations,
+  activeStationId,
 }: {
   initialTab: SettingsTab;
   accounts: ReactNode;
   showDataTab: boolean;
   settings: ManufacturingSettings;
   overrides: ManufacturingCalendarOverride[];
+  /** Our own stations, in display order — Station A before Station B. */
+  stations: ManufacturingPartner[];
+  activeStationId: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -93,11 +98,9 @@ export function SettingsScreen({
 
   const saveSettings = () => {
     startSettingsTransition(async () => {
-      // TODO(stations phase 6): a station picker here, so Station B's capacities
-      // are editable too. Until then this edits Station A only — `settings` is
-      // loaded for Station A, so saving anything else would write one station's
-      // numbers onto another's row. `applyHolidays` is facility-wide and the
-      // action propagates it to every station regardless.
+      // `settings` is loaded for the station picked by the switcher below;
+      // `applyHolidays` is facility-wide and the action propagates it to every
+      // station regardless.
       const result = await updateManufacturingSettings(
         Number(cutterCapacity || 0),
         Number(assemblerCapacity || 0),
@@ -192,9 +195,31 @@ export function SettingsScreen({
             <div>
               <p className="text-sm font-semibold text-foreground">Daily Capacity</p>
               <p className="text-xs text-tertiary mt-1">
-                Changes here immediately reflow all future cutter, assembler, and QC schedules.
+                Changes here immediately reflow all future cutter, assembler, and QC schedules
+                for the selected station. Each station paces its own queue.
               </p>
             </div>
+
+            {stations.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                {stations.map((station) => (
+                  <button
+                    key={station.id}
+                    onClick={() =>
+                      router.push(`/management/settings?tab=manufacturing&station=${station.id}`)
+                    }
+                    className={[
+                      "rounded-full border px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors",
+                      station.id === activeStationId
+                        ? "border-accent bg-accent text-white"
+                        : "border-border bg-card text-secondary hover:bg-surface",
+                    ].join(" ")}
+                  >
+                    {station.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Input

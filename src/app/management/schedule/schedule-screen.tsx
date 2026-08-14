@@ -1,10 +1,12 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarBlank, Factory } from "@phosphor-icons/react";
 import { useDatasetSelector, shallowEqual } from "@/lib/dataset-context";
 import type { ScheduleViewData } from "@/components/schedule/installation-schedule-view";
 import type { ManufacturingRoleSchedule } from "@/lib/manufacturing-scheduler";
+import type { ManufacturingPartner } from "@/lib/types";
 import { SCHEDULE_SCOPE_LABELS, type ScheduleScope } from "@/lib/schedule-ui";
 import { OwnerSchedule } from "./owner-schedule";
 import { ManufacturingSchedulePanel } from "./manufacturing-schedule-panel";
@@ -17,9 +19,15 @@ export type ManufacturingSchedules = {
 
 export function ScheduleScreen({
   manufacturingSchedulesPromise,
+  stations,
+  activeStationId,
 }: {
   manufacturingSchedulesPromise: Promise<ManufacturingSchedules>;
+  /** Our own stations, in display order — Station A before Station B. */
+  stations: ManufacturingPartner[];
+  activeStationId: string;
 }) {
+  const router = useRouter();
   const data = useDatasetSelector<ScheduleViewData>(
     (value) => ({
       units: value.data.units,
@@ -111,6 +119,25 @@ export function ScheduleScreen({
               ))}
             </div>
           </div>
+
+          {tab === "manufacturing" && stations.length > 1 && (
+            <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+              {stations.map((station) => (
+                <button
+                  key={station.id}
+                  onClick={() => router.push(`/management/schedule?station=${station.id}`)}
+                  className={[
+                    "rounded-full border px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition-colors",
+                    station.id === activeStationId
+                      ? "border-accent bg-accent text-white"
+                      : "border-border bg-card text-secondary hover:bg-surface",
+                  ].join(" ")}
+                >
+                  {station.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
