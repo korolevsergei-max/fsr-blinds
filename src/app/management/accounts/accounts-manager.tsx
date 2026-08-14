@@ -113,6 +113,9 @@ export function AccountsManager({
   const linkedQcs = qcs.filter((qc) => Boolean(qc.authUserId));
   const orphanQcs = qcs.filter((qc) => !qc.authUserId);
   const externalPartners = manufacturingPartners.filter((p) => !p.isInternal);
+  // Own stations only, in display order — walls Station A's people off from
+  // Station B's in the accounts list the same way the RLS layer walls off units.
+  const stations = manufacturingPartners.filter((p) => p.isInternal);
 
   const handleDeleteInstaller = (inst: AppDataset["installers"][number]) => {
     if (!confirm(`Delete installer "${inst.name}"? This will remove their account from the app (and Supabase auth if linked).`)) {
@@ -357,6 +360,7 @@ export function AccountsManager({
               />
             ) : tab === "cutters" ? (
               <InviteCutterForm
+                stations={stations}
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
             ) : tab === "schedulers" ? (
@@ -365,10 +369,12 @@ export function AccountsManager({
               />
             ) : tab === "assemblers" ? (
               <InviteAssemblerForm
+                stations={stations}
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
             ) : tab === "qcs" ? (
               <InviteQcForm
+                stations={stations}
                 onDone={() => { setShowForm(false); window.location.reload(); }}
               />
             ) : tab === "subcontractors" ? (
@@ -400,116 +406,120 @@ export function AccountsManager({
 
         {tab === "cutters" && (
           <>
-            {linkedCutters.map((mfr, i) => (
-              <div
-                key={mfr.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <Factory size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                          {mfr.name}
-                        </h3>
-                        <p className="text-[12px] text-tertiary">Cutter</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteCutter(mfr)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    {mfr.contactName && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <UserCircle size={12} />
-                        {mfr.contactName}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {mfr.contactEmail}
-                    </div>
-                    {mfr.contactPhone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {mfr.contactPhone}
-                      </div>
-                    )}
-                  </div>
-                  {mfr.authUserId && <ChangePasswordInline authUserId={mfr.authUserId} />}
-                </div>
-              </div>
-            ))}
-
-            {orphanCutters.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned cutter records (not linked to Supabase Auth):{" "}
-                    {orphanCutters.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanCutters.map((mfr, i) => (
-                  <div
-                key={mfr.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 mb-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <Factory size={22} className="text-tertiary" />
+            {stations.map((station) => {
+              const stationLinked = linkedCutters.filter((c) => c.stationId === station.id);
+              const stationOrphan = orphanCutters.filter((c) => c.stationId === station.id);
+              if (stationLinked.length === 0 && stationOrphan.length === 0) return null;
+              return (
+                <div key={station.id} className="flex flex-col gap-3">
+                  <p className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+                    {station.name}
+                  </p>
+                  {stationLinked.map((mfr) => (
+                    <div key={mfr.id} className="animate-fade-up">
+                      <div className="surface-card p-4">
+                        <div className="flex items-center gap-3 mb-3 justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                              <Factory size={22} className="text-tertiary" />
+                            </div>
+                            <div>
+                              <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
+                                {mfr.name}
+                              </h3>
+                              <p className="text-[12px] text-tertiary">Cutter</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
-                              {mfr.name}
-                            </h3>
-                            <p className="text-[12px] text-tertiary">Cutter</p>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={deletePending}
+                            onClick={() => handleDeleteCutter(mfr)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          {mfr.contactName && (
+                            <div className="flex items-center gap-2 text-[12px] text-secondary">
+                              <UserCircle size={12} />
+                              {mfr.contactName}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 text-[12px] text-secondary">
+                            <Envelope size={12} />
+                            {mfr.contactEmail}
+                          </div>
+                          {mfr.contactPhone && (
+                            <div className="flex items-center gap-2 text-[12px] text-secondary">
+                              <Phone size={12} />
+                              {mfr.contactPhone}
+                            </div>
+                          )}
+                        </div>
+                        {mfr.authUserId && <ChangePasswordInline authUserId={mfr.authUserId} />}
+                      </div>
+                    </div>
+                  ))}
+
+                  {stationOrphan.length > 0 && (
+                    <>
+                      <InlineAlert variant="error">
+                        Orphaned cutter records (not linked to Supabase Auth):{" "}
+                        {stationOrphan.length}. Use Delete to remove them.
+                      </InlineAlert>
+                      {stationOrphan.map((mfr) => (
+                        <div key={mfr.id} className="animate-fade-up">
+                          <div className="surface-card p-4">
+                            <div className="flex items-center gap-3 mb-3 justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                                  <Factory size={22} className="text-tertiary" />
+                                </div>
+                                <div>
+                                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
+                                    {mfr.name}
+                                  </h3>
+                                  <p className="text-[12px] text-tertiary">Cutter</p>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                disabled={deletePending}
+                                onClick={() => handleDeleteCutter(mfr)}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              {mfr.contactName && (
+                                <div className="flex items-center gap-2 text-[12px] text-secondary">
+                                  <UserCircle size={12} />
+                                  {mfr.contactName}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-[12px] text-secondary">
+                                <Envelope size={12} />
+                                {mfr.contactEmail}
+                              </div>
+                              {mfr.contactPhone && (
+                                <div className="flex items-center gap-2 text-[12px] text-secondary">
+                                  <Phone size={12} />
+                                  {mfr.contactPhone}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          disabled={deletePending}
-                          onClick={() => handleDeleteCutter(mfr)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        {mfr.contactName && (
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <UserCircle size={12} />
-                            {mfr.contactName}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-[12px] text-secondary">
-                          <Envelope size={12} />
-                          {mfr.contactEmail}
-                        </div>
-                        {mfr.contactPhone && (
-                          <div className="flex items-center gap-2 text-[12px] text-secondary">
-                            <Phone size={12} />
-                            {mfr.contactPhone}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             {cutters.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
@@ -635,81 +645,85 @@ export function AccountsManager({
 
         {tab === "assemblers" && (
           <>
-            {linkedAssemblers.map((qc: Assembler, i: number) => (
-              <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <CheckCircle size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                        <p className="text-[12px] text-tertiary">Assembler</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteAssembler(qc)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {qc.email}
-                    </div>
-                    {qc.phone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {qc.phone}
-                      </div>
-                    )}
-                  </div>
-                  {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
-                </div>
-              </div>
-            ))}
-
-            {orphanAssemblers.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned assembler records (not linked to Supabase Auth):{" "}
-                    {orphanAssemblers.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanAssemblers.map((qc: Assembler, i: number) => (
-                  <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <CheckCircle size={22} className="text-tertiary" />
+            {stations.map((station) => {
+              const stationLinked = linkedAssemblers.filter((a) => a.stationId === station.id);
+              const stationOrphan = orphanAssemblers.filter((a) => a.stationId === station.id);
+              if (stationLinked.length === 0 && stationOrphan.length === 0) return null;
+              return (
+                <div key={station.id} className="flex flex-col gap-3">
+                  <p className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+                    {station.name}
+                  </p>
+                  {stationLinked.map((qc: Assembler) => (
+                    <div key={qc.id} className="animate-fade-up">
+                      <div className="surface-card p-4">
+                        <div className="flex items-center gap-3 mb-3 justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                              <CheckCircle size={22} className="text-tertiary" />
+                            </div>
+                            <div>
+                              <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
+                              <p className="text-[12px] text-tertiary">Assembler</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                            <p className="text-[12px] text-tertiary">Assembler (orphan)</p>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={deletePending}
+                            onClick={() => handleDeleteAssembler(qc)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2 text-[12px] text-secondary">
+                            <Envelope size={12} />
+                            {qc.email}
+                          </div>
+                          {qc.phone && (
+                            <div className="flex items-center gap-2 text-[12px] text-secondary">
+                              <Phone size={12} />
+                              {qc.phone}
+                            </div>
+                          )}
+                        </div>
+                        {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
+                      </div>
+                    </div>
+                  ))}
+
+                  {stationOrphan.length > 0 && (
+                    <>
+                      <InlineAlert variant="error">
+                        Orphaned assembler records (not linked to Supabase Auth):{" "}
+                        {stationOrphan.length}. Use Delete to remove them.
+                      </InlineAlert>
+                      {stationOrphan.map((qc: Assembler) => (
+                        <div key={qc.id} className="animate-fade-up">
+                          <div className="surface-card p-4">
+                            <div className="flex items-center gap-3 justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                                  <CheckCircle size={22} className="text-tertiary" />
+                                </div>
+                                <div>
+                                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
+                                  <p className="text-[12px] text-tertiary">Assembler (orphan)</p>
+                                </div>
+                              </div>
+                              <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteAssembler(qc)}>
+                                Delete
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteAssembler(qc)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             {assemblers.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">
@@ -721,81 +735,85 @@ export function AccountsManager({
 
         {tab === "qcs" && (
           <>
-            {linkedQcs.map((qc, i) => (
-              <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                <div className="surface-card p-4">
-                  <div className="flex items-center gap-3 mb-3 justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                        <ShieldCheck size={22} className="text-tertiary" />
-                      </div>
-                      <div>
-                        <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                        <p className="text-[12px] text-tertiary">Quality Control</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={deletePending}
-                      onClick={() => handleDeleteQc(qc)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center gap-2 text-[12px] text-secondary">
-                      <Envelope size={12} />
-                      {qc.email}
-                    </div>
-                    {qc.phone && (
-                      <div className="flex items-center gap-2 text-[12px] text-secondary">
-                        <Phone size={12} />
-                        {qc.phone}
-                      </div>
-                    )}
-                  </div>
-                  {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
-                </div>
-              </div>
-            ))}
-
-            {orphanQcs.length > 0 && (
-              <>
-                <div className="pt-2">
-                  <InlineAlert variant="error">
-                    Orphaned QC records (not linked to Supabase Auth):{" "}
-                    {orphanQcs.length}. Use Delete to remove them.
-                  </InlineAlert>
-                </div>
-                {orphanQcs.map((qc, i) => (
-                  <div
-                key={qc.id}
-                className="animate-fade-up"
-              >
-                    <div className="surface-card p-4">
-                      <div className="flex items-center gap-3 justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
-                            <ShieldCheck size={22} className="text-tertiary" />
+            {stations.map((station) => {
+              const stationLinked = linkedQcs.filter((qc) => qc.stationId === station.id);
+              const stationOrphan = orphanQcs.filter((qc) => qc.stationId === station.id);
+              if (stationLinked.length === 0 && stationOrphan.length === 0) return null;
+              return (
+                <div key={station.id} className="flex flex-col gap-3">
+                  <p className="pt-2 text-[11px] font-semibold uppercase tracking-wider text-tertiary">
+                    {station.name}
+                  </p>
+                  {stationLinked.map((qc) => (
+                    <div key={qc.id} className="animate-fade-up">
+                      <div className="surface-card p-4">
+                        <div className="flex items-center gap-3 mb-3 justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                              <ShieldCheck size={22} className="text-tertiary" />
+                            </div>
+                            <div>
+                              <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
+                              <p className="text-[12px] text-tertiary">Quality Control</p>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
-                            <p className="text-[12px] text-tertiary">Quality Control (orphan)</p>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={deletePending}
+                            onClick={() => handleDeleteQc(qc)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2 text-[12px] text-secondary">
+                            <Envelope size={12} />
+                            {qc.email}
+                          </div>
+                          {qc.phone && (
+                            <div className="flex items-center gap-2 text-[12px] text-secondary">
+                              <Phone size={12} />
+                              {qc.phone}
+                            </div>
+                          )}
+                        </div>
+                        {qc.authUserId && <ChangePasswordInline authUserId={qc.authUserId} />}
+                      </div>
+                    </div>
+                  ))}
+
+                  {stationOrphan.length > 0 && (
+                    <>
+                      <InlineAlert variant="error">
+                        Orphaned QC records (not linked to Supabase Auth):{" "}
+                        {stationOrphan.length}. Use Delete to remove them.
+                      </InlineAlert>
+                      {stationOrphan.map((qc) => (
+                        <div key={qc.id} className="animate-fade-up">
+                          <div className="surface-card p-4">
+                            <div className="flex items-center gap-3 justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[var(--radius-md)] bg-surface border border-border flex items-center justify-center">
+                                  <ShieldCheck size={22} className="text-tertiary" />
+                                </div>
+                                <div>
+                                  <h3 className="text-[14px] font-semibold text-foreground tracking-tight">{qc.name}</h3>
+                                  <p className="text-[12px] text-tertiary">Quality Control (orphan)</p>
+                                </div>
+                              </div>
+                              <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteQc(qc)}>
+                                Delete
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                        <Button size="sm" variant="danger" disabled={deletePending} onClick={() => handleDeleteQc(qc)}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+                      ))}
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             {qcs.length === 0 && (
               <div className="text-center py-12 text-[13px] text-tertiary">

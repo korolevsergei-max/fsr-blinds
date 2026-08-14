@@ -313,6 +313,8 @@ export interface Cutter {
   contactEmail: string;
   contactPhone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 /**
@@ -352,6 +354,8 @@ export interface Assembler {
   email: string;
   phone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 export interface Qc {
@@ -360,6 +364,8 @@ export interface Qc {
   email: string;
   phone: string;
   authUserId: string | null;
+  /** The station this login is walled to — one of manufacturing_partners' internal rows. */
+  stationId: string;
 }
 
 export interface WindowManufacturingEscalation {

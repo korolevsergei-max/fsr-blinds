@@ -43,6 +43,36 @@ export async function ownerAccountExists(): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+/**
+ * A cutter/assembler/QC login must belong to one of our own stations, never a
+ * vendor — the mirror of `createSubcontractorAccount`'s "must not be internal"
+ * check. `auth_station_id()` (RLS) trusts whatever is on the row, so this is
+ * the one place that keeps a bad id from ever landing there.
+ */
+export async function assertStationIsInternal(
+  supabase: SupabaseClient,
+  stationId: string
+): Promise<ActionResult | null> {
+  if (!stationId) {
+    return { ok: false, error: "Choose which station this login belongs to." };
+  }
+  const { data: station } = await supabase
+    .from("manufacturing_partners")
+    .select("id, is_internal")
+    .eq("id", stationId)
+    .maybeSingle();
+  if (!station) {
+    return { ok: false, error: "That station no longer exists." };
+  }
+  if (!(station as { is_internal: boolean }).is_internal) {
+    return {
+      ok: false,
+      error: "Station accounts must belong to one of our own stations, not a subcontractor.",
+    };
+  }
+  return null;
+}
+
 export function isMissingColumnError(error: unknown, table: string, column: string): boolean {
   if (!error || typeof error !== "object") return false;
   const maybeMessage = "message" in error ? error.message : undefined;

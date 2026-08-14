@@ -170,6 +170,7 @@ export type CutterRow = {
   contact_email: string;
   contact_phone: string;
   auth_user_id?: string | null;
+  station_id?: string | null;
 };
 
 export type ManufacturingPartnerRow = {
@@ -334,6 +335,7 @@ export function mapCutter(r: CutterRow): Cutter {
     contactEmail: r.contact_email,
     contactPhone: r.contact_phone,
     authUserId: r.auth_user_id ?? null,
+    stationId: r.station_id ?? INTERNAL_PARTNER_ID,
   };
 }
 

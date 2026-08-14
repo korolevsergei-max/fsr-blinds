@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ActionResult } from "./helpers";
 import {
   assertOwnerForAccountActions,
+  assertStationIsInternal,
   deleteCuttersByContactEmail,
   ensureNotDeletingSelf,
   findAuthUserIdByEmail,
@@ -18,7 +19,8 @@ export async function createCutterAccount(
   email: string,
   contactName: string,
   phone: string,
-  password: string
+  password: string,
+  stationId: string
 ): Promise<ActionResult> {
   try {
     const denied = await assertOwnerForAccountActions();
@@ -27,6 +29,9 @@ export async function createCutterAccount(
     if (!password || password.length < 8) {
       return { ok: false, error: "Password must be at least 8 characters." };
     }
+
+    const stationDenied = await assertStationIsInternal(await createClient(), stationId);
+    if (stationDenied) return stationDenied;
 
     const admin = createAdminClient();
 
@@ -61,6 +66,7 @@ export async function createCutterAccount(
       contact_email: email,
       contact_phone: phone,
       auth_user_id: authUser.user.id,
+      station_id: stationId,
     };
 
     let { error: cutErr } = await supabase.from("cutters").insert(
@@ -73,6 +79,7 @@ export async function createCutterAccount(
         contact_name: contactName,
         contact_email: email,
         contact_phone: phone,
+        station_id: stationId,
       };
       const retry = await supabase.from("cutters").insert(cutterInsertLegacy);
       cutErr = retry.error;

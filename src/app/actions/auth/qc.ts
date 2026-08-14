@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ActionResult } from "./helpers";
 import {
   assertOwnerForAccountActions,
+  assertStationIsInternal,
   deleteQcsByEmail,
   ensureNotDeletingSelf,
   findAuthUserIdByEmail,
@@ -19,7 +20,8 @@ export async function createQcAccount(
   name: string,
   email: string,
   phone: string,
-  password: string
+  password: string,
+  stationId: string
 ): Promise<ActionResult> {
   try {
     const denied = await assertOwnerForAccountActions();
@@ -28,6 +30,9 @@ export async function createQcAccount(
     if (!password || password.length < 8) {
       return { ok: false, error: "Password must be at least 8 characters." };
     }
+
+    const stationDenied = await assertStationIsInternal(await createClient(), stationId);
+    if (stationDenied) return stationDenied;
 
     const admin = createAdminClient();
 
@@ -61,6 +66,7 @@ export async function createQcAccount(
       email,
       phone,
       auth_user_id: authUser.user.id,
+      station_id: stationId,
     });
 
     if (qcErr) return { ok: false, error: qcErr.message };

@@ -3,6 +3,7 @@ import { getInstallerCutterAuthDrift } from "@/lib/account-sync";
 import { loadFullDataset, loadAllSchedulerBuildingAccess } from "@/lib/server-data";
 import { createClient } from "@/lib/supabase/server";
 import { loadManufacturingSettings } from "@/lib/manufacturing-scheduler";
+import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
 import { AccountsManager } from "../accounts/accounts-manager";
 import type { Assembler, ManufacturingPartner, Qc, Subcontractor } from "@/lib/types";
 import { SettingsScreen } from "./settings-screen";
@@ -18,7 +19,7 @@ async function loadAssemblers(): Promise<Assembler[]> {
     const supabase = await createClient();
     const { data } = await supabase
       .from("assemblers")
-      .select("id, name, email, phone, auth_user_id")
+      .select("id, name, email, phone, auth_user_id, station_id")
       .order("name");
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -26,6 +27,7 @@ async function loadAssemblers(): Promise<Assembler[]> {
       email: row.email,
       phone: row.phone ?? "",
       authUserId: row.auth_user_id ?? null,
+      stationId: row.station_id ?? INTERNAL_PARTNER_ID,
     }));
   } catch {
     return [];
@@ -37,7 +39,7 @@ async function loadQcs(): Promise<Qc[]> {
     const supabase = await createClient();
     const { data } = await supabase
       .from("qcs")
-      .select("id, name, email, phone, auth_user_id")
+      .select("id, name, email, phone, auth_user_id, station_id")
       .order("name");
     return (data ?? []).map((row) => ({
       id: row.id,
@@ -45,6 +47,7 @@ async function loadQcs(): Promise<Qc[]> {
       email: row.email,
       phone: row.phone ?? "",
       authUserId: row.auth_user_id ?? null,
+      stationId: row.station_id ?? INTERNAL_PARTNER_ID,
     }));
   } catch {
     return [];
