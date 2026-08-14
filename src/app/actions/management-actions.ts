@@ -864,20 +864,32 @@ export async function assignUnitsToScheduler(
 }
 
 /**
- * Assign a set of units to a manufacturing partner (in-house or a subcontractor).
+ * Assign a set of units to a manufacturing destination: one of our own stations,
+ * or a subcontractor.
  *
- * The reflow at the end is what actually moves the work: it rebuilds the internal
- * factory schedule from units whose partner is internal and purges schedule rows
- * for the rest, so units sent out disappear from the cutter/assembler/QC queues
- * and stop consuming in-house capacity — and units brought back reappear.
+ * TWO KINDS OF MOVE, and the difference is the whole design (20260814120000):
  *
- * Once manufacturing has STARTED on a unit (computeManufacturingLock, mirroring
- * the DB trigger's is_manufacturing_locked), moving it re-shows part-built
- * blinds as open work on the other side — the ~$100-per-blind double build.
- * Locked units are rejected here with a readable message unless the owner
- * passes the `override` confirmation, which is only valid for a single-unit
- * call whose typed unit number matches. The DB trigger enforces the same rule
- * even if this check is bypassed.
+ *  RELOCATION — station → station, both in-house. The blinds walk down the hall.
+ *    Every window_production_status row travels UNTOUCHED: a blind cut at
+ *    Station A is a cut blind, and Station B's assembler assembles it. Nothing
+ *    is rebuilt, so the lock does not bind and no typed confirmation is asked
+ *    for. Schedule rows are KEPT and their manual pins cleared, so the receiving
+ *    station re-plans the dates against its own capacity.
+ *
+ *  TRANSFER — anything crossing the in-house↔vendor boundary. Part-built blinds
+ *    become open work at another COMPANY — the ~$100-per-blind double build.
+ *    Locked units are rejected unless the owner passes the `override`
+ *    confirmation, valid only for a single-unit call whose typed unit number
+ *    matches. Schedule rows are purged on the way out.
+ *
+ * ⚠️ RULE 2 (docs/MANUFACTURING_STATIONS.md): a relocation must NEVER delete a
+ * window_manufacturing_schedule row. Queue membership is "has schedule rows AND
+ * the unit's partner is mine", so deleting them makes the unit vanish from every
+ * queue silently rather than failing. That is why the purge below tests
+ * `!targetIsInternal` and not `partnerId !== INTERNAL_PARTNER_ID`.
+ *
+ * The DB trigger (units_guard_ownership_columns) enforces the same lock rule,
+ * including the relocation exemption, even if these checks are bypassed.
  */
 export async function assignUnitsToManufacturingPartner(
   partnerId: string,
@@ -896,13 +908,14 @@ export async function assignUnitsToManufacturingPartner(
     // writing an id the FK would reject with an opaque message.
     const { data: partner } = await supabase
       .from("manufacturing_partners")
-      .select("id, name")
+      .select("id, name, is_internal")
       .eq("id", partnerId)
       .maybeSingle();
     if (!partner) {
       return { ok: false, error: "That manufacturer no longer exists. Refresh and try again." };
     }
     const partnerName = (partner as { name: string }).name;
+    const targetIsInternal = (partner as { is_internal: boolean }).is_internal;
 
     // Schedulers may only touch units inside their own portal scope.
     let scopedUnitIds = unitIds;
@@ -980,13 +993,38 @@ export async function assignUnitsToManufacturingPartner(
       if (row.status === "qc_approved") counts.qcApprovedCount += 1;
     }
     const emptyCounts = { startedCount: 0, qcApprovedCount: 0 };
-    const lockedUnits = moving.filter((u) =>
-      computeManufacturingLock({
-        partnerId: u.manufacturing_partner_id,
-        productionEnteredAt: u.production_entered_at,
-        allMeasuredAt: u.all_measured_at,
-        ...(countsByUnit.get(u.id) ?? emptyCounts),
-      })
+
+    // Which of our own stations exist, resolved from the table — there is more
+    // than one internal partner now, so `id === INTERNAL_PARTNER_ID` would read
+    // every Station B unit as a subcontractor's and send it down the transfer
+    // path, demanding a typed confirmation for a walk down the hall.
+    const { data: allPartners } = await supabase
+      .from("manufacturing_partners")
+      .select("id, is_internal");
+    const internalIds = new Set(
+      ((allPartners as { id: string; is_internal: boolean }[] | null) ?? [])
+        .filter((p) => p.is_internal)
+        .map((p) => p.id)
+    );
+    const sourceIsInternal = (u: { manufacturing_partner_id: string | null }) =>
+      internalIds.has(u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID);
+
+    // A RELOCATION is in-house → in-house. It carries every part-built blind
+    // with it and rebuilds nothing, so the lock — which exists to price a
+    // cross-company double build — does not apply. Mirrors the v_relocation
+    // branch in units_guard_ownership_columns.
+    const isRelocation = (u: { manufacturing_partner_id: string | null }) =>
+      targetIsInternal && sourceIsInternal(u);
+
+    const lockedUnits = moving.filter(
+      (u) =>
+        !isRelocation(u) &&
+        computeManufacturingLock({
+          isInternal: sourceIsInternal(u),
+          productionEnteredAt: u.production_entered_at,
+          allMeasuredAt: u.all_measured_at,
+          ...(countsByUnit.get(u.id) ?? emptyCounts),
+        })
     );
 
     // The override is valid only when ALL of: the actor is the owner, exactly
@@ -1054,7 +1092,7 @@ export async function assignUnitsToManufacturingPartner(
     // long as that took, and permanently if after() never ran. The reads are
     // filtered by partner too, so this is belt-and-braces rather than the only
     // defence — but it keeps the tables honest.
-    if (partnerId !== INTERNAL_PARTNER_ID) {
+    if (!targetIsInternal) {
       const { error: purgeError } = await supabase
         .from("window_manufacturing_schedule")
         .delete()
@@ -1065,24 +1103,61 @@ export async function assignUnitsToManufacturingPartner(
           error: `Reassigned, but the in-house schedule could not be cleared: ${purgeError.message}. Refresh and try again.`,
         };
       }
+    } else {
+      // RULE 2: an in-house destination KEEPS its schedule rows — deleting them
+      // is how a unit disappears from every queue. What is cleared is the manual
+      // planning made against the OLD station's day buckets: a pinned date or a
+      // hand-set priority means nothing under different capacities, and a locked
+      // row pinned to an over-capacity day would jam the new station's packing.
+      // The reflow in after() then re-plans the dates. UPDATE, never DELETE.
+      const relocatingIds = moving.filter(isRelocation).map((u) => u.id);
+      if (relocatingIds.length > 0) {
+        const { error: repinError } = await supabase
+          .from("window_manufacturing_schedule")
+          .update({
+            is_schedule_locked: false,
+            lock_reason: "",
+            manual_priority: 0,
+            over_capacity_override: false,
+            last_reschedule_reason: "station_relocated",
+          })
+          .in("unit_id", relocatingIds);
+        if (repinError) {
+          // Non-fatal by design: the unit HAS moved and is already visible in the
+          // receiving station's queue (membership derives from the units join,
+          // not from these columns). Only the plan is stale, and the next reflow
+          // corrects it. Failing the action here would be worse — it would
+          // suggest the move did not happen.
+          console.warn("[mfg] could not clear pins after relocation:", repinError.message);
+        }
+      }
     }
 
     const unitsMeta = await loadUnitsRouteMeta(supabase, movingIds);
 
-    // Resolved before after() so the audit row names the side the work LEFT,
-    // not just where it went.
-    let overrideFromName: string | null = null;
-    if (overriding) {
-      const { data: fromPartner } = await supabase
-        .from("manufacturing_partners")
-        .select("name")
-        .eq("id", overriding.manufacturing_partner_id ?? INTERNAL_PARTNER_ID)
-        .maybeSingle();
-      overrideFromName =
-        (fromPartner as { name: string } | null)?.name ??
-        overriding.manufacturing_partner_id ??
-        INTERNAL_PARTNER_ID;
-    }
+    // Resolved before after() so every audit row names the side the work LEFT,
+    // not just where it went. One read covers both the override row and the
+    // relocation rows below.
+    const { data: partnerNameRows } = await supabase
+      .from("manufacturing_partners")
+      .select("id, name");
+    const partnerNameById = new Map(
+      ((partnerNameRows as { id: string; name: string }[] | null) ?? []).map((p) => [p.id, p.name])
+    );
+    const fromNameFor = (u: { manufacturing_partner_id: string | null }) => {
+      const id = u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID;
+      return partnerNameById.get(id) ?? id;
+    };
+    const overrideFromName = overriding ? fromNameFor(overriding) : null;
+
+    // Snapshot each relocating unit's progress AT THE MOMENT OF THE MOVE. This
+    // is what makes "did work disappear when we moved it?" answerable weeks
+    // later: the counts here, compared against the unit's production rows now,
+    // show whether anything was lost in transit. Cheap to record, impossible to
+    // reconstruct afterwards.
+    const relocationById = new Map(
+      moving.filter(isRelocation).map((u) => [u.id, u])
+    );
 
     after(async () => {
       for (const unitId of movingIds) {
@@ -1098,6 +1173,22 @@ export async function assignUnitsToManufacturingPartner(
               blindsQcApproved: counts.qcApprovedCount,
               blindsInFlight,
               estimatedRebuildCostUsd: blindsInFlight * 100,
+            }
+          );
+          continue;
+        }
+        const relocating = relocationById.get(unitId);
+        if (relocating) {
+          const counts = countsByUnit.get(unitId) ?? emptyCounts;
+          await logUnitActivity(
+            supabase, unitId, actor.role, actor.displayName, "station_relocated",
+            {
+              from: fromNameFor(relocating),
+              to: partnerName,
+              unitNumber: relocating.unit_number,
+              // The physical hand-off: these blinds exist and must be carried.
+              blindsCutOrAssembled: counts.startedCount - counts.qcApprovedCount,
+              blindsFinished: counts.qcApprovedCount,
             }
           );
           continue;

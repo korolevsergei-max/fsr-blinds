@@ -8,6 +8,7 @@ import { useDatasetSelectorMaybe } from "@/lib/dataset-context";
 import { INTERNAL_PARTNER_ID, sortPartners } from "@/lib/manufacturing-partners";
 import { manufacturingLockReason } from "@/lib/manufacturing-lock";
 import { ManufacturerTransferDialog } from "@/components/units/manufacturer-transfer-dialog";
+import { StationMoveDialog } from "@/components/units/station-move-dialog";
 import { EDITABLE_VALUE } from "@/components/units/editable-cell-styles";
 
 /**
@@ -53,6 +54,7 @@ export function UnitManufacturerPicker({
   // must not snap back to the old value while the reflow runs in after().
   const [optimisticId, setOptimisticId] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showStationMove, setShowStationMove] = useState(false);
 
   const current = optimisticId ?? partnerId ?? INTERNAL_PARTNER_ID;
   const currentPartner = partners.find((p) => p.id === current);
@@ -74,6 +76,17 @@ export function UnitManufacturerPicker({
   // `units_guard_ownership_columns` enforces both underneath; this is the
   // readable layer.
   const canEdit = (role === "owner" || !assignedAt) && !locked;
+
+  // A locked unit is frozen against a change of COMPANY, not against moving
+  // between our own stations: the blinds walk down the hall and every bit of
+  // recorded work travels with them. So the owner keeps a station move even here
+  // — the server takes the relocation path and the DB trigger's v_relocation
+  // branch lets it through without an override stamp.
+  const currentIsInternal = currentPartner?.isInternal ?? true;
+  const otherStations = partners.filter((p) => p.isInternal && p.id !== current);
+  const canMoveStation =
+    role === "owner" && currentIsInternal && otherStations.length > 0 && Boolean(unitNumber);
+
   if (!canEdit) {
     const lockReason = locked
       ? manufacturingLockReason(currentName, currentPartner?.isInternal ?? true, {
@@ -92,6 +105,19 @@ export function UnitManufacturerPicker({
             {/* The escape hatch is owner-only and deliberately understated — it
                 should be findable when a unit is genuinely mis-routed, not
                 inviting enough to click past the warning. */}
+            {/* Two different actions, deliberately weighted differently. Moving
+                between our own stations is routine and reads as an ordinary
+                link; transferring to another company rebuilds part-built blinds
+                and stays in danger red. */}
+            {locked && canMoveStation && (
+              <button
+                type="button"
+                onClick={() => setShowStationMove(true)}
+                className="mt-1 mr-3 text-[10px] font-medium text-accent underline underline-offset-2 hover:opacity-80"
+              >
+                Move to another station
+              </button>
+            )}
             {locked && role === "owner" && unitNumber && (
               <button
                 type="button"
@@ -112,6 +138,19 @@ export function UnitManufacturerPicker({
             startedCount={startedCount}
             qcApprovedCount={qcApprovedCount}
             onClose={() => setShowTransfer(false)}
+            onSuccess={(next) => setOptimisticId(next)}
+          />
+        )}
+        {showStationMove && unitNumber && (
+          <StationMoveDialog
+            unitId={unitId}
+            unitNumber={unitNumber}
+            currentPartnerId={current}
+            currentPartnerName={currentName}
+            partners={partners}
+            startedCount={startedCount}
+            qcApprovedCount={qcApprovedCount}
+            onClose={() => setShowStationMove(false)}
             onSuccess={(next) => setOptimisticId(next)}
           />
         )}
