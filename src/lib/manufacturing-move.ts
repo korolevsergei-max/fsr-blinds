@@ -24,6 +24,8 @@
  * the unit silently vanishes from every queue with no error anywhere.
  * `manufacturing-move.test.mts` pins that across the whole truth table.
  */
+import { INTERNAL_PARTNER_ID } from "./manufacturing-partners.ts";
+
 export type ManufacturerMoveKind = "relocation" | "transfer";
 
 export interface ManufacturerMovePlan {
@@ -60,4 +62,43 @@ export function planManufacturerMove(
     deletesScheduleRows: !targetIsInternal,
     clearsManualPins: relocation,
   };
+}
+
+/**
+ * Has anybody actually decided who builds this unit?
+ *
+ * `manufacturing_assigned_at` is the ONLY answer, because
+ * `manufacturing_partner_id` is `NOT NULL DEFAULT 'mp-internal'` — every unit
+ * carries Station A's id from the moment it is created, chosen by nobody.
+ */
+export function isInitialAssignment(unit: {
+  manufacturing_assigned_at: string | null;
+}): boolean {
+  return unit.manufacturing_assigned_at === null;
+}
+
+/**
+ * Does routing this unit to `partnerId` require a write?
+ *
+ * A never-routed unit ALWAYS does, even when `manufacturing_partner_id` already
+ * equals the destination — which for Station A is EVERY unit, per the column
+ * default above. Comparing ids alone made "route this to Station A" a no-op that
+ * still returned ok: `manufacturing_assigned_at` was never stamped, so the unit
+ * entered no queue (the reflow source requires it non-NULL) and the picker
+ * silently reverted on the next read. The stamp IS the routing decision; the
+ * partner id is only where it points.
+ *
+ * The id comparison still holds for a unit that HAS been routed — re-saving it
+ * to the partner it already has must stay a no-op, so a redundant save does not
+ * reset the queue-added date the subcontractor work list orders by.
+ */
+export function needsManufacturerWrite(
+  unit: {
+    manufacturing_partner_id: string | null;
+    manufacturing_assigned_at: string | null;
+  },
+  partnerId: string
+): boolean {
+  if (isInitialAssignment(unit)) return true;
+  return (unit.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== partnerId;
 }

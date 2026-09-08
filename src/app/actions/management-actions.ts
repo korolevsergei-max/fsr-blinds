@@ -7,7 +7,11 @@ import { getLinkedSchedulerId, requireOwner, requireOwnerOrScheduler } from "@/l
 import { getSchedulerScopedUnitIds } from "@/lib/scheduler-scope";
 import { reflowManufacturingSchedules } from "@/lib/manufacturing-scheduler";
 import { INTERNAL_PARTNER_ID } from "@/lib/manufacturing-partners";
-import { planManufacturerMove } from "@/lib/manufacturing-move";
+import {
+  isInitialAssignment,
+  needsManufacturerWrite,
+  planManufacturerMove,
+} from "@/lib/manufacturing-move";
 import { computeManufacturingLock } from "@/lib/manufacturing-lock";
 import { CONFIRM_PURGE_ALL_CLIENTS } from "@/lib/client-purge-constants";
 import { emitNotification } from "@/lib/emit-notification";
@@ -965,11 +969,14 @@ export async function assignUnitsToManufacturingPartner(
       }
     }
 
-    // Units genuinely moving. Ones already on this partner are left alone so a
-    // no-op re-save does not reset their queue-added date.
-    const moving = targets.filter(
-      (u) => (u.manufacturing_partner_id ?? INTERNAL_PARTNER_ID) !== partnerId
-    );
+    // Units genuinely needing a write. An already-routed unit re-saved to the
+    // partner it already has is left alone, so a no-op re-save does not reset its
+    // queue-added date — but a NEVER-routed unit always needs one, even when the
+    // ids already match. They always match for Station A: 'mp-internal' is the
+    // column default every unit is created with. Comparing ids alone made
+    // "route this to Station A" return ok while writing nothing, leaving
+    // manufacturing_assigned_at NULL and the unit in no queue at all.
+    const moving = targets.filter((u) => needsManufacturerWrite(u, partnerId));
     const movingIds = moving.map((u) => u.id);
     if (movingIds.length === 0) return { ok: true };
 
@@ -1073,7 +1080,7 @@ export async function assignUnitsToManufacturingPartner(
     // what makes the trigger's freshness test (NEW distinct from OLD, this UPDATE)
     // pass; a separate write would be rejected as a stale stamp.
     const nowIso = new Date().toISOString();
-    const { error } = await supabase
+    const { data: updatedRows, error } = await supabase
       .from("units")
       .update({
         manufacturing_partner_id: partnerId,
@@ -1085,8 +1092,26 @@ export async function assignUnitsToManufacturingPartner(
             }
           : {}),
       })
-      .in("id", movingIds);
+      .in("id", movingIds)
+      .select("id");
     if (error) return { ok: false, error: error.message };
+
+    // A row filtered out by units_update_scoped's USING clause is dropped with NO
+    // error and the trigger never fires for it, so without this the action would
+    // report success for a write that touched nothing — the same silent failure
+    // the moving filter above used to produce. Checked BEFORE the purge, the pin
+    // clear and the reflow, so a partial write does not go on to rearrange
+    // schedules around a routing that did not happen.
+    const updatedCount = (updatedRows as { id: string }[] | null)?.length ?? 0;
+    if (updatedCount !== movingIds.length) {
+      const missed = movingIds.length - updatedCount;
+      return {
+        ok: false,
+        error: `Could not save the manufacturer on ${missed} of ${movingIds.length} unit${
+          movingIds.length === 1 ? "" : "s"
+        }. Refresh and try again.`,
+      };
+    }
 
     // EXCLUSIVITY, synchronously — before this action returns and the caller's UI
     // refreshes. Deferring it to the reflow in after() would leave the unit
@@ -1119,7 +1144,13 @@ export async function assignUnitsToManufacturingPartner(
     // disjoint by construction (planManufacturerMove never sets both
     // deletesScheduleRows and clearsManualPins), and a bulk move can legitimately
     // contain both kinds at once.
-    const relocatingIds = moving.filter((u) => planFor(u).clearsManualPins).map((u) => u.id);
+    // Initial assignments are excluded: a unit nobody had routed yet is in no
+    // queue, so it has no schedule rows to re-pin. Nothing to clear, and running
+    // the UPDATE anyway would trip the scheduler gap in wms_update_mfg and log a
+    // warning about a relocation that never happened.
+    const relocatingIds = moving
+      .filter((u) => !isInitialAssignment(u) && planFor(u).clearsManualPins)
+      .map((u) => u.id);
     if (relocatingIds.length > 0) {
       const { error: repinError } = await supabase
         .from("window_manufacturing_schedule")
@@ -1163,8 +1194,14 @@ export async function assignUnitsToManufacturingPartner(
     // later: the counts here, compared against the unit's production rows now,
     // show whether anything was lost in transit. Cheap to record, impossible to
     // reconstruct afterwards.
+    // Initial assignments are excluded here too, and for a different reason than
+    // the pin clear: they are not relocations at all. An unrouted unit reads as
+    // internal (the column default), so without this the audit row would say
+    // `station_relocated` "from Station A to Station A" for a unit that never
+    // moved. They fall through to the `manufacturer_assigned` log below, which is
+    // what a first routing actually is.
     const relocationById = new Map(
-      moving.filter(isRelocation).map((u) => [u.id, u])
+      moving.filter((u) => !isInitialAssignment(u) && isRelocation(u)).map((u) => [u.id, u])
     );
 
     after(async () => {

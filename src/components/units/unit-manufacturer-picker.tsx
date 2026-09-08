@@ -163,13 +163,30 @@ export function UnitManufacturerPicker({
     if (!next) return;
     if (!unassigned && next === current) return;
     const previous = current;
+    // Restoring `previous` on an unrouted unit would be a lie: `current` is the
+    // COLUMN DEFAULT (Station A), not a choice anyone made. Putting that in
+    // optimisticId flips `unassigned` false, so the select would show Station A
+    // after a failed save — and the `next === current` guard above would then
+    // swallow the retry, leaving the user stuck. Restore "no choice" instead.
+    const wasUnassigned = unassigned;
+    const restore = () => setOptimisticId(wasUnassigned ? null : previous);
     setOptimisticId(next);
     setError("");
     startTransition(async () => {
-      const result = await assignUnitsToManufacturingPartner(next, [unitId]);
-      if (!result.ok) {
-        setOptimisticId(previous);
-        setError(result.error);
+      try {
+        const result = await assignUnitsToManufacturingPartner(next, [unitId]);
+        if (!result.ok) {
+          restore();
+          setError(result.error);
+        }
+      } catch {
+        // A REJECTED action (stale action id after a deploy, an expired session
+        // redirect, a dropped connection) skips the !ok branch entirely. Without
+        // this the optimistic value would stick with no error shown, and the old
+        // value would reappear on the next refetch — indistinguishable from a
+        // save that silently failed.
+        restore();
+        setError("Could not save the manufacturer. Check your connection and try again.");
       }
     });
   };

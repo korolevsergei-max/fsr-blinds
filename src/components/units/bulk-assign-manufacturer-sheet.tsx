@@ -62,10 +62,18 @@ export function BulkAssignManufacturerSheet({
     if (!selectedPartnerId || movable.length === 0) return;
     setError("");
     startTransition(async () => {
-      const result = await assignUnitsToManufacturingPartner(
-        selectedPartnerId,
-        movable.map((u) => u.id)
-      );
+      let result;
+      try {
+        result = await assignUnitsToManufacturingPartner(
+          selectedPartnerId,
+          movable.map((u) => u.id)
+        );
+      } catch {
+        // A rejected action would otherwise fall straight through to the success
+        // checkmark below, reporting a whole batch as saved when nothing was.
+        setError("Could not save the manufacturer. Check your connection and try again.");
+        return;
+      }
       if (!result.ok) {
         setError(result.error);
         return;

@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { planManufacturerMove } from "./manufacturing-move.ts";
+import {
+  isInitialAssignment,
+  needsManufacturerWrite,
+  planManufacturerMove,
+} from "./manufacturing-move.ts";
 import { computeManufacturingLock } from "./manufacturing-lock.ts";
 
 /**
@@ -127,4 +131,76 @@ test("Station B units take the internal lock branch, not the vendor one", () => 
   };
   assert.equal(computeManufacturingLock(measuredOnly), false);
   assert.equal(computeManufacturingLock({ ...measuredOnly, isInternal: false }), true);
+});
+
+// ── Routing to Station A: the write must follow the DECISION, not the id ─────
+//
+// `units.manufacturing_partner_id` is NOT NULL DEFAULT 'mp-internal', and
+// 'mp-internal' IS Station A — so every unit already carries Station A's id from
+// creation, chosen by nobody. Deciding what to write by comparing ids alone made
+// "route this unit to Station A" a no-op that still returned ok: nothing stamped
+// `manufacturing_assigned_at`, so the unit entered no queue (the reflow source
+// requires it non-NULL) and the picker reverted on the next read. Station B and
+// vendors were unaffected, which is exactly why it hid for so long.
+
+const STATION_A = "mp-internal";
+const STATION_B = "mp-station-b";
+const VENDOR = "mp-a1b2c3d4";
+
+const unrouted = (partnerId: string | null) => ({
+  manufacturing_partner_id: partnerId,
+  manufacturing_assigned_at: null,
+});
+const routed = (partnerId: string | null) => ({
+  manufacturing_partner_id: partnerId,
+  manufacturing_assigned_at: "2026-08-01T00:00:00Z",
+});
+
+test("THE BUG: routing a never-routed unit to Station A needs a write", () => {
+  // The ids match — and that is precisely the case that must still write, because
+  // the matching id is the default, not a decision.
+  assert.equal(needsManufacturerWrite(unrouted(STATION_A), STATION_A), true);
+});
+
+test("a never-routed unit always needs a write, wherever it is going", () => {
+  for (const destination of [STATION_A, STATION_B, VENDOR]) {
+    for (const partnerId of [STATION_A, STATION_B, VENDOR, null]) {
+      assert.equal(
+        needsManufacturerWrite(unrouted(partnerId), destination),
+        true,
+        `unrouted ${partnerId} → ${destination} must write`
+      );
+    }
+  }
+});
+
+test("a routed unit re-saved to the partner it already has stays a no-op", () => {
+  // The original reason for the filter, and it must survive: a redundant save
+  // must not reset the queue-added date the subcontractor work list orders by.
+  assert.equal(needsManufacturerWrite(routed(STATION_A), STATION_A), false);
+  assert.equal(needsManufacturerWrite(routed(STATION_B), STATION_B), false);
+  assert.equal(needsManufacturerWrite(routed(VENDOR), VENDOR), false);
+});
+
+test("a routed unit genuinely changing partner needs a write", () => {
+  assert.equal(needsManufacturerWrite(routed(STATION_A), STATION_B), true);
+  assert.equal(needsManufacturerWrite(routed(STATION_B), STATION_A), true);
+  assert.equal(needsManufacturerWrite(routed(STATION_A), VENDOR), true);
+  assert.equal(needsManufacturerWrite(routed(VENDOR), STATION_A), true);
+});
+
+test("an absent partner id reads as Station A once a decision exists", () => {
+  // The absent-reads-as-default rule from manufacturing-partners.ts, which only
+  // applies on the routed side — an unrouted unit writes regardless (above).
+  assert.equal(needsManufacturerWrite(routed(null), STATION_A), false);
+  assert.equal(needsManufacturerWrite(routed(null), STATION_B), true);
+});
+
+test("isInitialAssignment keys off the stamp, never the partner id", () => {
+  // If this ever starts reading manufacturing_partner_id, the Station A bug is
+  // back: every unit would look like an initial assignment or none would.
+  assert.equal(isInitialAssignment(unrouted(STATION_A)), true);
+  assert.equal(isInitialAssignment(unrouted(VENDOR)), true);
+  assert.equal(isInitialAssignment(routed(STATION_A)), false);
+  assert.equal(isInitialAssignment(routed(null)), false);
 });

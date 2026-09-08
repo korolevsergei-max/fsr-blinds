@@ -67,10 +67,18 @@ export function ManufacturerTransferDialog({
     if (!canConfirm) return;
     setError("");
     startTransition(async () => {
-      const result = await assignUnitsToManufacturingPartner(destinationId, [unitId], {
-        unitId,
-        confirmUnitNumber: typed.trim(),
-      });
+      let result;
+      try {
+        result = await assignUnitsToManufacturingPartner(destinationId, [unitId], {
+          unitId,
+          confirmUnitNumber: typed.trim(),
+        });
+      } catch {
+        // A rejected action would otherwise close the dialog as if the transfer
+        // had happened — on the one action in the app that commits a rebuild.
+        setError("Could not transfer the unit. Check your connection and try again.");
+        return;
+      }
       if (!result.ok) {
         setError(result.error);
         return;

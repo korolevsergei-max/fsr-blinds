@@ -72,7 +72,15 @@ export function StationMoveDialog({
       // No override argument: a station move is not a locked transfer, so the
       // server takes the relocation path and the DB trigger's v_relocation
       // branch lets it through without an override stamp.
-      const result = await assignUnitsToManufacturingPartner(destinationId, [unitId]);
+      let result;
+      try {
+        result = await assignUnitsToManufacturingPartner(destinationId, [unitId]);
+      } catch {
+        // A rejected action would otherwise close the dialog as if the unit had
+        // moved, while it is still on the old station's floor.
+        setError("Could not move the unit. Check your connection and try again.");
+        return;
+      }
       if (!result.ok) {
         setError(result.error);
         return;
