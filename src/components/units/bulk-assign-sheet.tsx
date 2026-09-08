@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { CalendarBlank, CheckCircle, Users, X } from "@phosphor-icons/react";
 import type { AppDataset } from "@/lib/app-dataset";
 import { bulkAssignUnits } from "@/app/actions/fsr-data";
+import { installerPickerCaption, isCoordinatorPick } from "@/lib/scheduler-installer-alias";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
 import { SectionLabel } from "@/components/ui/section-label";
@@ -141,7 +142,7 @@ export function BulkAssignSheet({
                     }`}
                   >
                     <div className="w-9 h-9 rounded-xl bg-zinc-200 flex-shrink-0 flex items-center justify-center text-[11px] font-semibold text-zinc-700">
-                      {assignee.name.startsWith("SC: ")
+                      {isCoordinatorPick(assignee.id)
                         ? "SC"
                         : assignee.name
                           .split(" ")
@@ -156,7 +157,12 @@ export function BulkAssignSheet({
                         {assignee.name}
                       </span>
                       <span className="block text-[11px] text-tertiary">
-                        {assignee.name.startsWith("SC: ") ? "Scheduler" : "Installer"}
+                        {/* Both kinds are offered here, so the captions must not be
+                            confusable: a coordinator pick clears the installer, an alias
+                            row sets it. See docs/SCHEDULER_AS_INSTALLER.md. */}
+                        {isCoordinatorPick(assignee.id)
+                          ? "Coordinating scheduler only"
+                          : installerPickerCaption(assignee)}
                       </span>
                     </div>
                     {selectedInstaller === assignee.id && (

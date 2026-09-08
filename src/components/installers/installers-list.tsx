@@ -5,6 +5,7 @@ import type { AppDataset } from "@/lib/app-dataset";
 import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { ChangePasswordInline } from "@/components/ui/change-password-inline";
+import { installerPickerCaption, isSchedulerAlias } from "@/lib/scheduler-installer-alias";
 
 type InstallerRecord = AppDataset["installers"][number];
 
@@ -46,7 +47,7 @@ function InstallerCard({
             <h3 className="text-[14px] font-semibold text-foreground tracking-tight">
               {installer.name}
             </h3>
-            <p className="text-[12px] text-tertiary">Installer</p>
+            <p className="text-[12px] text-tertiary">{installerPickerCaption(installer)}</p>
           </div>
         </div>
         {showDelete && onDelete && (
@@ -99,38 +100,60 @@ export function InstallersList({
   emptyMessage = "No installers added yet.",
   showChangePassword = false,
 }: InstallersListProps) {
-  const linkedInstallers = installers.filter((installer) => Boolean(installer.authUserId));
-  const orphanInstallers = installers.filter((installer) => !installer.authUserId);
+  // A scheduler-installer alias row has no auth link BY DESIGN (it is an assignment target,
+  // never a login), so it must be split out before the orphan check — otherwise every one of
+  // them lands under the "not linked to Supabase Auth" error. It also gets no Delete or
+  // Change password: the row is maintained by a trigger on `schedulers`, and the person is
+  // managed on the Schedulers tab. See docs/SCHEDULER_AS_INSTALLER.md.
+  const aliasInstallers = installers.filter(isSchedulerAlias);
+  const accountInstallers = installers.filter((installer) => !isSchedulerAlias(installer));
+  const linkedInstallers = accountInstallers.filter((installer) => Boolean(installer.authUserId));
+  const orphanInstallers = accountInstallers.filter((installer) => !installer.authUserId);
 
   if (installers.length === 0) {
     return <div className="py-12 text-center text-sm text-muted">{emptyMessage}</div>;
   }
 
+  const renderCard = (
+    installer: InstallerRecord,
+    animIndex: number,
+    cardProps: { showDelete: boolean; showChangePassword: boolean }
+  ) => {
+    const assignedUnits = units.filter((unit) => unit.assignedInstallerId === installer.id);
+    const activeUnits = assignedUnits.filter((unit) => unit.status !== "installed");
+    const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
+
+    return (
+      <div
+        key={installer.id}
+        className="animate-fade-up"
+        style={{ '--anim-delay': `${animIndex * 0.06}s` } as React.CSSProperties}
+      >
+        <InstallerCard
+          installer={installer}
+          activeUnits={activeUnits.length}
+          completedUnits={completedUnits.length}
+          showDelete={cardProps.showDelete}
+          deletePending={deletePending}
+          onDelete={onDelete}
+          showChangePassword={cardProps.showChangePassword}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      {linkedInstallers.map((installer, index) => {
-        const assignedUnits = units.filter((unit) => unit.assignedInstallerId === installer.id);
-        const activeUnits = assignedUnits.filter((unit) => unit.status !== "installed");
-        const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
+      {linkedInstallers.map((installer, index) =>
+        renderCard(installer, index, { showDelete, showChangePassword })
+      )}
 
-        return (
-          <div
-            key={installer.id}
-            className="animate-fade-up"
-            style={{ '--anim-delay': `${index * 0.06}s` } as React.CSSProperties}
-          >
-            <InstallerCard
-              installer={installer}
-              activeUnits={activeUnits.length}
-              completedUnits={completedUnits.length}
-              showDelete={showDelete}
-              deletePending={deletePending}
-              onDelete={onDelete}
-              showChangePassword={showChangePassword}
-            />
-          </div>
-        );
-      })}
+      {aliasInstallers.map((installer, index) =>
+        renderCard(installer, linkedInstallers.length + index, {
+          showDelete: false,
+          showChangePassword: false,
+        })
+      )}
 
       {orphanInstallers.length > 0 && (
         <>
@@ -138,28 +161,13 @@ export function InstallersList({
             Orphaned installer records (not linked to Supabase Auth): {orphanInstallers.length}.
             {showDelete ? " Use Delete to remove them." : " Ask the owner to clean them up."}
           </InlineAlert>
-          {orphanInstallers.map((installer, index) => {
-            const assignedUnits = units.filter((unit) => unit.assignedInstallerId === installer.id);
-            const activeUnits = assignedUnits.filter((unit) => unit.status !== "installed");
-            const completedUnits = assignedUnits.filter((unit) => unit.status === "installed");
-
-            return (
-              <div
-                key={installer.id}
-                className="animate-fade-up"
-                style={{ '--anim-delay': `${(linkedInstallers.length + index) * 0.06}s` } as React.CSSProperties}
-              >
-                <InstallerCard
-                  installer={installer}
-                  activeUnits={activeUnits.length}
-                  completedUnits={completedUnits.length}
-                  showDelete={showDelete}
-                  deletePending={deletePending}
-                  onDelete={onDelete}
-                />
-              </div>
-            );
-          })}
+          {orphanInstallers.map((installer, index) =>
+            renderCard(
+              installer,
+              linkedInstallers.length + aliasInstallers.length + index,
+              { showDelete, showChangePassword: false }
+            )
+          )}
         </>
       )}
     </div>

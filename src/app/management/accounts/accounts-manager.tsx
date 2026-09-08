@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { InlineAlert } from "@/components/ui/inline-alert";
 import { InstallersList } from "@/components/installers/installers-list";
 import { InviteInstallerForm } from "@/components/installers/invite-installer-form";
+import { isSchedulerAlias } from "@/lib/scheduler-installer-alias";
 import {
   deleteInstallerAccount,
   deleteCutterAccount,
@@ -248,6 +249,11 @@ export function AccountsManager({
               ? "Subcontractors"
               : "Owners";
 
+  // This tab manages LOGINS. A scheduler-installer alias row is not one — it is created and
+  // kept in sync by a trigger on `schedulers`, and deleting it here would strip a scheduler of
+  // their field-work identity while leaving the account behind. Schedulers are managed on the
+  // Schedulers tab. See docs/SCHEDULER_AS_INSTALLER.md.
+  const installerAccounts = installers.filter((i) => !isSchedulerAlias(i));
   const linkedSchedulers = schedulers.filter((s) => Boolean(s.authUserId));
   const orphanSchedulers = schedulers.filter((s) => !s.authUserId);
   const externalPartners = manufacturingPartners.filter((p) => !p.isInternal);
@@ -547,7 +553,7 @@ export function AccountsManager({
         {tab === "installers" && (
           <>
             <InstallersList
-              installers={installers}
+              installers={installerAccounts}
               units={units}
               showDelete
               showChangePassword

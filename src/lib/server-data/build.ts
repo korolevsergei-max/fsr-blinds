@@ -101,9 +101,14 @@ export function buildDatasetFromRaw(raw: {
 }
 
 /**
- * Builds the assignment pick-list: real installers plus a synthetic `sch-<id>` row per scheduler
- * (so owners can assign a unit to a scheduler acting as an installer). Shared by `buildDatasetFromRaw`
- * and `loadUnitDetail` so the list is byte-identical across the full and scoped loaders.
+ * Builds the assignment pick-list: real installers plus a synthetic `sch-<id>` row per
+ * scheduler. Shared by `buildDatasetFromRaw` and `loadUnitDetail` so the list is
+ * byte-identical across the full and scoped loaders.
+ *
+ * The `sch-` rows back the **"Assign scheduler"** (coordinator) screen only — selecting one
+ * records the unit's coordinating scheduler and clears the installer. A scheduler who also
+ * installs is assigned through their real alias row instead (`schedulerAliasId` non-null),
+ * which is why these carry `schedulerAliasId: null`. See docs/SCHEDULER_AS_INSTALLER.md.
  */
 export function combineInstallersWithSchedulers(
   installers: Installer[],
@@ -118,6 +123,7 @@ export function combineInstallersWithSchedulers(
       phone: sch.phone,
       avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
       authUserId: sch.authUserId,
+      schedulerAliasId: null,
     })),
   ];
 }

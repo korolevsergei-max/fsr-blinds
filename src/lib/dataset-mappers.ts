@@ -48,6 +48,7 @@ export type InstallerRow = {
   phone: string;
   avatar_url: string;
   auth_user_id?: string | null;
+  scheduler_alias_id?: string | null;
 };
 
 export type UnitRow = {
@@ -219,6 +220,7 @@ export function mapInstaller(r: InstallerRow): Installer {
     phone: r.phone,
     avatarUrl: r.avatar_url,
     authUserId: r.auth_user_id ?? null,
+    schedulerAliasId: r.scheduler_alias_id ?? null,
   };
 }
 

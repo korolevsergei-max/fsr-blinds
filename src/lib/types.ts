@@ -304,6 +304,12 @@ export interface Installer {
   phone: string;
   avatarUrl: string;
   authUserId: string | null;
+  /**
+   * Non-null when this row is a scheduler's field-work identity (an "alias" row) rather
+   * than a login: the scheduler it mirrors. Alias rows are assignment targets only —
+   * their `authUserId` is always null. See docs/SCHEDULER_AS_INSTALLER.md.
+   */
+  schedulerAliasId: string | null;
 }
 
 export interface Cutter {
