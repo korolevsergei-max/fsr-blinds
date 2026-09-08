@@ -8,6 +8,7 @@ import { CheckCircle } from "@phosphor-icons/react";
 import { updateUnitAssignment } from "@/app/actions/fsr-data";
 import type { AppDataset } from "@/lib/app-dataset";
 import { useDatasetMutation } from "@/lib/use-dataset-mutation";
+import { installerPickerCaption, isCoordinatorPick } from "@/lib/scheduler-installer-alias";
 import { PageHeader } from "@/components/ui/page-header";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,12 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
   const role = searchParams.get("role") === "scheduler" ? "scheduler" : "installer";
   const { afterMutate } = useDatasetMutation();
   const unit = data.units.find((u) => u.id === id);
+  // "Assign scheduler" offers the synthetic coordinator rows; "Assign installer" offers real
+  // installers, which now includes each scheduler's alias row (a scheduler who also installs).
   const assignees = useMemo(
     () => data.installers.filter((installer) =>
       Boolean(installer.id) &&
-      (role === "scheduler" ? installer.id.startsWith("sch-") : !installer.id.startsWith("sch-"))
+      (role === "scheduler" ? isCoordinatorPick(installer.id) : !isCoordinatorPick(installer.id))
     ),
     [data.installers, role]
   );
@@ -136,7 +139,7 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
                   {inst.avatarUrl ? (
                     <Image src={inst.avatarUrl} alt="" width={40} height={40} className="w-full h-full object-cover" />
                   ) : (
-                    inst.name.startsWith("SC: ")
+                    isCoordinatorPick(inst.id)
                       ? "SC"
                       : inst.name
                         .split(" ")
@@ -150,7 +153,7 @@ export function AssignUnit({ data }: { data: Pick<AppDataset, "units" | "install
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-zinc-900">{inst.name}</p>
                   <p className="text-xs text-muted">
-                    {inst.name.startsWith("SC: ") ? "Scheduler" : "Installer"} · {inst.phone}
+                    {isCoordinatorPick(inst.id) ? "Scheduler" : installerPickerCaption(inst)} · {inst.phone}
                   </p>
                 </div>
                 {selectedInstaller === inst.id && (

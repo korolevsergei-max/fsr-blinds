@@ -326,6 +326,13 @@ export async function resolveInstallerName(
  * installer's coordinating scheduler so the lead keeps portal scope and can perform field work
  * even when another tech is the named assignee. If the installer has no `scheduler_id`, clear
  * coordinator rows for those units (same as the previous delete-only behavior).
+ *
+ * A scheduler-installer alias row is exempt (RULE 3 of docs/SCHEDULER_AS_INSTALLER.md). Its
+ * `scheduler_id` is its OWN scheduler, and this upsert is keyed `onConflict: "unit_id"` — one
+ * coordinator per unit — so letting an alias through would overwrite whoever coordinates the
+ * unit and silently drop it out of THEIR portal. The alias needs no coordinator row anyway:
+ * `can_access_unit()` and `getSchedulerScopedUnitIds()` already grant a scheduler every unit
+ * whose assigned installer has `scheduler_id` = them, so both people keep the unit.
  */
 export async function syncCoordinatorAssignmentForInstaller(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -334,10 +341,12 @@ export async function syncCoordinatorAssignmentForInstaller(
 ): Promise<ActionResult | null> {
   const { data: inst, error } = await supabase
     .from("installers")
-    .select("scheduler_id")
+    .select("scheduler_id, scheduler_alias_id")
     .eq("id", installerId)
     .single();
   if (error) return { ok: false, error: error.message };
+
+  if (inst?.scheduler_alias_id) return null;
 
   const coordId = inst?.scheduler_id ?? null;
   if (coordId) {

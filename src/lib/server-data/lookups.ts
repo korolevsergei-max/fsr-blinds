@@ -220,7 +220,7 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
   // Security: a scheduler may only open units within their portal scope.
   if (!(await isSchedulerScopedUnit(supabase, schedulerId, unitId))) return emptyDataset();
 
-  const [unitRes, roomsRes, assignmentRes, teamInstallersRes, schedulerRowRes] = await Promise.all([
+  const [unitRes, roomsRes, assignmentRes, teamInstallersRes, schedulerRowRes, aliasInstallersRes] = await Promise.all([
     supabase.from("units").select("*").eq("id", unitId).single(),
     supabase.from("rooms").select("*").eq("unit_id", unitId).order("name"),
     supabase
@@ -231,6 +231,9 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
       .maybeSingle(),
     supabase.from("installers").select("*").eq("scheduler_id", schedulerId).order("name"),
     supabase.from("schedulers").select("*").eq("id", schedulerId).single(),
+    // Schedulers who also install are assignable by every scheduler, not just their own
+    // team lead — unioned into the pick-list below. One row per scheduler.
+    supabase.from("installers").select("*").not("scheduler_alias_id", "is", null).order("name"),
   ]);
 
   if (unitRes.error || !unitRes.data) return emptyDataset();
@@ -251,12 +254,22 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
       loadManufacturingLocked(supabase, unitId, unitRow),
     ]);
 
-  // Team-scoped pick-list (fallback to all when empty) + synthetic self row — mirrors loadSchedulerDataset.
+  // Team-scoped pick-list (fallback to all when empty) + every scheduler-installer alias
+  // + synthetic self row — mirrors loadSchedulerDataset.
+  // The scheduler's own alias row carries `scheduler_id` = them, so it lands in the team
+  // query — it must NOT count towards "has a team", or a newly created scheduler's picker
+  // would collapse to just themselves. Emptiness is judged on REAL team members only.
   let installers = ((teamInstallersRes.data as InstallerRow[]) ?? []).map(mapInstaller);
-  if (installers.length === 0) {
+  if (!installers.some((i) => !i.schedulerAliasId)) {
     const { data: all } = await supabase.from("installers").select("*").order("name");
     installers = ((all as InstallerRow[]) ?? []).map(mapInstaller);
   }
+  const seenInstallerIds = new Set(installers.map((i) => i.id));
+  const missingAliases = ((aliasInstallersRes.data as InstallerRow[]) ?? [])
+    .filter((row) => !seenInstallerIds.has(row.id))
+    .map(mapInstaller);
+  if (missingAliases.length > 0) installers = [...installers, ...missingAliases];
+
   const schedulerRow = schedulerRowRes.data as SchedulerRow | null;
   const selfPickId = `sch-${schedulerId}`;
   if (schedulerRow && !installers.some((i) => i.id === selfPickId)) {
@@ -269,6 +282,7 @@ export async function loadSchedulerUnitDetail(unitId: string): Promise<AppDatase
         phone: sch.phone,
         avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
         authUserId: sch.authUserId,
+        schedulerAliasId: null,
       },
       ...installers,
     ];

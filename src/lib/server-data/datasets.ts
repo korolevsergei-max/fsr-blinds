@@ -228,13 +228,27 @@ async function buildSchedulerDataset(
   const buildings = (raw.buildings ?? []).map(mapBuilding);
   const clients = (raw.clients ?? []).map(mapClient);
 
-  // Fall back to all installers when the scheduler has no team yet.
-  let installers = (raw.team_installers ?? []).map(mapInstaller);
-  if (installers.length === 0) {
-    installers = (raw.all_installers ?? []).map(mapInstaller);
-  }
+  // Fall back to all installers when the scheduler has no team yet. A scheduler's own alias
+  // row carries `scheduler_id` = them, so it lands in `team_installers` — it must NOT count
+  // towards "has a team", or a newly created scheduler's picker would instantly collapse to
+  // just themselves. Emptiness is judged on REAL team members only.
+  const allInstallers = (raw.all_installers ?? []).map(mapInstaller);
+  const teamInstallers = (raw.team_installers ?? []).map(mapInstaller);
+  let installers = teamInstallers.some((i) => !i.schedulerAliasId) ? teamInstallers : allInstallers;
 
-  // Same synthetic pick-list row as `loadFullDataset`: schedulers can assign units to themselves.
+  // Every scheduler who also installs is assignable by every scheduler, not just by their
+  // own team lead — so union the alias rows in. `all_installers` is already in the payload,
+  // and `installers_select_scoped` already lets any scheduler read every installer row, so
+  // this widens the pick-list only. Alias rows carry `scheduler_id = their own scheduler`,
+  // which is how they land in `team_installers` too; dedupe by id.
+  const seenInstallerIds = new Set(installers.map((i) => i.id));
+  const missingAliases = allInstallers.filter(
+    (i) => i.schedulerAliasId && !seenInstallerIds.has(i.id)
+  );
+  if (missingAliases.length > 0) installers = [...installers, ...missingAliases];
+
+  // Same synthetic coordinator row as `loadFullDataset` — it backs "Assign scheduler" and
+  // the profile page's phone lookup, not the installer pickers.
   const selfPickId = `sch-${schedulerId}`;
   if (raw.scheduler && !installers.some((i) => i.id === selfPickId)) {
     const sch = mapScheduler(raw.scheduler);
@@ -246,6 +260,7 @@ async function buildSchedulerDataset(
         phone: sch.phone,
         avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sch.name)}`,
         authUserId: sch.authUserId,
+        schedulerAliasId: null,
       },
       ...installers,
     ];
@@ -352,7 +367,7 @@ export async function loadSchedulerDataset(
 
   // Phase 10: the global scheduler payload no longer ships raw rooms/windows, so the fallback
   // skips those queries too (buildSchedulerDataset hardcodes them to []).
-  const [buildingRows, clientRows, schedulerScheduleRows, installerRows] = await Promise.all([
+  const [buildingRows, clientRows, schedulerScheduleRows, installerRows, aliasInstallerRows] = await Promise.all([
     selectInChunks<BuildingRow>(allowedBuildingIds, (chunk) =>
       supabase
         .from("buildings")
@@ -379,12 +394,18 @@ export async function loadSchedulerDataset(
     ),
     // Scope installers to this scheduler's team.
     supabase.from("installers").select("*").eq("scheduler_id", schedulerId).order("name"),
+    // Schedulers who also install are assignable by every scheduler, not just their own
+    // team lead — the builder unions these in. Tiny result set (one row per scheduler).
+    supabase.from("installers").select("*").not("scheduler_alias_id", "is", null).order("name"),
   ]);
 
   const teamInstallers = (installerRows.data as InstallerRow[]) ?? [];
-  // Only fetch the full installers list when the team is empty (the builder's fallback).
-  let allInstallers: InstallerRow[] = [];
-  if (teamInstallers.length === 0) {
+  // The builder reads `all_installers` for two things: the whole-list fallback when the team
+  // is empty, and the alias union. When the team has real members only the aliases are
+  // needed, so skip the full fetch. "Real members" excludes the scheduler's own alias row —
+  // see the matching note in buildSchedulerDataset.
+  let allInstallers = (aliasInstallerRows.data as InstallerRow[]) ?? [];
+  if (!teamInstallers.some((i) => !i.scheduler_alias_id)) {
     const { data } = await supabase.from("installers").select("*").order("name");
     allInstallers = (data as InstallerRow[]) ?? [];
   }

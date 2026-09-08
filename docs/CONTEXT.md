@@ -32,9 +32,9 @@
 
 **owner** — The property owner or client representative. Day-to-day they review installed work, raise post-install issues when something looks wrong, and track overall project progress across their buildings.
 
-**scheduler** — Coordinates the installation pipeline for their assigned units. Day-to-day they assign units to installers, set task dates in the schedule, monitor which units are ready for each phase, and triage post-install issues.
+**scheduler** — Coordinates the installation pipeline for their assigned units. Day-to-day they assign units to installers, set task dates in the schedule, monitor which units are ready for each phase, and triage post-install issues. Some schedulers also do the installs themselves: every scheduler has a mirrored `installers` row (an **alias row**, `inst-sa-<schedulerId>`, maintained by a trigger) so they can be named as a unit's assigned installer without a second login. They still work from the scheduler portal, whose routes mirror the installer portal's. Read docs/SCHEDULER_AS_INSTALLER.md before touching this — an alias row is an assignment target, never a login, and it must not be confused with the synthetic `sch-<id>` / `SC: <name>` **coordinator pick**, which assigns the unit's coordinating scheduler and clears the installer.
 
-**installer** — A field technician who visits units on-site. Day-to-day they perform bracketing and measurement of windows, then return to install finished blinds, uploading photos at each stage to document completion.
+**installer** — A field technician who visits units on-site. Day-to-day they perform bracketing and measurement of windows, then return to install finished blinds, uploading photos at each stage to document completion. An `installers` row is not necessarily a login: rows with `scheduler_alias_id` set are schedulers who also install (`auth_user_id` is always NULL on those).
 
 **cutter** — A manufacturing team member responsible for cutting blind materials to spec. Day-to-day they receive windows queued for cutting, cut the materials, and mark each window's production status as `cut`.
 
