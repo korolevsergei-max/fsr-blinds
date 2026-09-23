@@ -924,6 +924,9 @@ export async function loadPersistedRoleSchedule(
 ): Promise<ManufacturingRoleSchedule> {
   const includeArchived = options.includeArchived ?? false;
   const startedAt = performance.now();
+  // Taken before any read so it can only understate freshness: a write
+  // confirmed after this instant may or may not be reflected below.
+  const loadedAt = new Date().toISOString();
   // No silent default: falling back to Station A here would show its queue and
   // its capacity to a Station B cutter.
   const stationId = options.stationId ?? (await requireStationId());
@@ -991,7 +994,10 @@ export async function loadPersistedRoleSchedule(
     console.warn(
       `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} rpc ${(performance.now() - startedAt).toFixed(0)}ms`
     );
-    return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
+    return {
+      ...buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides),
+      loadedAt,
+    };
   }
 
   // Fallback: paginate through all schedule rows — the PostgREST default caps at
@@ -1083,7 +1089,10 @@ export async function loadPersistedRoleSchedule(
     `[perf][role-schedule] role=${role} items=${items.length} allItems=${allItems.length} chunked ${(performance.now() - startedAt).toFixed(0)}ms`
   );
 
-  return buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides);
+  return {
+    ...buildRoleScheduleOutput(role, items, allItems, currentWorkDate, settings, overrides),
+    loadedAt,
+  };
 }
 
 export async function loadManufacturingRoleSchedule(

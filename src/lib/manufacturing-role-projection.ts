@@ -32,6 +32,7 @@ import type {
 export interface FactoryScheduleView {
   currentWorkDate: string;
   allItems: ManufacturingWindowItem[];
+  loadedAt?: string;
 }
 
 /** The production status each role can actually act on. */
@@ -64,7 +65,7 @@ const ACTIONABLE_STATUS = {
  */
 export function selectFactoryScheduleView(
   role: "cutter" | "assembler" | "qc",
-  schedule: Pick<ManufacturingRoleSchedule, "allItems" | "currentWorkDate">,
+  schedule: Pick<ManufacturingRoleSchedule, "allItems" | "currentWorkDate" | "loadedAt">,
 ): FactoryScheduleView {
   const actionable = ACTIONABLE_STATUS[role];
 
@@ -75,7 +76,11 @@ export function selectFactoryScheduleView(
 
   const allItems = schedule.allItems.filter((item) => liveUnitIds.has(item.unitId));
 
-  return { currentWorkDate: schedule.currentWorkDate, allItems };
+  return {
+    currentWorkDate: schedule.currentWorkDate,
+    allItems,
+    ...(schedule.loadedAt ? { loadedAt: schedule.loadedAt } : {}),
+  };
 }
 
 /**
@@ -93,14 +98,16 @@ export function selectFactoryScheduleView(
 export interface RoleQueueView {
   currentWorkDate: string;
   buckets: ManufacturingDayBucket[];
+  loadedAt?: string;
 }
 
 export function selectRoleQueueView(
-  schedule: Pick<ManufacturingRoleSchedule, "buckets" | "currentWorkDate">,
+  schedule: Pick<ManufacturingRoleSchedule, "buckets" | "currentWorkDate" | "loadedAt">,
 ): RoleQueueView {
   return {
     currentWorkDate: schedule.currentWorkDate,
     buckets: schedule.buckets,
+    ...(schedule.loadedAt ? { loadedAt: schedule.loadedAt } : {}),
   };
 }
 

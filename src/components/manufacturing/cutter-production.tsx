@@ -35,6 +35,8 @@ import {
 } from "@/components/manufacturing/cutter-unit-card";
 import { CutterBulkActionBar } from "@/components/manufacturing/cutter-bulk-action-bar";
 import { CutterUnitSortModal } from "@/components/manufacturing/cutter-unit-sort-modal";
+import { QueueEmptyState } from "@/components/manufacturing/queue-empty-state";
+import { pruneSettledWrites } from "@/lib/queue-reconcile";
 import {
   sortCutterUnitGroups,
   type CutterUnitSortField,
@@ -55,37 +57,35 @@ const PRODUCTION_SORT_FIELDS: CutterUnitSortField[] = [
 type ComponentFilter = "all" | ManufacturingHighlightSection;
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
 
+type CutStatus = "pending" | "cut";
+type CutActionResult = { ok: true; confirmedAt?: string } | { ok: false; error?: string };
+
 function WindowCutActions({
   item,
-  onChange,
+  onStart,
+  onSettled,
 }: {
   item: ManufacturingWindowItem;
-  onChange: (windowId: string, nextStatus: "pending" | "cut") => void;
+  onStart: (windowId: string, nextStatus: CutStatus) => void;
+  onSettled: (windowId: string, nextStatus: CutStatus, result: CutActionResult) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const status = item.productionStatus;
   const isPending = status === "pending";
 
-  function handleMarkCut() {
-    onChange(item.windowId, "cut");
+  function run(nextStatus: CutStatus, task: () => Promise<CutActionResult>) {
+    onStart(item.windowId, nextStatus);
     startTransition(async () => {
-      const res = await markWindowCut(item.windowId);
-      if (!res.ok) {
-        onChange(item.windowId, "pending");
-        globalThis.window.alert(res.error ?? "Failed to mark as cut.");
-      }
+      onSettled(item.windowId, nextStatus, await task());
     });
   }
 
+  function handleMarkCut() {
+    run("cut", () => markWindowCut(item.windowId));
+  }
+
   function handleUndoCut() {
-    onChange(item.windowId, "pending");
-    startTransition(async () => {
-      const res = await undoWindowCut(item.windowId);
-      if (!res.ok) {
-        onChange(item.windowId, "cut");
-        globalThis.window.alert(res.error ?? "Failed to undo cut.");
-      }
-    });
+    run("pending", () => undoWindowCut(item.windowId));
   }
 
   if (isPending) {
@@ -161,10 +161,30 @@ export function CutterProduction({
   // Units optimistically moved back to the queue: hidden from production instantly
   // and reconciled on the next fresh schedule. Reset when a new schedule arrives.
   const [movedBackUnitIds, setMovedBackUnitIds] = useState<Set<string>>(new Set());
+
+  // Optimistic per-window status overrides keyed by windowId. `saving` marks a
+  // write still in flight; `confirmedAt` is the server time it was verified.
+  const [statusOverrides, setStatusOverrides] = useState<
+    Map<string, { status: CutStatus; saving: boolean; confirmedAt?: string }>
+  >(new Map());
+  const [awaitingSnapshot, setAwaitingSnapshot] = useState(false);
+
+  // A fresh schedule is server truth. Keep an override only while its write is
+  // unanswered or the snapshot may predate it; otherwise a failed or reverted
+  // write would stay painted over the real status indefinitely.
   const [syncedSchedule, setSyncedSchedule] = useState(schedule);
   if (syncedSchedule !== schedule) {
     setSyncedSchedule(schedule);
     setMovedBackUnitIds(new Set());
+    setAwaitingSnapshot(false);
+    const confirmed = new Map<string, string>();
+    for (const [windowId, entry] of statusOverrides) {
+      if (entry.confirmedAt) confirmed.set(windowId, entry.confirmedAt);
+    }
+    const unsettled = pruneSettledWrites(confirmed, schedule.loadedAt);
+    setStatusOverrides(
+      new Map([...statusOverrides].filter(([windowId, entry]) => entry.saving || unsettled.has(windowId)))
+    );
   }
 
   const handleMoveBackToQueue = (unitId: string) => {
@@ -191,11 +211,6 @@ export function CutterProduction({
   const [fabricTypeFilter, setFabricTypeFilter] = useState<string[]>([]);
   const [componentFilter, setComponentFilter] = useState<ComponentFilter>("all");
   const [displayLimit, setDisplayLimit] = useState<DisplayLimit>("all");
-
-  // Optimistic per-window status overrides keyed by windowId.
-  const [statusOverrides, setStatusOverrides] = useState<
-    Map<string, "pending" | "cut">
-  >(new Map());
 
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
@@ -233,8 +248,8 @@ export function CutterProduction({
       if (!override) return item;
       return {
         ...item,
-        productionStatus: override,
-        cutAt: override === "cut" ? (item.cutAt ?? new Date().toISOString()) : null,
+        productionStatus: override.status,
+        cutAt: override.status === "cut" ? (item.cutAt ?? new Date().toISOString()) : null,
       };
     });
   }, [schedule.allItems, statusOverrides]);
@@ -389,6 +404,31 @@ export function CutterProduction({
   const maxVisibleUnits = displayLimit === "all" ? Infinity : Number(displayLimit);
   const visibleGroups = unitGroups.slice(0, maxVisibleUnits);
 
+  const productionUnitCount = useMemo(
+    () => new Set(productionItems.map((item) => item.unitId)).size,
+    [productionItems]
+  );
+  const savingCount = useMemo(
+    () => [...statusOverrides.values()].filter((entry) => entry.saving).length,
+    [statusOverrides]
+  );
+
+  const clearFilters = () => {
+    setSearch("");
+    setBuildingFilter([]);
+    setFloorFilter([]);
+    setFabricTypeFilter([]);
+    setComponentFilter("all");
+    setDisplayLimit("all");
+  };
+
+  // Production just emptied locally: verify with the server now rather than
+  // after the coalescing window, so "empty" always reflects a fresh read.
+  const drained = productionItems.length === 0 && savingCount === 0 && awaitingSnapshot;
+  useEffect(() => {
+    if (drained) router.refresh();
+  }, [drained, router]);
+
   // Drop any selected ids that are no longer visible (e.g. after a filter change).
   const visibleIds = useMemo(() => new Set(visibleGroups.map((g) => g.unitId)), [visibleGroups]);
   const hasStale = [...selectedUnitIds].some((id) => !visibleIds.has(id));
@@ -438,16 +478,29 @@ export function CutterProduction({
     setBulkPickerValue("");
   }
 
-  function handleStatusChange(windowId: string, next: "pending" | "cut") {
-    setStatusOverrides((prev) => {
-      const m = new Map(prev);
-      m.set(windowId, next);
-      return m;
-    });
-    // Coalesce reconciliation: a batch of mark-cut/undo taps yields ONE refetch
-    // after the burst settles instead of one full route re-render per tap. The
-    // status override already gave instant feedback (and drops the unit from the
-    // view once every window is cut). (B1 / roadmap Phase 2, finding 1.1.)
+  function handleStatusStart(windowId: string, next: CutStatus) {
+    setStatusOverrides((prev) => new Map(prev).set(windowId, { status: next, saving: true }));
+  }
+
+  function handleStatusSettled(windowId: string, next: CutStatus, result: CutActionResult) {
+    if (!result.ok) {
+      // Drop the override so the window shows its real server status again.
+      setStatusOverrides((prev) => {
+        const m = new Map(prev);
+        m.delete(windowId);
+        return m;
+      });
+      globalThis.window.alert(
+        result.error ?? (next === "cut" ? "Failed to mark as cut." : "Failed to undo cut.")
+      );
+    } else {
+      setStatusOverrides((prev) =>
+        new Map(prev).set(windowId, { status: next, saving: false, confirmedAt: result.confirmedAt })
+      );
+      setAwaitingSnapshot(true);
+    }
+    // Refetch only after the write is answered, so the reconciling snapshot can
+    // reflect it. A burst of taps still yields ONE coalesced refetch. (B1)
     scheduleRefresh();
   }
 
@@ -629,14 +682,7 @@ export function CutterProduction({
           {activeFilterCount > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setSearch("");
-                setBuildingFilter([]);
-                setFloorFilter([]);
-                setFabricTypeFilter([]);
-                setComponentFilter("all");
-                setDisplayLimit("all");
-              }}
+              onClick={clearFilters}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
             >
               <X size={11} weight="bold" />
@@ -648,16 +694,15 @@ export function CutterProduction({
 
       <div className="space-y-3 px-4 pt-4">
         {visibleGroups.length === 0 ? (
-          <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/70 px-4 py-10 text-center">
-            <p className="text-sm font-semibold text-foreground">
-              {activeFilterCount > 0 ? "No units match your filters" : "Production is empty"}
-            </p>
-            <p className="mt-1 text-[12px] text-tertiary max-w-[40ch] mx-auto">
-              {activeFilterCount > 0
-                ? "Try clearing a filter or two."
-                : "Units appear here once all their labels (cut list, MFG, PKG) are printed."}
-            </p>
-          </div>
+          <QueueEmptyState
+            noun="unit"
+            savingCount={savingCount}
+            checking={awaitingSnapshot}
+            hiddenCount={productionUnitCount}
+            onShowAll={clearFilters}
+            emptyTitle="Production is empty"
+            emptyBody="Units appear here once all their labels (cut list, MFG, PKG) are printed."
+          />
         ) : (
           visibleGroups.map((unit) => {
             const enteredLabel = formatStoredDateLongEnglish(
@@ -689,7 +734,11 @@ export function CutterProduction({
                 }
                 renderWindowActions={(item) =>
                   selectMode ? null : (
-                    <WindowCutActions item={item} onChange={handleStatusChange} />
+                    <WindowCutActions
+                      item={item}
+                      onStart={handleStatusStart}
+                      onSettled={handleStatusSettled}
+                    />
                   )
                 }
               />

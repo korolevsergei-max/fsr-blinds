@@ -148,6 +148,25 @@ setAll(cookiesToSet) {
 
 ---
 
+## Factory Queues: Shows Empty While Clearing Fast, More Blinds After Refresh
+
+**Symptoms:** A QC user (or assembler/cutter) clears blinds quickly; the queue suddenly reads empty, then a browser refresh shows more blinds — sometimes ones already cleared.
+
+**Root causes (all client/transition-level; the server read was already exhaustive):**
+1. **Silent success on no-op writes.** `markWindowAssembled` / `markWindowQCApproved` used a status-guarded `UPDATE` but never checked how many rows changed, so a stale or missing row returned `{ ok: true }`. The card vanished and came back on refresh. `markWindowCut` used an unguarded upsert that could drag an assembled blind back to `cut`; undo actions had no status guard at all.
+2. **Snapshots racing writes.** A coalesced/realtime `router.refresh()` fetched mid-burst replaced the whole local list, putting in-flight or just-confirmed blinds back on screen.
+3. **Whole-list rollback.** A failed tap restored a snapshot taken at tap time, resurrecting blinds cleared by later taps.
+4. **Empty from local state.** "No queue items" rendered from optimistic state alone, and did not say when filters were hiding remaining work. Cutter Production also kept stale status overrides across refreshes.
+
+**Fix:**
+- `src/lib/production-transition.ts` — every status change is a compare-and-set with `{ count: "exact" }`. Zero rows ⇒ re-read: already at/past the target is an idempotent success (side effects skipped), anything else is an error. A non-numeric count falls back to the re-read. `markWindowCut` inserts only when no row exists and verifies the result; pushbacks and undos carry the same guard.
+- Actions return server `confirmedAt`; queue loads carry server `loadedAt` (taken before the read). `src/lib/queue-reconcile.ts` keeps in-flight and not-yet-caught-up clears out of incoming snapshots, trusting a snapshot once `loadedAt > confirmedAt`.
+- `manufacturing-role-queue.tsx` / `cutter-production.tsx` track each tap on its own, restore only the failed blind, refresh immediately when the list drains, and render `QueueEmptyState` (saving / checking / hidden-by-filters / truly clear).
+
+**Prevention:** A factory write must never report success without evidence the row changed, and a screen must never claim "empty" from local state alone.
+
+---
+
 ## Security Advisor: RLS Disabled on 3 Public Tables
 
 **Symptoms:** Supabase Security Advisor reports 3 errors — "RLS Disabled in Public" for `window_post_install_issues`, `window_post_install_issue_notes`, and `daily_progress_snapshots`.

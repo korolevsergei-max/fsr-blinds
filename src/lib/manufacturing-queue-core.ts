@@ -92,6 +92,8 @@ export interface ManufacturingRoleSchedule {
   unscheduledCount: number;
   allItems: ManufacturingWindowItem[];
   buckets: ManufacturingDayBucket[];
+  /** Server time when this read began; see ActionResult.confirmedAt. */
+  loadedAt?: string;
 }
 
 export function getQueueWindowPriority(

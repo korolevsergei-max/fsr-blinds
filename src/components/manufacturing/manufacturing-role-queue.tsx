@@ -34,7 +34,9 @@ import {
 } from "@/app/actions/production-actions";
 import { ManufacturingSummaryCard } from "@/components/windows/manufacturing-summary-card";
 import { ReturnBlindDialog } from "@/components/manufacturing/return-blind-dialog";
+import { QueueEmptyState } from "@/components/manufacturing/queue-empty-state";
 import type { PushbackDirection } from "@/lib/pushback-reasons";
+import { pruneSettledWrites, reconcileSnapshot } from "@/lib/queue-reconcile";
 
 type DisplayLimit = "all" | "25" | "50" | "75" | "100";
 
@@ -54,10 +56,9 @@ function formatReadyDate(date: string | null) {
   return label ? `Ready by ${label}` : null;
 }
 
-type QueueActionResult = {
-  ok: boolean;
-  error?: string;
-};
+type QueueActionResult =
+  | { ok: true; confirmedAt?: string }
+  | { ok: false; error?: string };
 
 function isReturnedToRole(
   item: ManufacturingWindowItem,
@@ -157,13 +158,22 @@ export function ManufacturingRoleQueue({
     direction: PushbackDirection;
   } | null>(null);
 
+  const [clearingIds, setClearingIds] = useState<Set<string>>(() => new Set());
+  const [settlingClears, setSettlingClears] = useState<Map<string, string>>(() => new Map());
+  const [awaitingSnapshot, setAwaitingSnapshot] = useState(false);
   // Re-sync to the server truth when a fresh schedule arrives (e.g. after
-  // router.refresh()), discarding any optimistic local edits. Done during render
-  // rather than in an effect to avoid a cascading re-render.
+  // router.refresh()), minus blinds whose clear is in flight or newer than the
+  // read (see queue-reconcile.ts). Done during render rather than in an effect
+  // to avoid a cascading re-render.
   const [syncedSchedule, setSyncedSchedule] = useState(schedule);
   if (syncedSchedule !== schedule) {
     setSyncedSchedule(schedule);
-    setLocalItems(flattenScheduleWindows(schedule));
+    const stillSettling = pruneSettledWrites(settlingClears, schedule.loadedAt);
+    setSettlingClears(stillSettling);
+    setAwaitingSnapshot(false);
+    setLocalItems(
+      reconcileSnapshot(flattenScheduleWindows(schedule), clearingIds, stillSettling)
+    );
   }
 
   // Filter-change router.refresh() removed (MF2): client-side filtering + the
@@ -192,37 +202,69 @@ export function ManufacturingRoleQueue({
     };
   }, []);
 
-  const runWindowAction = (
-    windowId: string,
-    task: () => Promise<QueueActionResult>,
-    options?: {
-      optimisticUpdate?: (current: ManufacturingWindowItem[]) => ManufacturingWindowItem[];
-    }
+  // A blind leaves the list on tap so the next one slides under the operator's
+  // finger. Each tap is tracked on its own: a failure restores only that blind
+  // (never a whole-list snapshot, which would resurrect blinds cleared by later
+  // taps), and a refresh landing mid-burst cannot put unconfirmed or
+  // just-confirmed blinds back on screen.
+  const clearWindow = (
+    item: ManufacturingWindowItem,
+    task: () => Promise<QueueActionResult>
   ) => {
-    const previousItems = localItems;
-    if (options?.optimisticUpdate) {
-      setLocalItems((current) => options.optimisticUpdate?.(current) ?? current);
-    }
+    const { windowId } = item;
+    setClearingIds((prev) => new Set(prev).add(windowId));
+    setLocalItems((current) => removeWindow(current, windowId));
 
-    setBusyWindowId(windowId);
     startTransition(async () => {
       const result = await task();
+      setClearingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(windowId);
+        return next;
+      });
       if (!result.ok) {
-        if (options?.optimisticUpdate) {
-          setLocalItems(previousItems);
-        }
+        setLocalItems((current) =>
+          current.some((entry) => entry.windowId === windowId) ? current : [...current, item]
+        );
         if (result.error) setErrorMsg(result.error);
-        setBusyWindowId(null);
-        return;
+      } else {
+        const { confirmedAt } = result;
+        if (confirmedAt) {
+          setSettlingClears((prev) => new Map(prev).set(windowId, confirmedAt));
+        }
+        setAwaitingSnapshot(true);
       }
-      setBusyWindowId(null);
-      // Reconcile with server truth once the burst settles: a run of marks/undos/
-      // pushbacks yields ONE coalesced refetch, which re-seeds localItems from the
-      // fresh schedule (the syncedSchedule guard above). The optimistic update
-      // already gave instant feedback. (B1 / roadmap Phase 2.)
+      // One coalesced refetch per burst reconciles with server truth. (B1)
       scheduleRefresh();
     });
   };
+
+  const updateWindowInPlace = (
+    item: ManufacturingWindowItem,
+    task: () => Promise<QueueActionResult>,
+    patch: Partial<ManufacturingWindowItem>
+  ) => {
+    const { windowId } = item;
+    setBusyWindowId(windowId);
+    setLocalItems((current) => updateWindow(current, windowId, (entry) => ({ ...entry, ...patch })));
+    startTransition(async () => {
+      const result = await task();
+      setBusyWindowId(null);
+      if (!result.ok) {
+        setLocalItems((current) => updateWindow(current, windowId, () => item));
+        if (result.error) setErrorMsg(result.error);
+      }
+      scheduleRefresh();
+    });
+  };
+
+  // The last blind just left the list: verify against the server right away
+  // instead of waiting out the coalescing window, so "empty" is never shown
+  // on the strength of local state alone.
+  const drained = localItems.length === 0 && clearingIds.size === 0 && awaitingSnapshot;
+  useEffect(() => {
+    if (drained) router.refresh();
+  }, [drained, router]);
 
   const handleReturnToCutter = (item: ManufacturingWindowItem) => {
     const direction: PushbackDirection =
@@ -242,10 +284,8 @@ export function ManufacturingRoleQueue({
         ? () => returnWindowToAssembler(target.item.windowId, reason, notes)
         : () => returnWindowToCutter(target.item.windowId, reason, notes);
     // Optimistic: the returned window leaves this role's queue immediately and the
-    // dialog closes; on failure runWindowAction restores it and shows the error.
-    runWindowAction(target.item.windowId, action, {
-      optimisticUpdate: (current) => removeWindow(current, target.item.windowId),
-    });
+    // dialog closes; on failure clearWindow restores it and shows the error.
+    clearWindow(target.item, action);
     setPushbackTarget(null);
   };
 
@@ -283,11 +323,19 @@ export function ManufacturingRoleQueue({
 
   const displayLimitOptions: { value: DisplayLimit; label: string }[] = [
     { value: "all", label: "No limit" },
-    { value: "25", label: "25 units" },
-    { value: "50", label: "50 units" },
-    { value: "75", label: "75 units" },
-    { value: "100", label: "100 units" },
+    { value: "25", label: "25 blinds" },
+    { value: "50", label: "50 blinds" },
+    { value: "75", label: "75 blinds" },
+    { value: "100", label: "100 blinds" },
   ];
+
+  const clearFilters = () => {
+    setSearch("");
+    setBuildingFilter([]);
+    setFloorFilter([]);
+    setFabricTypeFilter([]);
+    setDisplayLimit("all");
+  };
 
   const activeFilterCount = [
     search.trim().length > 0,
@@ -331,7 +379,9 @@ export function ManufacturingRoleQueue({
             <div>
               <h1 className="text-[17px] font-semibold tracking-tight text-foreground sm:text-[18px]">{title}</h1>
               <p className="mt-0.5 text-[12px] text-tertiary sm:text-[13px]">
-                {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"}
+                {userName ? `Hi, ${userName.split(" ")[0]}` : "Manufacturing"} ·{" "}
+                {localItems.length} blind{localItems.length === 1 ? "" : "s"} in queue
+                {clearingIds.size > 0 && ` · saving ${clearingIds.size}`}
               </p>
             </div>
           </div>
@@ -393,7 +443,7 @@ export function ManufacturingRoleQueue({
             onChange={setFabricTypeFilter}
           />
           <FilterDropdown
-            label="Units"
+            label="Show"
             value={displayLimit}
             options={displayLimitOptions}
             onChange={(value) => setDisplayLimit(value as DisplayLimit)}
@@ -401,13 +451,7 @@ export function ManufacturingRoleQueue({
           {activeFilterCount > 0 && (
             <button
               type="button"
-              onClick={() => {
-                setSearch("");
-                setBuildingFilter([]);
-                setFloorFilter([]);
-                setFabricTypeFilter([]);
-                setDisplayLimit("all");
-              }}
+              onClick={clearFilters}
               className="flex h-8 flex-shrink-0 items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 text-xs font-medium text-red-500"
             >
               <X size={11} weight="bold" />
@@ -432,12 +476,19 @@ export function ManufacturingRoleQueue({
 
       <div className="space-y-3 px-4 pt-4">
         {visibleItems.length === 0 ? (
-          <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/70 px-4 py-8 text-center">
-            <p className="text-sm font-semibold text-foreground">No queue items in this scope</p>
-            <p className="mt-1 text-[12px] text-tertiary">
-              Try clearing filters to see more.
-            </p>
-          </div>
+          <QueueEmptyState
+            noun="blind"
+            savingCount={clearingIds.size}
+            checking={awaitingSnapshot}
+            hiddenCount={localItems.length}
+            onShowAll={clearFilters}
+            emptyTitle={role === "assembler" ? "Assembly queue is clear" : "QC queue is clear"}
+            emptyBody={
+              role === "assembler"
+                ? "Every cut blind has been assembled. New cuts appear here automatically."
+                : "Every assembled blind has been checked. New work appears here automatically."
+            }
+          />
         ) : (
           visibleItems.map((item) => {
             const busy = isPending && busyWindowId === item.windowId;
@@ -589,12 +640,7 @@ export function ManufacturingRoleQueue({
                             tone="primary"
                             busy={busy}
                             onClick={() =>
-                              runWindowAction(item.windowId, () =>
-                                markWindowAssembled(item.windowId)
-                              , {
-                                optimisticUpdate: (current) =>
-                                  removeWindow(current, item.windowId),
-                              })
+                              clearWindow(item, () => markWindowAssembled(item.windowId))
                             }
                           />
                         ) : (
@@ -613,14 +659,8 @@ export function ManufacturingRoleQueue({
                             tone="ghost"
                             busy={busy}
                             onClick={() =>
-                              runWindowAction(item.windowId, () =>
-                                undoWindowAssembly(item.windowId)
-                              , {
-                                optimisticUpdate: (current) =>
-                                  updateWindow(current, item.windowId, (currentItem) => ({
-                                    ...currentItem,
-                                    productionStatus: "cut",
-                                  })),
+                              updateWindowInPlace(item, () => undoWindowAssembly(item.windowId), {
+                                productionStatus: "cut",
                               })
                             }
                           />
@@ -634,12 +674,7 @@ export function ManufacturingRoleQueue({
                             tone="success"
                             busy={busy}
                             onClick={() =>
-                              runWindowAction(item.windowId, () =>
-                                markWindowQCApproved(item.windowId)
-                              , {
-                                optimisticUpdate: (current) =>
-                                  removeWindow(current, item.windowId),
-                              })
+                              clearWindow(item, () => markWindowQCApproved(item.windowId))
                             }
                           />
                         ) : (
@@ -669,14 +704,8 @@ export function ManufacturingRoleQueue({
                             tone="ghost"
                             busy={busy}
                             onClick={() =>
-                              runWindowAction(item.windowId, () =>
-                                undoWindowQC(item.windowId)
-                              , {
-                                optimisticUpdate: (current) =>
-                                  updateWindow(current, item.windowId, (currentItem) => ({
-                                    ...currentItem,
-                                    productionStatus: "assembled",
-                                  })),
+                              updateWindowInPlace(item, () => undoWindowQC(item.windowId), {
+                                productionStatus: "assembled",
                               })
                             }
                           />
@@ -699,11 +728,7 @@ export function ManufacturingRoleQueue({
             ? `${pushbackTarget.item.roomName} · ${pushbackTarget.item.label}`
             : undefined
         }
-        busy={
-          pushbackTarget !== null &&
-          busyWindowId === pushbackTarget.item.windowId &&
-          isPending
-        }
+        busy={pushbackTarget !== null && clearingIds.has(pushbackTarget.item.windowId)}
         onCancel={() => setPushbackTarget(null)}
         onSubmit={({ reason, notes }) => submitPushback(reason, notes)}
       />

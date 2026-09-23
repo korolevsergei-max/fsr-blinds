@@ -23,8 +23,15 @@ import {
   type UnitNotificationContext,
 } from "@/lib/notification-copy";
 import { resolveManufacturingEscalationsForTarget } from "@/lib/manufacturing-escalations";
+import { hasReached, transitionProductionStatus } from "@/lib/production-transition";
+import type { ProductionStatus } from "@/lib/types";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/**
+ * `confirmedAt` is server time taken after the new status was verified in the
+ * database. Queue screens compare it with a snapshot's `loadedAt` to tell a
+ * refresh that raced the write from one that genuinely shows the blind again.
+ */
+export type ActionResult = { ok: true; confirmedAt: string } | { ok: false; error: string };
 
 /**
  * Refuse to record work on a unit that is not the caller's station's — because
@@ -226,21 +233,52 @@ export async function markWindowCut(
     if (ownershipError) return { ok: false, error: ownershipError };
 
     const now = new Date().toISOString();
+    const cutPatch = {
+      cut_by_cutter_id: cutterId,
+      cut_at: now,
+      cut_notes: notes?.trim() ?? "",
+    };
 
-    const { error } = await supabase.from("window_production_status").upsert(
-      {
-        id: `wps-${crypto.randomUUID().slice(0, 8)}`,
-        window_id: windowId,
-        unit_id: unitId,
-        status: "cut",
-        cut_by_cutter_id: cutterId,
-        cut_at: now,
-        cut_notes: notes?.trim() ?? "",
-      },
-      { onConflict: "window_id" }
-    );
+    // Guarded update, not a blind upsert: an upsert would pull an assembled or
+    // QC-approved blind back to "cut" from a stale card and drop it into the
+    // assembler queue a second time.
+    const transition = await transitionProductionStatus(supabase, {
+      windowId,
+      from: "pending",
+      to: "cut",
+      direction: "forward",
+      patch: cutPatch,
+    });
 
-    if (error) return { ok: false, error: error.message };
+    if (!transition.ok) {
+      if (!transition.missingRow) return { ok: false, error: transition.error };
+      // First touch on this window: there is no status row to guard yet.
+      const { error: insertError } = await supabase.from("window_production_status").upsert(
+        {
+          id: `wps-${crypto.randomUUID().slice(0, 8)}`,
+          window_id: windowId,
+          unit_id: unitId,
+          status: "cut",
+          ...cutPatch,
+        },
+        { onConflict: "window_id", ignoreDuplicates: true }
+      );
+      if (insertError) return { ok: false, error: insertError.message };
+
+      // ignoreDuplicates turns a conflict into a silent no-op, and a row the
+      // read above could not see would conflict. Never report a cut the
+      // database does not show.
+      const { data: written } = await supabase
+        .from("window_production_status")
+        .select("status")
+        .eq("window_id", windowId)
+        .maybeSingle();
+      if (!hasReached((written?.status ?? null) as ProductionStatus | null, "cut")) {
+        return { ok: false, error: "Could not confirm this blind was marked cut. Refresh and try again." };
+      }
+    } else if (transition.outcome === "already_done") {
+      return { ok: true, confirmedAt: new Date().toISOString() };
+    }
 
     const resolvedPushback = await resolveManufacturingEscalationsForTarget(supabase, {
       windowId,
@@ -254,7 +292,7 @@ export async function markWindowCut(
       resolvedPushbackFor: resolvedPushback ? "cutter" : null,
       scheduleReason: "mark_cut",
     });
-    return { ok: true };
+    return { ok: true, confirmedAt: new Date().toISOString() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark window as cut." };
   }
@@ -293,18 +331,22 @@ export async function markWindowAssembled(
       if (ownershipError) return { ok: false, error: ownershipError };
     }
 
-    const { error } = await supabase
-      .from("window_production_status")
-      .update({
-        status: "assembled",
+    const transition = await transitionProductionStatus(supabase, {
+      windowId,
+      from: "cut",
+      to: "assembled",
+      direction: "forward",
+      patch: {
         assembled_by_assembler_id: assemblerId,
         assembled_at: now,
         assembled_notes: notes?.trim() ?? "",
-      })
-      .eq("window_id", windowId)
-      .eq("status", "cut");
+      },
+    });
 
-    if (error) return { ok: false, error: error.message };
+    if (!transition.ok) return { ok: false, error: transition.error };
+    if (transition.outcome === "already_done") {
+      return { ok: true, confirmedAt: new Date().toISOString() };
+    }
 
     const resolvedPushback = await resolveManufacturingEscalationsForTarget(supabase, {
       windowId,
@@ -320,7 +362,7 @@ export async function markWindowAssembled(
         scheduleReason: "mark_assembled",
       });
     }
-    return { ok: true };
+    return { ok: true, confirmedAt: new Date().toISOString() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark window as assembled." };
   }
@@ -358,28 +400,29 @@ export async function markWindowQCApproved(
       if (ownershipError) return { ok: false, error: ownershipError };
     }
 
-    const { error } = await supabase
-      .from("window_production_status")
-      .update({
-        status: "qc_approved",
+    const transition = await transitionProductionStatus(supabase, {
+      windowId,
+      from: "assembled",
+      to: "qc_approved",
+      direction: "forward",
+      patch: {
         qc_approved_by_assembler_id: null,
         qc_approved_by_qc_id: qcId,
         qc_approved_at: now,
         qc_notes: notes?.trim() ?? "",
-      })
-      .eq("window_id", windowId)
-      .eq("status", "assembled");
+      },
+    });
 
-    if (error) return { ok: false, error: error.message };
+    if (!transition.ok) return { ok: false, error: transition.error };
 
-    if (currentRow?.unit_id) {
+    if (transition.outcome === "applied" && currentRow?.unit_id) {
       scheduleManufacturingFollowUp({
         unitId: currentRow.unit_id,
         resolvedPushbackFor: null,
         scheduleReason: "mark_qc",
       });
     }
-    return { ok: true };
+    return { ok: true, confirmedAt: new Date().toISOString() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to mark blind as built fully." };
   }

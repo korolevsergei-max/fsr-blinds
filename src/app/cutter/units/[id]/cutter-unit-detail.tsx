@@ -20,7 +20,19 @@ function formatDim(val: number | null): string {
   return `${val}"`;
 }
 
-function WindowCard({ window: win, roomName, onCut, canMark }: { window: CutterWindow; roomName: string; onCut: (id: string) => void; canMark: boolean }) {
+function WindowCard({
+  window: win,
+  roomName,
+  onCut,
+  onCutFailed,
+  canMark,
+}: {
+  window: CutterWindow;
+  roomName: string;
+  onCut: (id: string) => void;
+  onCutFailed: (id: string, error: string) => void;
+  canMark: boolean;
+}) {
   const [pending, startTransition] = useTransition();
   const production = win.production;
   const status = production?.status ?? "pending";
@@ -35,11 +47,10 @@ function WindowCard({ window: win, roomName, onCut, canMark }: { window: CutterW
   const blindTypeLabel = win.blindType === "blackout" ? "Blackout" : "Screen";
 
   function handleMarkCut() {
-    // Optimistic: update UI immediately
     onCut(win.id);
-    // Fire DB write in background
     startTransition(async () => {
-      await markWindowCut(win.id);
+      const result = await markWindowCut(win.id);
+      if (!result.ok) onCutFailed(win.id, result.error);
     });
   }
 
@@ -188,6 +199,15 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
     );
   };
 
+  const handleCutFailed = (windowId: string, error: string) => {
+    const original = detail.windows.find((w) => w.id === windowId);
+    if (original) {
+      setWindows((prev) => prev.map((w) => (w.id === windowId ? original : w)));
+    }
+    globalThis.window.alert(error);
+    router.refresh();
+  };
+
   const cutCount = windows.filter(
     (w) => w.production?.status === "cut" || w.production?.status === "assembled" || w.production?.status === "qc_approved"
   ).length;
@@ -273,7 +293,14 @@ export function CutterUnitDetail({ detail }: { detail: DetailType }) {
               {room.name}
             </p>
             {roomWindows.map((win) => (
-              <WindowCard key={win.id} window={win} roomName={room.name} onCut={handleCut} canMark={canMark} />
+              <WindowCard
+                key={win.id}
+                window={win}
+                roomName={room.name}
+                onCut={handleCut}
+                onCutFailed={handleCutFailed}
+                canMark={canMark}
+              />
             ))}
           </div>
         );

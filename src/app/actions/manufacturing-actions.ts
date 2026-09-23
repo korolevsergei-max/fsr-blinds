@@ -23,9 +23,14 @@ import {
 import {
   openManufacturingEscalation,
 } from "@/lib/manufacturing-escalations";
+import {
+  describeStaleTransition,
+  transitionProductionStatus,
+} from "@/lib/production-transition";
+import type { ProductionStatus } from "@/lib/types";
 
 type ActionResult =
-  | { ok: true; warning?: string }
+  | { ok: true; warning?: string; confirmedAt?: string }
   | { ok: false; error: string; needsConfirmation?: boolean; targetDate?: string; overBy?: number };
 
 function revalidateManufacturingPaths() {
@@ -505,6 +510,59 @@ async function loadWindowUnit(windowId: string) {
   return { supabase, unitId: unitId ?? null };
 }
 
+type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
+
+async function describeCurrentStatus(supabase: ServerSupabase, windowId: string) {
+  const { data } = await supabase
+    .from("window_production_status")
+    .select("status")
+    .eq("window_id", windowId)
+    .maybeSingle();
+  return describeStaleTransition((data?.status ?? null) as ProductionStatus | null);
+}
+
+/**
+ * Whether a guarded pushback UPDATE really moved the blind. Opening an
+ * escalation and notifying the scheduler for a blind that never went back
+ * would send someone to redo work that is fine.
+ */
+async function pushbackApplied(
+  supabase: ServerSupabase,
+  windowId: string,
+  count: number | null,
+  target: ProductionStatus
+) {
+  if (typeof count === "number" && Number.isFinite(count)) return count > 0;
+  const { data } = await supabase
+    .from("window_production_status")
+    .select("status")
+    .eq("window_id", windowId)
+    .maybeSingle();
+  return data?.status === target;
+}
+
+async function undoTransition(
+  supabase: ServerSupabase,
+  windowId: string,
+  from: ProductionStatus,
+  to: ProductionStatus,
+  patch: Record<string, unknown>
+): Promise<{ ok: true; applied: boolean; confirmedAt: string } | { ok: false; error: string }> {
+  const transition = await transitionProductionStatus(supabase, {
+    windowId,
+    from,
+    to,
+    direction: "backward",
+    patch,
+  });
+  if (!transition.ok) return { ok: false, error: transition.error };
+  return {
+    ok: true,
+    applied: transition.outcome === "applied",
+    confirmedAt: new Date().toISOString(),
+  };
+}
+
 export async function returnWindowToCutter(
   windowId: string,
   reason: string,
@@ -530,24 +588,31 @@ export async function returnWindowToCutter(
     const { unitId } = await loadWindowUnit(windowId);
     if (!unitId) return { ok: false, error: "Unable to resolve unit." };
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from("window_production_status")
-      .update({
-        status: "pending",
-        cut_by_cutter_id: null,
-        cut_at: null,
-        cut_notes: "",
-        assembled_by_assembler_id: null,
-        assembled_at: null,
-        assembled_notes: "",
-        qc_approved_by_assembler_id: null,
-        qc_approved_by_qc_id: null,
-        qc_approved_at: null,
-        qc_notes: "",
-      })
-      .eq("window_id", windowId);
+      .update(
+        {
+          status: "pending",
+          cut_by_cutter_id: null,
+          cut_at: null,
+          cut_notes: "",
+          assembled_by_assembler_id: null,
+          assembled_at: null,
+          assembled_notes: "",
+          qc_approved_by_assembler_id: null,
+          qc_approved_by_qc_id: null,
+          qc_approved_at: null,
+          qc_notes: "",
+        },
+        { count: "exact" }
+      )
+      .eq("window_id", windowId)
+      .eq("status", row.status);
 
     if (error) return { ok: false, error: error.message };
+    if (!(await pushbackApplied(supabase, windowId, count, "pending"))) {
+      return { ok: false, error: await describeCurrentStatus(supabase, windowId) };
+    }
 
     await openManufacturingEscalation(supabase, {
       windowId,
@@ -569,7 +634,7 @@ export async function returnWindowToCutter(
     });
 
     scheduleManufacturingReflow("pushback_to_cutter");
-    return { ok: true };
+    return { ok: true, confirmedAt: new Date().toISOString() };
   } catch (error) {
     return {
       ok: false,
@@ -603,21 +668,28 @@ export async function returnWindowToAssembler(
     const { unitId } = await loadWindowUnit(windowId);
     if (!unitId) return { ok: false, error: "Unable to resolve unit." };
 
-    const { error } = await supabase
+    const { error, count } = await supabase
       .from("window_production_status")
-      .update({
-        status: "cut",
-        assembled_by_assembler_id: null,
-        assembled_at: null,
-        assembled_notes: "",
-        qc_approved_by_assembler_id: null,
-        qc_approved_by_qc_id: null,
-        qc_approved_at: null,
-        qc_notes: "",
-      })
-      .eq("window_id", windowId);
+      .update(
+        {
+          status: "cut",
+          assembled_by_assembler_id: null,
+          assembled_at: null,
+          assembled_notes: "",
+          qc_approved_by_assembler_id: null,
+          qc_approved_by_qc_id: null,
+          qc_approved_at: null,
+          qc_notes: "",
+        },
+        { count: "exact" }
+      )
+      .eq("window_id", windowId)
+      .eq("status", row.status);
 
     if (error) return { ok: false, error: error.message };
+    if (!(await pushbackApplied(supabase, windowId, count, "cut"))) {
+      return { ok: false, error: await describeCurrentStatus(supabase, windowId) };
+    }
 
     await openManufacturingEscalation(supabase, {
       windowId,
@@ -639,7 +711,7 @@ export async function returnWindowToAssembler(
     });
 
     scheduleManufacturingReflow("pushback_to_assembler", { recomputeUnitStatusFor: unitId });
-    return { ok: true };
+    return { ok: true, confirmedAt: new Date().toISOString() };
   } catch (error) {
     return {
       ok: false,
@@ -655,19 +727,17 @@ export async function undoWindowCut(windowId: string): Promise<ActionResult> {
     if (!row || row.status !== "cut") {
       return { ok: false, error: "Only cut blinds can be undone." };
     }
-    const { error } = await supabase
-      .from("window_production_status")
-      .update({
-        status: "pending",
-        cut_by_cutter_id: null,
-        cut_at: null,
-        cut_notes: "",
-      })
-      .eq("window_id", windowId);
-    if (error) return { ok: false, error: error.message };
+    const result = await undoTransition(supabase, windowId, "cut", "pending", {
+      cut_by_cutter_id: null,
+      cut_at: null,
+      cut_notes: "",
+    });
+    if (!result.ok) return result;
 
-    scheduleManufacturingReflow("undo_cut", { recomputeUnitStatusFor: row.unit_id });
-    return { ok: true };
+    if (result.applied) {
+      scheduleManufacturingReflow("undo_cut", { recomputeUnitStatusFor: row.unit_id });
+    }
+    return { ok: true, confirmedAt: result.confirmedAt };
   } catch (error) {
     return {
       ok: false,
@@ -683,19 +753,17 @@ export async function undoWindowAssembly(windowId: string): Promise<ActionResult
     if (!row || row.status !== "assembled") {
       return { ok: false, error: "Only assembled blinds can be undone." };
     }
-    const { error } = await supabase
-      .from("window_production_status")
-      .update({
-        status: "cut",
-        assembled_by_assembler_id: null,
-        assembled_at: null,
-        assembled_notes: "",
-      })
-      .eq("window_id", windowId);
-    if (error) return { ok: false, error: error.message };
+    const result = await undoTransition(supabase, windowId, "assembled", "cut", {
+      assembled_by_assembler_id: null,
+      assembled_at: null,
+      assembled_notes: "",
+    });
+    if (!result.ok) return result;
 
-    scheduleManufacturingReflow("undo_assembly", { recomputeUnitStatusFor: row.unit_id });
-    return { ok: true };
+    if (result.applied) {
+      scheduleManufacturingReflow("undo_assembly", { recomputeUnitStatusFor: row.unit_id });
+    }
+    return { ok: true, confirmedAt: result.confirmedAt };
   } catch (error) {
     return {
       ok: false,
@@ -711,19 +779,17 @@ export async function undoWindowQC(windowId: string): Promise<ActionResult> {
     if (!row || row.status !== "qc_approved") {
       return { ok: false, error: "Only QC-approved blinds can be undone." };
     }
-    const { error } = await supabase
-      .from("window_production_status")
-      .update({
-        status: "assembled",
-        qc_approved_by_assembler_id: null,
-        qc_approved_at: null,
-        qc_notes: "",
-      })
-      .eq("window_id", windowId);
-    if (error) return { ok: false, error: error.message };
+    const result = await undoTransition(supabase, windowId, "qc_approved", "assembled", {
+      qc_approved_by_assembler_id: null,
+      qc_approved_at: null,
+      qc_notes: "",
+    });
+    if (!result.ok) return result;
 
-    scheduleManufacturingReflow("undo_qc", { recomputeUnitStatusFor: row.unit_id });
-    return { ok: true };
+    if (result.applied) {
+      scheduleManufacturingReflow("undo_qc", { recomputeUnitStatusFor: row.unit_id });
+    }
+    return { ok: true, confirmedAt: result.confirmedAt };
   } catch (error) {
     return {
       ok: false,
